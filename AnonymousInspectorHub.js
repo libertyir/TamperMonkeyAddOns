@@ -17,5 +17,6 @@
 
 AnonymousInspector(
     "DS_Store_Viewer",
-    "GitConfig_Viewer"
+    "GitConfig_Viewer",
+    "ApachiServerStatus_Viewer"
 );
