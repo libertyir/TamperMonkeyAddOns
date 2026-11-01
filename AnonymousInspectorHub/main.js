@@ -541,7 +541,7 @@
             throw new Error("Invalid module filename");
         }
 
-        const url = MODULE_BASE + id + ".js" + (new Date());
+        const url = MODULE_BASE + id + ".js?" + (new Date());
         const source = await requestText(url);
 
         const executeModule = new Function(
