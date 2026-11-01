@@ -20,8 +20,12 @@ AnonymousInspector(
     "GitConfig_Viewer",
     "ApachiServerStatus_Viewer",
     "PhpInfo_Viewer",
-    "SwaggerUI_Viewer",
     "EnvFile_Viewer",
     "CommonTestFiles_Viewer",
-    "GraphQL_Viewer"
+    "GraphQL_Viewer",
+    "SwaggerUI_Viewer",
+    "OpenAPI_Viewer",
+    "Redoc_Viewer",
+    "Scalar_Viewer",
+    "ApiDocs_Viewer"
 );
