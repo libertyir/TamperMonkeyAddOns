@@ -20,5 +20,7 @@ AnonymousInspector(
     "GitConfig_Viewer",
     "ApachiServerStatus_Viewer",
     "PhpInfo_Viewer",
-    "SwaggerUI_Viewer"
+    "SwaggerUI_Viewer",
+    "EnvFile_Viewer",
+    "CommonTestFiles_Viewer"
 );
