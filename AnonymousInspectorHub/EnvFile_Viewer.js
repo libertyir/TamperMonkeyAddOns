@@ -67,6 +67,7 @@
                 rel: "noopener noreferrer"
             });
 
+
             downloadLink.style.display = "inline-block";
             downloadLink.style.marginBottom = "15px";
             downloadLink.style.color = "#8ab4f8";
