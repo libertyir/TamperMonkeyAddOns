@@ -5,13 +5,14 @@
     class EnvFileViewer extends Framework.BaseModule {
 
         static id = "EnvFile_Viewer";
-        static title = ".ENV File";
-        static description = "Detect exposed environment configuration";
+        static title = "Environment File";
+        static description = "View and download exposed environment files";
         static icon = "🔐";
 
         constructor() {
             super();
             this.fileUrl = null;
+            this.fileContent = null;
         }
 
         getMetadata() {
@@ -26,70 +27,68 @@
         async init() {
             this.available = false;
 
-            this.fileUrl = new URL(
-                ".env",
-                Framework.getCurrentDirectory()
-            ).href;
+            const url = new URL(".env", window.location.href);
 
             try {
-                const response = await fetch(this.fileUrl, {
-                    method: "HEAD",
+                const response = await fetch(url.href, {
+                    method: "GET",
                     credentials: "same-origin",
                     redirect: "follow",
                     cache: "no-store"
                 });
 
-                if (!response.ok) {
-                    return;
-                }
+                if (!response.ok) return;
 
-                const contentType = (
-                    response.headers.get("content-type") || ""
-                ).toLowerCase();
+                const content = await response.text();
 
-                // Reject obvious HTML error or fallback pages.
-                if (
-                    contentType.includes("text/html") &&
-                    response.headers.get("content-length") !== "0"
-                ) {
-                    return;
-                }
+                if (!content.trim()) return;
 
+                this.fileUrl = response.url || url.href;
+                this.fileContent = content;
                 this.available = true;
 
             } catch (error) {
-                this.error = error;
+                console.error("[EnvFile Viewer]", error);
             }
         }
 
         render() {
             const container = Framework.createElement("div");
 
-            container.appendChild(
-                Framework.createElement("h2", {
-                    textContent: "Exposed .env File Detected"
-                })
-            );
+            const heading = Framework.createElement("h3", {
+                textContent: ".env"
+            });
 
-            container.appendChild(
-                Framework.createElement("p", {
-                    textContent:
-                        "The .env endpoint responded successfully to a HEAD request."
-                })
-            );
+            const downloadLink = Framework.createElement("a", {
+                textContent: "Download .env",
+                href: this.fileUrl,
+                download: ".env",
+                target: "_blank",
+                rel: "noopener noreferrer"
+            });
 
-            container.appendChild(
-                Framework.createElement("p", {
-                    textContent:
-                        "Its contents are hidden because environment files commonly contain passwords, API keys and other secrets.",
-                    style: "color:#e0a040;"
-                })
-            );
+            downloadLink.style.display = "inline-block";
+            downloadLink.style.marginBottom = "15px";
+            downloadLink.style.color = "#8ab4f8";
+            downloadLink.style.cursor = "pointer";
 
-            container.appendChild(
-                Framework.createElement("p", {
-                    textContent: "File path: " + this.fileUrl
-                })
+            const content = Framework.createElement("pre", {
+                textContent: this.fileContent
+            });
+
+            content.style.whiteSpace = "pre-wrap";
+            content.style.overflowWrap = "anywhere";
+            content.style.padding = "15px";
+            content.style.background = "#222";
+            content.style.border = "1px solid #444";
+            content.style.borderRadius = "6px";
+            content.style.color = "#eee";
+            content.style.overflowX = "auto";
+
+            container.append(
+                heading,
+                downloadLink,
+                content
             );
 
             return container;
