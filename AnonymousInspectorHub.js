@@ -18,7 +18,6 @@
 AnonymousInspector(
     "DS_Store_Viewer",
     "GitConfig_Viewer",
-    "ApachiServerStatus_Viewer",
     "PhpInfo_Viewer",
     "EnvFile_Viewer",
     "CommonTestFiles_Viewer",
@@ -27,5 +26,11 @@ AnonymousInspector(
     "OpenAPI_Viewer",
     "Redoc_Viewer",
     "Scalar_Viewer",
-    "ApiDocs_Viewer"
+    "ApiDocs_Viewer",
+    "ApachiServerStatus_Viewer",
+    "ServerInfo_Viewer",
+    "Status_Viewer",
+    "Metrics_Viewer",
+    "HealthCheck_Viewer",
+    "DirectoryBrowsing_Viewer"
 );
