@@ -15,6 +15,9 @@
             this.buffer = null;
             this.records = [];
             this.fileUrl = null;
+            this.KaitaiStream = null;
+            this.DsStore = null;
+            this.error = null;
         }
 
         getMetadata() {
@@ -56,10 +59,14 @@
         }
 
         async loadParser() {
+
+            // Reuse globally available libraries.
             if (
-                typeof globalThis.KaitaiStream !== "undefined" &&
-                typeof globalThis.DsStore !== "undefined"
+                typeof globalThis.KaitaiStream === "function" &&
+                typeof globalThis.DsStore === "function"
             ) {
+                this.KaitaiStream = globalThis.KaitaiStream;
+                this.DsStore = globalThis.DsStore;
                 return;
             }
 
@@ -72,7 +79,22 @@
             const runtimeSource = await Framework.requestText(runtimeUrl);
             const parserSource = await Framework.requestText(parserUrl);
 
-            const runtimeRoot = {};
+            if (!runtimeSource) {
+                throw new Error("KaitaiStream runtime source is empty");
+            }
+
+            if (!parserSource) {
+                throw new Error("DS_Store parser source is empty");
+            }
+
+            // Load Kaitai runtime.
+            const runtimeRoot = {
+                console,
+                Uint8Array,
+                ArrayBuffer,
+                DataView
+            };
+
             runtimeRoot.self = runtimeRoot;
 
             new Function(
@@ -80,30 +102,53 @@
                 runtimeSource
             )(runtimeRoot);
 
-            if (!runtimeRoot.KaitaiStream) {
-                throw new Error("KaitaiStream runtime could not be loaded");
+            const KaitaiStream = runtimeRoot.KaitaiStream;
+
+            if (typeof KaitaiStream !== "function") {
+                throw new Error(
+                    "KaitaiStream runtime is not a constructor"
+                );
             }
 
+            // Load DS_Store parser.
             const parserRoot = {
-                KaitaiStream: runtimeRoot.KaitaiStream
+                KaitaiStream,
+                console
             };
 
             parserRoot.self = parserRoot;
 
-            new Function(
+            const Parser = new Function(
                 "self",
-                parserSource
+                parserSource + `
+                    ;
+                    return typeof DsStore !== "undefined"
+                        ? DsStore
+                        : self.DsStore;
+                `
             )(parserRoot);
 
-            if (!parserRoot.DsStore) {
-                throw new Error("DS_Store parser could not be loaded");
+            if (typeof Parser !== "function") {
+                throw new Error(
+                    "DS_Store parser is not a constructor. Type: " +
+                    typeof Parser
+                );
             }
 
-            this.KaitaiStream = runtimeRoot.KaitaiStream;
-            this.DsStore = parserRoot.DsStore;
+            this.KaitaiStream = KaitaiStream;
+            this.DsStore = Parser;
         }
 
         parseFile(buffer) {
+
+            if (typeof this.KaitaiStream !== "function") {
+                throw new Error("KaitaiStream is not initialized");
+            }
+
+            if (typeof this.DsStore !== "function") {
+                throw new Error("DsStore parser is not initialized");
+            }
+
             const stream = new this.KaitaiStream(buffer);
             const ds = new this.DsStore(stream);
 
@@ -111,11 +156,16 @@
         }
 
         collectRecords(ds) {
+
             const results = [];
 
             const body = ds.buddyAllocatorBody;
 
-            if (!body || !body.directoryEntries || !body.directories) {
+            if (
+                !body ||
+                !body.directoryEntries ||
+                !body.directories
+            ) {
                 throw new Error("Unexpected DS_Store structure");
             }
 
@@ -134,10 +184,10 @@
             }
 
             const master = directory.masterBlock;
-
             const visited = new Set();
 
             const readBlock = block => {
+
                 if (!block || visited.has(block)) {
                     return;
                 }
@@ -145,8 +195,11 @@
                 visited.add(block);
 
                 if (Array.isArray(block.data)) {
+
                     for (const item of block.data) {
+
                         if (item && item.record) {
+
                             const record = item.record;
 
                             const filename =
@@ -158,6 +211,7 @@
                                 record.structureType.value;
 
                             if (filename) {
+
                                 results.push({
                                     name: String(filename),
                                     property: property
@@ -184,6 +238,7 @@
         }
 
         render() {
+
             const container = Framework.createElement("div");
 
             const heading = Framework.createElement("h2", {
@@ -191,7 +246,8 @@
             });
 
             const description = Framework.createElement("p", {
-                textContent: "Directory metadata extracted from the exposed DS_Store file."
+                textContent:
+                    "Directory metadata extracted from the exposed DS_Store file."
             });
 
             const fileLink = Framework.createElement("a", {
@@ -207,24 +263,29 @@
             });
 
             copyButton.addEventListener("click", () => {
+
                 const names = this.records
                     .map(record => record.name)
                     .join("\n");
 
                 Framework.copy(names);
+
                 copyButton.textContent = "Copied";
             });
 
             const table = Framework.createElement("table", {
-                style: "width:100%;border-collapse:collapse;margin-top:15px;"
+                style:
+                    "width:100%;border-collapse:collapse;margin-top:15px;"
             });
 
             const header = Framework.createElement("tr");
 
             for (const label of ["Name", "Property", "Action"]) {
+
                 const cell = Framework.createElement("th", {
                     textContent: label,
-                    style: "padding:9px;border-bottom:1px solid #555;text-align:left;"
+                    style:
+                        "padding:9px;border-bottom:1px solid #555;text-align:left;"
                 });
 
                 header.appendChild(cell);
@@ -233,10 +294,12 @@
             table.appendChild(header);
 
             for (const record of this.records) {
+
                 const row = Framework.createElement("tr");
 
                 const nameCell = Framework.createElement("td", {
-                    style: "padding:9px;border-bottom:1px solid #333;"
+                    style:
+                        "padding:9px;border-bottom:1px solid #333;"
                 });
 
                 const nameLink = Framework.createElement("a", {
@@ -253,11 +316,13 @@
 
                 const propertyCell = Framework.createElement("td", {
                     textContent: record.property,
-                    style: "padding:9px;border-bottom:1px solid #333;"
+                    style:
+                        "padding:9px;border-bottom:1px solid #333;"
                 });
 
                 const actionCell = Framework.createElement("td", {
-                    style: "padding:9px;border-bottom:1px solid #333;"
+                    style:
+                        "padding:9px;border-bottom:1px solid #333;"
                 });
 
                 const openButton = Framework.createElement("button", {
@@ -271,14 +336,20 @@
 
                 actionCell.appendChild(openButton);
 
-                row.append(nameCell, propertyCell, actionCell);
+                row.append(
+                    nameCell,
+                    propertyCell,
+                    actionCell
+                );
+
                 table.appendChild(row);
             }
 
             const warning = Framework.createElement("p", {
                 textContent:
                     "Note: DS_Store records may contain stale directory entries. File availability is not guaranteed.",
-                style: "margin-top:15px;color:#aaa;font-size:12px;"
+                style:
+                    "margin-top:15px;color:#aaa;font-size:12px;"
             });
 
             container.append(
@@ -295,8 +366,11 @@
         }
 
         destroy() {
+
             this.buffer = null;
             this.records = [];
+            this.KaitaiStream = null;
+            this.DsStore = null;
         }
     }
 
