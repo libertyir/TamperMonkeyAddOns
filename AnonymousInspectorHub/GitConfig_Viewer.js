@@ -1,0 +1,175 @@
+
+(function (Framework) {
+    "use strict";
+
+    class GitConfigViewer extends Framework.BaseModule {
+
+        static id = "GitConfig_Viewer";
+        static title = "Git Config Viewer";
+        static description = "Inspect exposed Git configuration";
+        static icon = "⑂";
+
+        constructor() {
+            super();
+
+            this.content = "";
+            this.fileUrl = null;
+        }
+
+        getMetadata() {
+            return {
+                id: GitConfigViewer.id,
+                title: GitConfigViewer.title,
+                description: GitConfigViewer.description,
+                icon: GitConfigViewer.icon
+            };
+        }
+
+        async init() {
+            this.available = false;
+
+            this.fileUrl = new URL(
+                ".git/config",
+                Framework.getCurrentDirectory()
+            ).href;
+
+            try {
+                const content = await Framework.requestText(this.fileUrl);
+
+                if (!content || content.length > 262144) {
+                    return;
+                }
+
+                if (
+                    !/^\s*\[[^\]]+\]/m.test(content) ||
+                    !/^\s*[\w.-]+\s*=/m.test(content)
+                ) {
+                    return;
+                }
+
+                this.content = content;
+                this.available = true;
+
+            } catch (error) {
+                this.error = error;
+                console.warn("[Git Config Viewer]", error);
+            }
+        }
+
+        render() {
+            const container = Framework.createElement("div");
+
+            const heading = Framework.createElement("h2", {
+                textContent: "Git Configuration"
+            });
+
+            const description = Framework.createElement("p", {
+                textContent: "Exposed .git/config file contents."
+            });
+
+            const fileLink = Framework.createElement("a", {
+                href: this.fileUrl,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                textContent: "Open raw config file"
+            });
+
+            const copyButton = Framework.createElement("button", {
+                type: "button",
+                textContent: "Copy Config"
+            });
+
+            copyButton.addEventListener("click", () => {
+                Framework.copy(this.content);
+                copyButton.textContent = "Copied";
+            });
+
+            const contentBox = Framework.createElement("pre", {
+                style: [
+                    "white-space:pre-wrap",
+                    "overflow-wrap:anywhere",
+                    "padding:15px",
+                    "margin-top:15px",
+                    "background:#101010",
+                    "border:1px solid #444",
+                    "border-radius:5px",
+                    "color:#ddd",
+                    "font-size:13px"
+                ].join(";")
+            });
+
+            this.renderConfigContent(contentBox);
+
+            container.append(
+                heading,
+                description,
+                fileLink,
+                document.createTextNode(" "),
+                copyButton,
+                contentBox
+            );
+
+            return container;
+        }
+
+        renderConfigContent(container) {
+            const urlPattern = /https?:\/\/[^\s"'<>]+/gi;
+
+            let lastIndex = 0;
+            let match;
+
+            while ((match = urlPattern.exec(this.content)) !== null) {
+                const start = match.index;
+                const rawUrl = match[0];
+
+                const trailingMatch = rawUrl.match(/[),.;]+$/);
+                const trailing = trailingMatch
+                    ? trailingMatch[0]
+                    : "";
+
+                const url = trailing
+                    ? rawUrl.slice(0, -trailing.length)
+                    : rawUrl;
+
+                container.appendChild(
+                    document.createTextNode(
+                        this.content.slice(lastIndex, start)
+                    )
+                );
+
+                const link = Framework.createElement("a", {
+                    href: url,
+                    target: "_blank",
+                    rel: "noopener noreferrer",
+                    textContent: url
+                });
+
+                container.appendChild(link);
+
+                if (trailing) {
+                    container.appendChild(
+                        document.createTextNode(trailing)
+                    );
+                }
+
+                lastIndex = start + rawUrl.length;
+            }
+
+            container.appendChild(
+                document.createTextNode(
+                    this.content.slice(lastIndex)
+                )
+            );
+        }
+
+        destroy() {
+            this.content = "";
+        }
+    }
+
+    Framework.register(
+        GitConfigViewer.id,
+        GitConfigViewer
+    );
+
+})(Framework);
