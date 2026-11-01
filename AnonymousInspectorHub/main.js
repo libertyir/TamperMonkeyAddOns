@@ -2,8 +2,16 @@
 (function (root) {
     "use strict";
 
-    const VERSION = "1.4.0";
+    const VERSION = "1.5.0";
     const MAX_CONCURRENT_MODULES = 4;
+
+    const CONFIG_KEY = "aih_general_config";
+
+    const DEFAULT_CONFIG = Object.freeze({
+        maxConcurrentModules: MAX_CONCURRENT_MODULES,
+        requestTimeout: 20000,
+        showInitializationSummary: true
+    });
 
     const BASE_URL =
         "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/";
@@ -19,6 +27,8 @@
         settings: new Map(),
         activeSettings: [],
 
+        config: { ...DEFAULT_CONFIG },
+
         ui: null,
         started: false,
         settingsLoaded: false,
@@ -29,6 +39,116 @@
             failed: 0
         }
     };
+
+    // --------------------------------------------------
+    // CONFIGURATION
+    // --------------------------------------------------
+
+    function normalizeConfig(config = {}) {
+        const result = { ...DEFAULT_CONFIG };
+
+        if (
+            Number.isInteger(config.maxConcurrentModules) &&
+            config.maxConcurrentModules >= 1 &&
+            config.maxConcurrentModules <= 10
+        ) {
+            result.maxConcurrentModules = config.maxConcurrentModules;
+        }
+
+        if (
+            Number.isInteger(config.requestTimeout) &&
+            config.requestTimeout >= 5000 &&
+            config.requestTimeout <= 120000
+        ) {
+            result.requestTimeout = config.requestTimeout;
+        }
+
+        if (typeof config.showInitializationSummary === "boolean") {
+            result.showInitializationSummary =
+                config.showInitializationSummary;
+        }
+
+        return result;
+    }
+
+    function loadConfig() {
+        try {
+            let saved = null;
+
+            if (typeof GM_getValue === "function") {
+                saved = GM_getValue(CONFIG_KEY, null);
+            } else {
+                const raw = localStorage.getItem(CONFIG_KEY);
+                saved = raw ? JSON.parse(raw) : null;
+            }
+
+            if (saved && typeof saved === "object") {
+                state.config = normalizeConfig(saved);
+            }
+        } catch (error) {
+            console.error(
+                "[Anonymous Inspector] Configuration load failed:",
+                error
+            );
+
+            state.config = { ...DEFAULT_CONFIG };
+        }
+    }
+
+    function getConfig() {
+        return { ...state.config };
+    }
+
+    function setConfig(updates) {
+        if (
+            !updates ||
+            typeof updates !== "object" ||
+            Array.isArray(updates)
+        ) {
+            throw new Error("Invalid configuration object");
+        }
+
+        const allowedKeys = Object.keys(DEFAULT_CONFIG);
+
+        for (const key of Object.keys(updates)) {
+            if (!allowedKeys.includes(key)) {
+                throw new Error("Unknown configuration key: " + key);
+            }
+        }
+
+        const merged = {
+            ...state.config,
+            ...updates
+        };
+
+        const normalized = normalizeConfig(merged);
+
+        for (const key of Object.keys(updates)) {
+            if (normalized[key] !== updates[key]) {
+                throw new Error("Invalid configuration value: " + key);
+            }
+        }
+
+        try {
+            if (typeof GM_setValue === "function") {
+                GM_setValue(CONFIG_KEY, normalized);
+            } else {
+                localStorage.setItem(
+                    CONFIG_KEY,
+                    JSON.stringify(normalized)
+                );
+            }
+
+            state.config = normalized;
+
+        } catch (error) {
+            throw new Error(
+                "Configuration storage failed: " + error.message
+            );
+        }
+
+        return getConfig();
+    }
 
     // --------------------------------------------------
     // NETWORK
@@ -51,7 +171,7 @@
                     "Pragma": "no-cache",
                     "Expires": "0"
                 },
-                timeout: 20000,
+                timeout: state.config.requestTimeout,
 
                 onload(response) {
                     if (response.status >= 200 && response.status < 300) {
@@ -89,7 +209,7 @@
                     "Pragma": "no-cache",
                     "Expires": "0"
                 },
-                timeout: 20000,
+                timeout: state.config.requestTimeout,
 
                 onload(response) {
                     if (response.status >= 200 && response.status < 300) {
@@ -378,6 +498,9 @@
         getCurrentDirectory,
         copy,
         open,
+
+        getConfig,
+        setConfig,
 
         openSettings,
         closeSettings
@@ -1023,10 +1146,12 @@
 
                 safelyDestroy(instance);
                 return null;
+
             } catch (error) {
                 safelyDestroy(instance);
                 throw error;
             }
+
         } catch (error) {
             console.error("[Anonymous Inspector]", id, error);
             return null;
@@ -1059,6 +1184,8 @@
         if (state.started) return;
 
         state.started = true;
+
+        loadConfig();
 
         const uniqueIds = [...new Set(moduleIds)];
 
@@ -1103,7 +1230,7 @@
         }
 
         const workerCount = Math.min(
-            MAX_CONCURRENT_MODULES,
+            state.config.maxConcurrentModules,
             uniqueIds.length
         );
 
@@ -1121,16 +1248,18 @@
         updateProgress();
         finishProgress();
 
-        console.info(
-            "[Anonymous Inspector] Initialization complete:",
-            {
-                version: VERSION,
-                total: state.progress.total,
-                loaded: state.active.length,
-                failed: state.progress.failed,
-                settings: state.activeSettings.length
-            }
-        );
+        if (state.config.showInitializationSummary) {
+            console.info(
+                "[Anonymous Inspector] Initialization complete:",
+                {
+                    version: VERSION,
+                    total: state.progress.total,
+                    loaded: state.active.length,
+                    failed: state.progress.failed,
+                    settings: state.activeSettings.length
+                }
+            );
+        }
     }
 
     // --------------------------------------------------

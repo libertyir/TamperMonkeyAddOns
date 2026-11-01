@@ -145,7 +145,10 @@ class GeneralUI extends Framework.BaseSettings {
 
                 status.style.color = "#8bcf91";
                 status.textContent =
-                    "Settings saved successfully. Changes apply to the next page load.";
+                    "Settings saved successfully. " +
+                    "Request timeout applies to subsequent requests. " +
+                    "Other changes apply on the next page load.";
+
             } catch (error) {
                 status.style.color = "#ff7777";
                 status.textContent =
@@ -156,19 +159,22 @@ class GeneralUI extends Framework.BaseSettings {
         container.append(
             this.createField(
                 "Maximum Concurrent Modules",
-                "Maximum number of modules initialized simultaneously. Range: 1–10.",
+                "Maximum number of modules initialized simultaneously. Range: 1–10. Applies on the next page load.",
                 concurrency
             ),
+
             this.createField(
                 "Request Timeout",
-                "Maximum waiting time for network requests, in milliseconds.",
+                "Maximum waiting time for network requests, in milliseconds. Range: 5000–120000. Applies to subsequent requests.",
                 timeout
             ),
+
             this.createField(
                 "Show Initialization Summary",
-                "Write the initialization summary to the browser console.",
+                "Write the initialization summary to the browser console. Applies on the next page load.",
                 summary
             ),
+
             saveButton,
             status
         );
