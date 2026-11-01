@@ -32,5 +32,6 @@ AnonymousInspector(
     "Status_Viewer",
     "Metrics_Viewer",
     "HealthCheck_Viewer",
-    "DirectoryBrowsing_Viewer"
+    "DirectoryBrowsing_Viewer",
+    "AdminPanel_Viewer"
 );
