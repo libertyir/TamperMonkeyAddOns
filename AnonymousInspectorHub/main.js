@@ -40,9 +40,16 @@
                 onload(response) {
                     if (response.status >= 200 && response.status < 300) {
                         resolve(response.responseText);
-                    } else {
-                        reject(new Error("HTTP " + response.status));
+                        return;
                     }
+
+                    // Expected HTTP responses: resource unavailable.
+                    if ([401, 403, 404].includes(response.status)) {
+                        resolve(null);
+                        return;
+                    }
+
+                    reject(new Error("HTTP " + response.status));
                 },
                 onerror() {
                     reject(new Error("Network request failed"));
@@ -69,9 +76,16 @@
                 onload(response) {
                     if (response.status >= 200 && response.status < 300) {
                         resolve(response.response);
-                    } else {
-                        reject(new Error("HTTP " + response.status));
+                        return;
                     }
+
+                    // Expected HTTP responses: resource unavailable.
+                    if ([401, 403, 404].includes(response.status)) {
+                        resolve(null);
+                        return;
+                    }
+
+                    reject(new Error("HTTP " + response.status));
                 },
                 onerror() {
                     reject(new Error("Network request failed"));
@@ -82,7 +96,7 @@
             });
         });
     }
-
+    
     function createElement(tag, attributes = {}, children = []) {
         const element = document.createElement(tag);
 
