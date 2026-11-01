@@ -11,7 +11,6 @@
 
         constructor() {
             super();
-
             this.swaggerUrl = null;
         }
 
@@ -27,10 +26,7 @@
         async init() {
             this.available = false;
 
-            const base = new URL(
-                ".",
-                window.location.href
-            );
+            const base = new URL(".", window.location.href);
 
             const paths = [
                 "swagger",
@@ -92,11 +88,13 @@
         }
 
         render() {
-            window.open(
-                this.swaggerUrl,
-                "_blank",
-                "noopener,noreferrer"
-            );
+            if (this.swaggerUrl) {
+                window.open(
+                    this.swaggerUrl,
+                    "_blank",
+                    "noopener,noreferrer"
+                );
+            }
 
             return null;
         }
