@@ -11,6 +11,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
 // @grant        GM_registerMenuCommand
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @connect      libertyir.github.io
 // @connect      cdn.jsdelivr.net
 // @connect      formats.kaitai.io
