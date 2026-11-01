@@ -18,5 +18,7 @@
 AnonymousInspector(
     "DS_Store_Viewer",
     "GitConfig_Viewer",
-    "ApachiServerStatus_Viewer"
+    "ApachiServerStatus_Viewer",
+    "PhpInfo_Viewer",
+    "SwaggerUI_Viewer"
 );
