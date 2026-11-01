@@ -22,5 +22,6 @@ AnonymousInspector(
     "PhpInfo_Viewer",
     "SwaggerUI_Viewer",
     "EnvFile_Viewer",
-    "CommonTestFiles_Viewer"
+    "CommonTestFiles_Viewer",
+    "GraphQL_Viewer"
 );
