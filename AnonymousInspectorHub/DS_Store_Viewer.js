@@ -60,78 +60,115 @@
 
         async loadParser() {
 
-            // Reuse globally available libraries.
-            if (
-                typeof globalThis.KaitaiStream === "function" &&
-                typeof globalThis.DsStore === "function"
-            ) {
-                this.KaitaiStream = globalThis.KaitaiStream;
-                this.DsStore = globalThis.DsStore;
-                return;
-            }
-
-            const runtimeUrl =
-                "https://cdn.jsdelivr.net/npm/kaitai-struct@0.10.0/KaitaiStream.js";
-
-            const parserUrl =
-                "https://formats.kaitai.io/ds_store/src/javascript/DsStore.js";
-
-            const runtimeSource = await Framework.requestText(runtimeUrl);
-            const parserSource = await Framework.requestText(parserUrl);
-
-            if (!runtimeSource) {
-                throw new Error("KaitaiStream runtime source is empty");
-            }
-
-            if (!parserSource) {
-                throw new Error("DS_Store parser source is empty");
-            }
-
             // Load Kaitai runtime.
-            const runtimeRoot = {
-                console,
-                Uint8Array,
-                ArrayBuffer,
-                DataView
-            };
+            let KaitaiStream = globalThis.KaitaiStream;
 
-            runtimeRoot.self = runtimeRoot;
+            if (typeof KaitaiStream !== "function") {
 
-            new Function(
-                "self",
-                runtimeSource
-            )(runtimeRoot);
+                const runtimeUrl =
+                    "https://cdn.jsdelivr.net/npm/kaitai-struct@0.10.0/KaitaiStream.js";
 
-            const KaitaiStream = runtimeRoot.KaitaiStream;
+                const runtimeSource =
+                    await Framework.requestText(runtimeUrl);
+
+                if (!runtimeSource) {
+                    throw new Error(
+                        "KaitaiStream runtime source is empty"
+                    );
+                }
+
+                const runtimeRoot = {};
+
+                runtimeRoot.self = runtimeRoot;
+
+                new Function(
+                    "self",
+                    "define",
+                    "exports",
+                    "require",
+                    runtimeSource
+                )(
+                    runtimeRoot,
+                    undefined,
+                    undefined,
+                    undefined
+                );
+
+                KaitaiStream = runtimeRoot.KaitaiStream;
+            }
 
             if (typeof KaitaiStream !== "function") {
                 throw new Error(
-                    "KaitaiStream runtime is not a constructor"
+                    "KaitaiStream constructor was not found"
                 );
             }
 
             // Load DS_Store parser.
-            const parserRoot = {
-                KaitaiStream,
-                console
-            };
+            let Parser = globalThis.DsStore;
 
-            parserRoot.self = parserRoot;
+            // The generated parser may expose a namespace.
+            if (
+                Parser &&
+                typeof Parser.DsStore === "function"
+            ) {
+                Parser = Parser.DsStore;
+            }
 
-            const Parser = new Function(
-                "self",
-                parserSource + `
-                    ;
-                    return typeof DsStore !== "undefined"
-                        ? DsStore
-                        : self.DsStore;
-                `
-            )(parserRoot);
+            if (typeof Parser !== "function") {
+
+                const parserUrl =
+                    "https://formats.kaitai.io/ds_store/src/javascript/DsStore.js";
+
+                const parserSource =
+                    await Framework.requestText(parserUrl);
+
+                if (!parserSource) {
+                    throw new Error(
+                        "DS_Store parser source is empty"
+                    );
+                }
+
+                const parserRoot = {
+                    KaitaiStream: KaitaiStream
+                };
+
+                parserRoot.self = parserRoot;
+
+                new Function(
+                    "self",
+                    "define",
+                    "exports",
+                    "require",
+                    parserSource
+                )(
+                    parserRoot,
+                    undefined,
+                    undefined,
+                    undefined
+                );
+
+                // IMPORTANT:
+                // Kaitai's generated UMD file exports:
+                // DsStore_.DsStore = DsStore
+                //
+                // Therefore parserRoot.DsStore is a namespace,
+                // and the actual constructor is parserRoot.DsStore.DsStore.
+
+                const namespace = parserRoot.DsStore;
+
+                if (typeof namespace === "function") {
+                    Parser = namespace;
+                } else if (
+                    namespace &&
+                    typeof namespace.DsStore === "function"
+                ) {
+                    Parser = namespace.DsStore;
+                }
+            }
 
             if (typeof Parser !== "function") {
                 throw new Error(
-                    "DS_Store parser is not a constructor. Type: " +
-                    typeof Parser
+                    "DS_Store constructor not found. Check parser export structure."
                 );
             }
 
@@ -142,14 +179,20 @@
         parseFile(buffer) {
 
             if (typeof this.KaitaiStream !== "function") {
-                throw new Error("KaitaiStream is not initialized");
+                throw new Error(
+                    "KaitaiStream is not initialized"
+                );
             }
 
             if (typeof this.DsStore !== "function") {
-                throw new Error("DsStore parser is not initialized");
+                throw new Error(
+                    "DsStore is not a valid constructor. Type: " +
+                    typeof this.DsStore
+                );
             }
 
             const stream = new this.KaitaiStream(buffer);
+
             const ds = new this.DsStore(stream);
 
             return this.collectRecords(ds);
@@ -166,24 +209,32 @@
                 !body.directoryEntries ||
                 !body.directories
             ) {
-                throw new Error("Unexpected DS_Store structure");
+                throw new Error(
+                    "Unexpected DS_Store structure"
+                );
             }
 
-            const directoryIndex = body.directoryEntries.findIndex(
-                entry => entry.name === "DSDB"
-            );
+            const directoryIndex =
+                body.directoryEntries.findIndex(
+                    entry => entry.name === "DSDB"
+                );
 
             if (directoryIndex < 0) {
-                throw new Error("DSDB directory was not found");
+                throw new Error(
+                    "DSDB directory was not found"
+                );
             }
 
             const directory = body.directories[directoryIndex];
 
             if (!directory || !directory.masterBlock) {
-                throw new Error("DSDB master block was not found");
+                throw new Error(
+                    "DSDB master block was not found"
+                );
             }
 
             const master = directory.masterBlock;
+
             const visited = new Set();
 
             const readBlock = block => {
@@ -280,7 +331,11 @@
 
             const header = Framework.createElement("tr");
 
-            for (const label of ["Name", "Property", "Action"]) {
+            for (const label of [
+                "Name",
+                "Property",
+                "Action"
+            ]) {
 
                 const cell = Framework.createElement("th", {
                     textContent: label,
