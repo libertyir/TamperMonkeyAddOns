@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Anonymous Inspector Hub
 // @namespace    https://github.com/libertyir/TamperMonkeyAddOns
-// @version      1.1.0
+// @version      1.1.1
 // @description  Modular exposure inspectors for public web directories
 // @author       libertyir
 // @match        http://*/*
@@ -10,9 +10,7 @@
 // @require      https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/main.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
-// @connect      libertyir.github.io
-// @connect      cdn.jsdelivr.net
-// @connect      formats.kaitai.io
+// @connect      *
 // ==/UserScript==
 
 AnonymousInspector(

@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -87,31 +86,29 @@
         }
 
         getTargets() {
-            const hosts = this.getAllowedHosts();
+            const currentHost = location.hostname.toLowerCase();
             const protocol = location.protocol;
-
             const targets = [];
-            const seen = new Set();
 
-            for (const host of hosts) {
-                for (const path of this.getPaths()) {
-                    const url = new URL(
-                        protocol + "//" + host + path
-                    );
+            // Check the admin subdomain first; only its root is required.
+            const adminHost = "admin." + currentHost;
 
-                    if (seen.has(url.href)) continue;
+            targets.push({
+                url: protocol + "//" + adminHost + "/",
+                host: adminHost,
+                path: "/",
+                source: "Admin Subdomain",
+                rootOnly: true
+            });
 
-                    seen.add(url.href);
-
-                    targets.push({
-                        url: url.href,
-                        host: host,
-                        path: path,
-                        source: host === "admin." + location.hostname.toLowerCase()
-                            ? "Admin Subdomain"
-                            : "Current Domain"
-                    });
-                }
+            // Scan common paths only on the current hostname.
+            for (const path of this.getPaths()) {
+                targets.push({
+                    url: protocol + "//" + currentHost + path,
+                    host: currentHost,
+                    path: path,
+                    source: "Current Domain"
+                });
             }
 
             return targets;
@@ -158,25 +155,72 @@
         async checkTarget(target) {
             const startedAt = performance.now();
 
-            const responseData = await this.requestPage(target.url);
+            // HEAD is sufficient to identify whether the admin subdomain responds.
+            const headResponse = await this.requestPage(target.url, "HEAD");
 
-            if (!responseData) return null;
+            if (!headResponse) return null;
 
-            const responseTime = Math.round(
-                performance.now() - startedAt
-            );
+            const finalUrl = new URL(headResponse.url);
 
-            const finalUrl = new URL(responseData.url);
-
-            // Never accept redirects to other hosts.
+            // Never accept redirects outside the current host and its admin subdomain.
             if (!this.isAllowedHost(finalUrl.hostname)) {
                 return null;
             }
 
-            const analysis = this.analyzePage(
-                responseData.html,
-                target
+            const responseTimeAfterHead = Math.round(
+                performance.now() - startedAt
             );
+
+            if (target.rootOnly) {
+                if (headResponse.status < 200 || headResponse.status >= 600) {
+                    return null;
+                }
+
+                return {
+                    url: headResponse.url,
+                    requestedUrl: target.url,
+                    host: target.host,
+                    path: target.path,
+                    source: target.source,
+                    status: headResponse.status,
+                    responseTime: responseTimeAfterHead,
+                    title: "Admin Subdomain",
+                    type: "Admin Subdomain",
+                    indicators: ["Admin subdomain responded to HTTP HEAD"]
+                };
+            }
+
+            let responseData = null;
+
+            // Some servers do not implement HEAD. Fall back to GET only in that case.
+            if (headResponse.status === 405 || headResponse.status === 501) {
+                responseData = await this.requestPage(target.url, "GET");
+            } else {
+                if (headResponse.status < 200 || headResponse.status >= 300) {
+                    return null;
+                }
+
+                const contentType = (headResponse.contentType || "").toLowerCase();
+
+                // Avoid downloading non-HTML resources. Empty content-type is allowed
+                // because some servers omit it from HEAD responses.
+                if (contentType && !contentType.includes("text/html") &&
+                    !contentType.includes("application/xhtml+xml")) {
+                    return null;
+                }
+
+                responseData = await this.requestPage(target.url, "GET");
+            }
+
+            if (!responseData) return null;
+
+            const finalGetUrl = new URL(responseData.url);
+
+            if (!this.isAllowedHost(finalGetUrl.hostname)) {
+                return null;
+            }
+
+            const analysis = this.analyzePage(responseData.html, target);
 
             if (!analysis.detected) return null;
 
@@ -187,43 +231,44 @@
                 path: target.path,
                 source: target.source,
                 status: responseData.status,
-                responseTime: responseTime,
+                responseTime: Math.round(performance.now() - startedAt),
                 title: analysis.title,
                 type: analysis.type,
                 indicators: analysis.indicators
             };
         }
 
-        requestPage(url) {
+        requestPage(url, method = "GET") {
             return new Promise((resolve, reject) => {
                 if (typeof GM_xmlhttpRequest !== "function") {
-                    this.fetchPage(url).then(resolve).catch(reject);
+                    // Fetch cannot reliably read a cross-origin admin subdomain
+                    // unless the target server explicitly allows CORS.
+                    if (new URL(url).origin !== location.origin) {
+                        resolve(null);
+                        return;
+                    }
+
+                    this.fetchPage(url, method).then(resolve).catch(reject);
                     return;
                 }
 
                 GM_xmlhttpRequest({
-                    method: "GET",
+                    method: method,
                     url: url,
                     timeout: this.timeout,
                     headers: {
                         "Accept": "text/html"
                     },
                     onload: response => {
-                        if (
-                            response.status < 200 ||
-                            response.status >= 400
-                        ) {
+                        if (response.status < 200 || response.status >= 600) {
                             resolve(null);
                             return;
                         }
 
                         const finalUrl = response.finalUrl || url;
 
-                        // Reject redirects outside the two allowed hosts.
                         try {
-                            if (!this.isAllowedHost(
-                                new URL(finalUrl).hostname
-                            )) {
+                            if (!this.isAllowedHost(new URL(finalUrl).hostname)) {
                                 resolve(null);
                                 return;
                             }
@@ -232,11 +277,23 @@
                             return;
                         }
 
+                        const headers = response.responseHeaders || "";
+                        const contentTypeMatch = headers.match(
+                            /^content-type:\s*([^\r\n]+)/im
+                        );
+
                         resolve({
                             status: response.status,
                             url: finalUrl,
-                            html: (response.responseText || "")
-                                .substring(0, this.maxResponseSize)
+                            contentType: contentTypeMatch
+                                ? contentTypeMatch[1].trim()
+                                : "",
+                            html: method === "HEAD"
+                                ? ""
+                                : (response.responseText || "").substring(
+                                    0,
+                                    this.maxResponseSize
+                                )
                         });
                     },
                     onerror: () => resolve(null),
@@ -245,7 +302,7 @@
             });
         }
 
-        async fetchPage(url) {
+        async fetchPage(url, method = "GET") {
             const controller = new AbortController();
 
             const timer = setTimeout(
@@ -255,17 +312,17 @@
 
             try {
                 const response = await fetch(url, {
-                    method: "GET",
-                    credentials: new URL(url).origin === location.origin
-                        ? "same-origin"
-                        : "omit",
-                    mode: "cors",
-                    redirect: "manual",
+                    method: method,
+                    credentials: "same-origin",
+                    mode: "same-origin",
+                    redirect: "follow",
                     cache: "no-store",
                     signal: controller.signal
                 });
 
-                if (!response.ok) return null;
+                if (response.status < 200 || response.status >= 600) {
+                    return null;
+                }
 
                 const finalUrl = new URL(response.url);
 
@@ -276,14 +333,18 @@
                 const contentType =
                     response.headers.get("content-type") || "";
 
-                if (!contentType.includes("text/html")) return null;
-
-                const html = await response.text();
+                const html = method === "HEAD"
+                    ? ""
+                    : (await response.text()).substring(
+                        0,
+                        this.maxResponseSize
+                    );
 
                 return {
                     status: response.status,
                     url: response.url,
-                    html: html.substring(0, this.maxResponseSize)
+                    contentType: contentType,
+                    html: html
                 };
             } finally {
                 clearTimeout(timer);

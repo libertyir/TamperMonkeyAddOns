@@ -2,10 +2,12 @@
 (function (root) {
     "use strict";
 
-    const VERSION = "1.1.0";
+    const VERSION = "1.2.0";
 
     const MODULE_BASE =
         "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/";
+
+    const MAX_CONCURRENT_MODULES = 4;
 
     const state = {
         modules: new Map(),
@@ -433,27 +435,83 @@
         return state.modules.get(id);
     }
 
+    async function initializeModule(id) {
+        let instance = null;
+
+        try {
+            const ModuleClass = await loadModule(id);
+
+            instance = new ModuleClass();
+
+            await instance.init();
+
+            if (instance.available) {
+                return instance;
+            }
+
+            safelyDestroy(instance);
+            return null;
+
+        } catch (error) {
+            console.error("[Anonymous Inspector]", id, error);
+
+            if (instance) {
+                safelyDestroy(instance);
+            }
+
+            return null;
+        }
+    }
+
+    function safelyDestroy(instance) {
+        try {
+            instance.destroy();
+        } catch (error) {
+            console.error(
+                "[Anonymous Inspector] Module destroy failed",
+                error
+            );
+        }
+    }
+
     async function AnonymousInspector(...moduleIds) {
         if (state.started) return;
 
         state.started = true;
 
-        for (const id of moduleIds) {
-            try {
-                const ModuleClass = await loadModule(id);
-                const instance = new ModuleClass();
+        // Remove duplicate module IDs while preserving their original order.
+        const uniqueIds = [...new Set(moduleIds)];
 
-                await instance.init();
+        const results = new Array(uniqueIds.length);
+        let nextIndex = 0;
 
-                if (instance.available) {
-                    state.active.push(instance);
-                } else {
-                    instance.destroy();
+        // Run module loading and initialization with bounded concurrency.
+        async function worker() {
+            while (true) {
+                const index = nextIndex++;
+
+                if (index >= uniqueIds.length) {
+                    return;
                 }
-            } catch (error) {
-                console.error("[Anonymous Inspector]", id, error);
+
+                results[index] = await initializeModule(uniqueIds[index]);
             }
         }
+
+        const workerCount = Math.min(
+            MAX_CONCURRENT_MODULES,
+            uniqueIds.length
+        );
+
+        const workers = Array.from(
+            { length: workerCount },
+            () => worker()
+        );
+
+        await Promise.all(workers);
+
+        // Preserve the module order defined in AnonymousInspector(...).
+        state.active = results.filter(Boolean);
 
         if (state.active.length) {
             createUI();
