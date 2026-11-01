@@ -2,18 +2,22 @@
 (function (root) {
     "use strict";
 
-    const VERSION = "1.2.0";
+    const VERSION = "1.3.0";
+    const MAX_CONCURRENT_MODULES = 4;
 
     const MODULE_BASE =
         "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/";
-
-    const MAX_CONCURRENT_MODULES = 4;
 
     const state = {
         modules: new Map(),
         active: [],
         ui: null,
-        started: false
+        started: false,
+        progress: {
+            total: 0,
+            completed: 0,
+            failed: 0
+        }
     };
 
     function requestText(url) {
@@ -22,6 +26,7 @@
                 method: "GET",
                 url,
                 timeout: 20000,
+
                 onload(response) {
                     if (response.status >= 200 && response.status < 300) {
                         resolve(response.responseText);
@@ -29,9 +34,11 @@
                         reject(new Error("HTTP " + response.status));
                     }
                 },
+
                 onerror() {
                     reject(new Error("Network request failed"));
                 },
+
                 ontimeout() {
                     reject(new Error("Request timed out"));
                 }
@@ -46,6 +53,7 @@
                 url,
                 responseType: "arraybuffer",
                 timeout: 20000,
+
                 onload(response) {
                     if (response.status >= 200 && response.status < 300) {
                         resolve(response.response);
@@ -53,9 +61,11 @@
                         reject(new Error("HTTP " + response.status));
                     }
                 },
+
                 onerror() {
                     reject(new Error("Network request failed"));
                 },
+
                 ontimeout() {
                     reject(new Error("Request timed out"));
                 }
@@ -74,7 +84,10 @@
             } else if (key === "innerHTML") {
                 element.innerHTML = value;
             } else if (key.startsWith("on") && typeof value === "function") {
-                element.addEventListener(key.substring(2).toLowerCase(), value);
+                element.addEventListener(
+                    key.substring(2).toLowerCase(),
+                    value
+                );
             } else if (value !== null && value !== undefined) {
                 element.setAttribute(key, value);
             }
@@ -84,7 +97,9 @@
             if (child instanceof Node) {
                 element.appendChild(child);
             } else if (child !== null && child !== undefined) {
-                element.appendChild(document.createTextNode(String(child)));
+                element.appendChild(
+                    document.createTextNode(String(child))
+                );
             }
         }
 
@@ -171,19 +186,29 @@
 
         const style = createElement("style", {
             id: "aih-styles",
+
             textContent: `
                 #aih-root {
                     position: fixed;
                     right: 20px;
                     bottom: 20px;
                     z-index: 2147483647;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: flex-end;
+                    gap: 8px;
                     font-family: Arial, sans-serif;
                     color: #eee;
                 }
 
                 #aih-button {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
                     width: 48px;
                     height: 48px;
+                    padding: 0;
                     border: 1px solid #555;
                     border-radius: 50%;
                     background: #171717;
@@ -191,6 +216,68 @@
                     font-size: 25px;
                     cursor: pointer;
                     box-shadow: 0 3px 12px rgba(0,0,0,.45);
+                    transition: width .2s, border-radius .2s;
+                }
+
+                #aih-button:disabled {
+                    cursor: default;
+                    opacity: 1;
+                }
+
+                #aih-button.aih-processing {
+                    width: 180px;
+                    border-radius: 24px;
+                    justify-content: flex-start;
+                    padding: 0 15px;
+                }
+
+                #aih-button-icon {
+                    flex-shrink: 0;
+                }
+
+                #aih-button-label {
+                    display: none;
+                    font-size: 12px;
+                    font-weight: bold;
+                    white-space: nowrap;
+                }
+
+                #aih-button.aih-processing #aih-button-label {
+                    display: inline;
+                }
+
+                #aih-progress {
+                    display: none;
+                    width: 180px;
+                    box-sizing: border-box;
+                    padding: 10px 12px;
+                    background: #171717;
+                    border: 1px solid #444;
+                    border-radius: 8px;
+                    box-shadow: 0 3px 12px rgba(0,0,0,.4);
+                }
+
+                #aih-progress-track {
+                    width: 100%;
+                    height: 5px;
+                    overflow: hidden;
+                    background: #444;
+                    border-radius: 5px;
+                }
+
+                #aih-progress-fill {
+                    width: 0%;
+                    height: 100%;
+                    background: #b9a0ff;
+                    border-radius: 5px;
+                    transition: width .2s ease;
+                }
+
+                #aih-progress-text {
+                    margin-top: 7px;
+                    color: #ccc;
+                    font-size: 11px;
+                    text-align: center;
                 }
 
                 #aih-menu {
@@ -283,7 +370,14 @@
 
         if (panel) {
             panel.style.display = "none";
-            document.getElementById("aih-panel-content").replaceChildren();
+
+            const content = document.getElementById(
+                "aih-panel-content"
+            );
+
+            if (content) {
+                content.replaceChildren();
+            }
         }
     }
 
@@ -302,15 +396,18 @@
                 content.textContent = String(result);
             }
         } catch (error) {
-            content.textContent = "Module rendering failed: " + error.message;
+            content.textContent =
+                "Module rendering failed: " + error.message;
         }
 
         panel.style.display = "block";
+
         document.getElementById("aih-menu").style.display = "none";
     }
 
     function refreshMenu() {
         const menu = document.getElementById("aih-menu");
+
         if (!menu) return;
 
         menu.replaceChildren();
@@ -342,7 +439,9 @@
 
             item.append(icon, details);
 
-            item.addEventListener("click", () => showPanel(module));
+            item.addEventListener("click", () => {
+                showPanel(module);
+            });
 
             menu.appendChild(item);
         }
@@ -355,18 +454,56 @@
 
         injectStyles();
 
-        const rootElement = createElement("div", { id: "aih-root" });
+        const rootElement = createElement("div", {
+            id: "aih-root"
+        });
+
+        const buttonIcon = createElement("span", {
+            id: "aih-button-icon",
+            textContent: "◉"
+        });
+
+        const buttonLabel = createElement("span", {
+            id: "aih-button-label",
+            textContent: "Initializing..."
+        });
 
         const button = createElement("button", {
             id: "aih-button",
             type: "button",
             title: "Anonymous Inspector",
-            textContent: "◉"
+            className: "aih-processing"
+        }, [buttonIcon, buttonLabel]);
+
+        button.disabled = true;
+
+        const progress = createElement("div", {
+            id: "aih-progress"
         });
 
-        const menu = createElement("div", { id: "aih-menu" });
+        const progressTrack = createElement("div", {
+            id: "aih-progress-track"
+        });
 
-        const panel = createElement("div", { id: "aih-panel" });
+        const progressFill = createElement("div", {
+            id: "aih-progress-fill"
+        });
+
+        const progressText = createElement("div", {
+            id: "aih-progress-text",
+            textContent: "Preparing modules..."
+        });
+
+        progressTrack.appendChild(progressFill);
+        progress.append(progressTrack, progressText);
+
+        const menu = createElement("div", {
+            id: "aih-menu"
+        });
+
+        const panel = createElement("div", {
+            id: "aih-panel"
+        });
 
         const closeButton = createElement("button", {
             id: "aih-panel-close",
@@ -386,9 +523,9 @@
         });
 
         panel.append(closeButton, content);
-        rootElement.append(button, menu);
-        document.body.append(rootElement);
-        document.body.append(panel);
+        rootElement.append(progress, button, menu);
+
+        document.body.append(rootElement, panel);
 
         state.ui = rootElement;
 
@@ -407,6 +544,61 @@
                 menu.style.display = "none";
             }
         });
+    }
+
+    function updateProgress() {
+        const progress = document.getElementById("aih-progress");
+        const progressFill = document.getElementById("aih-progress-fill");
+        const progressText = document.getElementById("aih-progress-text");
+        const buttonLabel = document.getElementById("aih-button-label");
+
+        if (!progress || !progressFill || !progressText) return;
+
+        const total = state.progress.total;
+        const completed = state.progress.completed;
+        const failed = state.progress.failed;
+
+        const percentage = total > 0
+            ? Math.round((completed / total) * 100)
+            : 100;
+
+        progress.style.display = "block";
+        progressFill.style.width = percentage + "%";
+
+        let text = "Scanning " + completed + " / " + total;
+
+        if (failed > 0) {
+            text += " · " + failed + " failed";
+        }
+
+        progressText.textContent = text;
+
+        if (buttonLabel) {
+            buttonLabel.textContent =
+                completed === total ? "Finishing..." : "Scanning...";
+        }
+    }
+
+    function finishProgress() {
+        const progress = document.getElementById("aih-progress");
+        const button = document.getElementById("aih-button");
+        const buttonLabel = document.getElementById("aih-button-label");
+
+        if (progress) {
+            progress.style.display = "none";
+        }
+
+        if (button) {
+            button.classList.remove("aih-processing");
+            button.disabled = false;
+            button.title = "Anonymous Inspector";
+        }
+
+        if (buttonLabel) {
+            buttonLabel.textContent = "";
+        }
+
+        refreshMenu();
     }
 
     async function loadModule(id) {
@@ -435,6 +627,21 @@
         return state.modules.get(id);
     }
 
+    function safelyDestroy(instance) {
+        if (!instance || typeof instance.destroy !== "function") {
+            return;
+        }
+
+        try {
+            instance.destroy();
+        } catch (error) {
+            console.error(
+                "[Anonymous Inspector] Module cleanup failed:",
+                error
+            );
+        }
+    }
+
     async function initializeModule(id) {
         let instance = null;
 
@@ -453,24 +660,13 @@
             return null;
 
         } catch (error) {
-            console.error("[Anonymous Inspector]", id, error);
-
-            if (instance) {
-                safelyDestroy(instance);
-            }
-
-            return null;
-        }
-    }
-
-    function safelyDestroy(instance) {
-        try {
-            instance.destroy();
-        } catch (error) {
             console.error(
-                "[Anonymous Inspector] Module destroy failed",
+                "[Anonymous Inspector] " + id,
                 error
             );
+
+            safelyDestroy(instance);
+            return null;
         }
     }
 
@@ -479,13 +675,30 @@
 
         state.started = true;
 
-        // Remove duplicate module IDs while preserving their original order.
         const uniqueIds = [...new Set(moduleIds)];
 
+        state.progress.total = uniqueIds.length;
+        state.progress.completed = 0;
+        state.progress.failed = 0;
+
+        // Show the interface before starting any network requests.
+        createUI();
+        updateProgress();
+
+        // Give the browser an opportunity to paint the initial UI.
+        await new Promise(resolve => {
+            requestAnimationFrame(resolve);
+        });
+
+        if (uniqueIds.length === 0) {
+            finishProgress();
+            return;
+        }
+
         const results = new Array(uniqueIds.length);
+
         let nextIndex = 0;
 
-        // Run module loading and initialization with bounded concurrency.
         async function worker() {
             while (true) {
                 const index = nextIndex++;
@@ -494,7 +707,24 @@
                     return;
                 }
 
-                results[index] = await initializeModule(uniqueIds[index]);
+                const id = uniqueIds[index];
+
+                const instance = await initializeModule(id);
+
+                results[index] = instance;
+
+                if (!instance) {
+                    state.progress.failed++;
+                }
+
+                state.progress.completed++;
+
+                // Preserve the original module order in the menu.
+                state.active = results.filter(Boolean);
+
+                // Update the menu and progress after every module.
+                refreshMenu();
+                updateProgress();
             }
         }
 
@@ -510,13 +740,18 @@
 
         await Promise.all(workers);
 
-        // Preserve the module order defined in AnonymousInspector(...).
         state.active = results.filter(Boolean);
 
-        if (state.active.length) {
-            createUI();
-            refreshMenu();
-        }
+        finishProgress();
+
+        console.info(
+            "[Anonymous Inspector] Initialization complete:",
+            {
+                total: state.progress.total,
+                available: state.active.length,
+                failed: state.progress.failed
+            }
+        );
     }
 
     root.AnonymousInspectorFramework = Framework;

@@ -10,6 +10,9 @@
 // @require      https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/main.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
+// @connect      libertyir.github.io
+// @connect      cdn.jsdelivr.net
+// @connect      formats.kaitai.io
 // @connect      *
 // ==/UserScript==
 
