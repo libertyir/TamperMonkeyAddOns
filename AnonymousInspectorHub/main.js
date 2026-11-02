@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -23,6 +22,11 @@
         deleteValue:
             typeof GM_deleteValue === "function"
                 ? GM_deleteValue
+                : null,
+
+        listValues:
+            typeof GM_listValues === "function"
+                ? GM_listValues
                 : null,
 
         xmlHttpRequest:
