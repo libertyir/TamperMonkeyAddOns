@@ -6,6 +6,7 @@
 
     const CONFIG_KEY = "aih_general_config";
     const SITES_CONFIG_KEY = "aih_sites_config";
+    const MODULES_CONFIG_KEY = "aih_modules_config";
 
     const DEFAULT_CONFIG = Object.freeze({
         maxConcurrentModules: MAX_CONCURRENT_MODULES,
@@ -28,6 +29,8 @@
         activeSettings: [],
 
         config: { ...DEFAULT_CONFIG },
+
+        configuredModuleIds: [],
 
         ui: null,
         started: false,
@@ -173,6 +176,66 @@
 
         GM_setValue(SITES_CONFIG_KEY, sites);
     }
+
+    // --------------------------------------------------
+    // MODULE CONFIGURATION
+    // --------------------------------------------------
+
+    function getDisabledModules() {
+        if (typeof GM_getValue !== "function") {
+            throw new Error("GM_getValue is unavailable.");
+        }
+
+        const saved = GM_getValue(MODULES_CONFIG_KEY, []);
+
+        if (!Array.isArray(saved)) {
+            return [];
+        }
+
+        return [...new Set(saved.filter(id =>
+            typeof id === "string" &&
+            /^[a-zA-Z0-9_-]+$/.test(id)
+        ))];
+    }
+
+    function getConfiguredModules() {
+        const disabled = new Set(getDisabledModules());
+
+        return state.configuredModuleIds.map(id => ({
+            id,
+            enabled: !disabled.has(id)
+        }));
+    }
+
+    function setModuleEnabled(id, enabled) {
+        if (!state.configuredModuleIds.includes(id)) {
+            throw new Error("Unknown module: " + id);
+        }
+
+        if (typeof enabled !== "boolean") {
+            throw new Error("Invalid module state.");
+        }
+
+        const disabled = new Set(getDisabledModules());
+
+        if (enabled) {
+            disabled.delete(id);
+        } else {
+            disabled.add(id);
+        }
+
+        if (typeof GM_setValue !== "function") {
+            throw new Error("GM_setValue is unavailable.");
+        }
+
+        GM_setValue(MODULES_CONFIG_KEY, [...disabled]);
+
+        return enabled;
+    }
+
+    // --------------------------------------------------
+    // SITE MATCHING
+    // --------------------------------------------------
 
     function normalizeSiteDomain(value) {
         let domain = String(value || "")
@@ -590,6 +653,9 @@
 
         getSitesConfig: loadSitesConfig,
         setSitesConfig: saveSitesConfig,
+
+        getConfiguredModules,
+        setModuleEnabled,
 
         openSettings,
         closeSettings
@@ -1278,17 +1344,26 @@
 
         const uniqueIds = [...new Set(moduleIds)];
 
+        state.configuredModuleIds = uniqueIds;
+
         let allowedIds;
 
         try {
-            allowedIds = getAllowedModules(uniqueIds);
+            const disabledModules = new Set(getDisabledModules());
+
+            const globallyEnabledIds = uniqueIds.filter(id =>
+                !disabledModules.has(id)
+            );
+
+            allowedIds = getAllowedModules(globallyEnabledIds);
+
         } catch (error) {
             console.error(
-                "[Anonymous Inspector] Site configuration load failed:",
+                "[Anonymous Inspector] Module/site configuration load failed:",
                 error
             );
 
-            // Fail closed if the shared site configuration cannot be read.
+            // Fail closed if the configuration cannot be read.
             allowedIds = [];
         }
 
