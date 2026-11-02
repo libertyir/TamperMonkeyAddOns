@@ -26,6 +26,7 @@ class SitesUI extends Framework.BaseSettings {
 
         this.sites = [];
         this.available = true;
+        this.searchQuery = "";
     }
 
     async init() {
@@ -33,19 +34,20 @@ class SitesUI extends Framework.BaseSettings {
         this.available = true;
     }
 
+    // --------------------------------------------------
+    // STORAGE
+    // --------------------------------------------------
+
     loadSites() {
         try {
-            let saved = null;
-
-            if (typeof GM_getValue === "function") {
-                saved = GM_getValue(this.constructor.STORAGE_KEY, null);
-            } else {
-                const raw = localStorage.getItem(
-                    this.constructor.STORAGE_KEY
-                );
-
-                saved = raw ? JSON.parse(raw) : null;
+            if (typeof GM_getValue !== "function") {
+                throw new Error("GM_getValue is unavailable.");
             }
+
+            const saved = GM_getValue(
+                this.constructor.STORAGE_KEY,
+                []
+            );
 
             this.sites = Array.isArray(saved)
                 ? saved.filter(site =>
@@ -56,36 +58,56 @@ class SitesUI extends Framework.BaseSettings {
                 )
                 : [];
 
+            return this.sites;
+
         } catch (error) {
-            console.error("[Anonymous Inspector] Sites load failed:", error);
-            this.sites = [];
+            console.error(
+                "[Anonymous Inspector] Sites load failed:",
+                error
+            );
+
+            throw new Error(
+                "Unable to load shared site configuration: " +
+                error.message
+            );
         }
     }
 
     saveSites() {
         try {
-            const data = JSON.stringify(this.sites);
-
-            if (typeof GM_setValue === "function") {
-                GM_setValue(this.constructor.STORAGE_KEY, this.sites);
-            } else {
-                localStorage.setItem(
-                    this.constructor.STORAGE_KEY,
-                    data
-                );
+            if (typeof GM_setValue !== "function") {
+                throw new Error("GM_setValue is unavailable.");
             }
+
+            GM_setValue(
+                this.constructor.STORAGE_KEY,
+                this.sites
+            );
 
             return true;
 
         } catch (error) {
-            throw new Error("Storage failed: " + error.message);
+            throw new Error(
+                "Shared storage failed: " + error.message
+            );
         }
     }
 
+    // --------------------------------------------------
+    // DOMAIN VALIDATION
+    // --------------------------------------------------
+
     normalizeDomain(value) {
-        let domain = String(value || "").trim().toLowerCase();
+        let domain = String(value || "")
+            .trim()
+            .toLowerCase();
 
         domain = domain.replace(/^https?:\/\//, "");
+
+        // Both example.com and *.example.com
+        // are stored as the same canonical domain.
+        domain = domain.replace(/^\*\./, "");
+
         domain = domain.split("/")[0];
         domain = domain.split(":")[0];
 
@@ -118,6 +140,10 @@ class SitesUI extends Framework.BaseSettings {
 
         return unique;
     }
+
+    // --------------------------------------------------
+    // UI HELPERS
+    // --------------------------------------------------
 
     createElement(tag, attributes = {}, children = []) {
         return Framework.createElement(tag, attributes, children);
@@ -155,15 +181,38 @@ class SitesUI extends Framework.BaseSettings {
                 textContent: title,
                 style: "font-size:14px;font-weight:bold;margin-bottom:5px;"
             }),
+
             this.createElement("div", {
                 textContent: description,
                 style: "font-size:12px;color:#aaa;margin-bottom:9px;"
             }),
+
             input
         );
 
         return row;
     }
+
+    createInput(placeholder) {
+        return this.createElement("input", {
+            type: "text",
+            placeholder,
+            style: `
+                width:100%;
+                max-width:350px;
+                padding:8px;
+                box-sizing:border-box;
+                border:1px solid #555;
+                border-radius:4px;
+                background:#222;
+                color:#fff;
+            `
+        });
+    }
+
+    // --------------------------------------------------
+    // RENDER
+    // --------------------------------------------------
 
     render() {
         const container = this.createElement("div", {
@@ -174,35 +223,19 @@ class SitesUI extends Framework.BaseSettings {
             style: "margin-top:12px;font-size:12px;"
         });
 
-        const domainInput = this.createElement("input", {
-            type: "text",
-            placeholder: "example.com",
-            style: `
-                width:100%;
-                max-width:350px;
-                padding:8px;
-                box-sizing:border-box;
-                border:1px solid #555;
-                border-radius:4px;
-                background:#222;
-                color:#fff;
-            `
-        });
+        const domainInput = this.createInput(
+            "example.com or *.example.com"
+        );
 
-        const modulesInput = this.createElement("input", {
-            type: "text",
-            placeholder: "ModuleOne, ModuleTwo",
-            style: `
-                width:100%;
-                max-width:350px;
-                padding:8px;
-                box-sizing:border-box;
-                border:1px solid #555;
-                border-radius:4px;
-                background:#222;
-                color:#fff;
-            `
-        });
+        const modulesInput = this.createInput(
+            "ModuleOne, ModuleTwo"
+        );
+
+        const searchInput = this.createInput(
+            "Search configured domains..."
+        );
+
+        searchInput.style.maxWidth = "100%";
 
         const enabledInput = this.createElement("input", {
             type: "checkbox"
@@ -211,16 +244,53 @@ class SitesUI extends Framework.BaseSettings {
         enabledInput.checked = true;
 
         const siteList = this.createElement("div", {
-            style: "margin-top:20px;"
+            style: "margin-top:15px;"
         });
 
         const showStatus = (message, success = false) => {
-            status.style.color = success ? "#8bcf91" : "#ff7777";
+            status.style.color = success
+                ? "#8bcf91"
+                : "#ff7777";
+
             status.textContent = message;
         };
 
+        // --------------------------------------------------
+        // SHARED DATA REFRESH
+        // --------------------------------------------------
+
+        const refreshSites = () => {
+            try {
+                this.loadSites();
+                renderSites();
+
+                return true;
+
+            } catch (error) {
+                showStatus(error.message);
+                return false;
+            }
+        };
+
+        // --------------------------------------------------
+        // SITE LIST
+        // --------------------------------------------------
+
         const renderSites = () => {
             siteList.replaceChildren();
+
+            const query = this.searchQuery.trim().toLowerCase();
+
+            const filteredSites = this.sites.filter(site => {
+                if (!query) return true;
+
+                return (
+                    site.domain.toLowerCase().includes(query) ||
+                    site.modules.some(module =>
+                        module.toLowerCase().includes(query)
+                    )
+                );
+            });
 
             if (!this.sites.length) {
                 siteList.appendChild(this.createElement("div", {
@@ -231,7 +301,16 @@ class SitesUI extends Framework.BaseSettings {
                 return;
             }
 
-            this.sites.forEach((site, index) => {
+            if (!filteredSites.length) {
+                siteList.appendChild(this.createElement("div", {
+                    textContent: "No matching sites found.",
+                    style: "padding:15px 0;color:#aaa;font-size:13px;"
+                }));
+
+                return;
+            }
+
+            filteredSites.forEach(site => {
                 const row = this.createElement("div", {
                     style: `
                         display:flex;
@@ -258,13 +337,15 @@ class SitesUI extends Framework.BaseSettings {
 
                 const modules = this.createElement("div", {
                     textContent: site.modules.length
-                        ? "Modules: " + site.modules.join(", ")
-                        : "Modules: None",
+                        ? "Allowed Modules: " + site.modules.join(", ")
+                        : "Allowed Modules: None",
                     style: "margin-top:5px;color:#aaa;font-size:12px;"
                 });
 
                 const enabled = this.createElement("div", {
-                    textContent: site.enabled ? "Enabled" : "Disabled",
+                    textContent: site.enabled
+                        ? "Enabled"
+                        : "Disabled",
                     style: `
                         margin-top:5px;
                         color:${site.enabled ? "#8bcf91" : "#ff7777"};
@@ -281,13 +362,22 @@ class SitesUI extends Framework.BaseSettings {
                 const toggleButton = this.createButton(
                     site.enabled ? "Disable" : "Enable",
                     () => {
-                        site.enabled = !site.enabled;
+                        const oldValue = site.enabled;
 
                         try {
+                            site.enabled = !site.enabled;
+
                             this.saveSites();
+
                             renderSites();
-                            showStatus("Site status updated.", true);
+
+                            showStatus(
+                                "Site status updated successfully.",
+                                true
+                            );
+
                         } catch (error) {
+                            site.enabled = oldValue;
                             showStatus(error.message);
                         }
                     }
@@ -296,13 +386,28 @@ class SitesUI extends Framework.BaseSettings {
                 const deleteButton = this.createButton(
                     "Delete",
                     () => {
-                        this.sites.splice(index, 1);
+                        const index = this.sites.indexOf(site);
+
+                        if (index === -1) {
+                            showStatus("Site no longer exists.");
+                            refreshSites();
+                            return;
+                        }
+
+                        const removed = this.sites.splice(index, 1)[0];
 
                         try {
                             this.saveSites();
+
                             renderSites();
-                            showStatus("Site deleted.", true);
+
+                            showStatus(
+                                "Site deleted successfully.",
+                                true
+                            );
+
                         } catch (error) {
+                            this.sites.splice(index, 0, removed);
                             showStatus(error.message);
                         }
                     },
@@ -316,15 +421,33 @@ class SitesUI extends Framework.BaseSettings {
             });
         };
 
+        // --------------------------------------------------
+        // ADD SITE
+        // --------------------------------------------------
+
         const addButton = this.createButton(
             "Add Site",
             () => {
                 try {
-                    const domain = this.normalizeDomain(domainInput.value);
-                    const modules = this.normalizeModules(modulesInput.value);
+                    // Reload shared data before modifying it.
+                    this.loadSites();
 
-                    if (this.sites.some(site => site.domain === domain)) {
-                        throw new Error("This domain already exists.");
+                    const domain = this.normalizeDomain(
+                        domainInput.value
+                    );
+
+                    const modules = this.normalizeModules(
+                        modulesInput.value
+                    );
+
+                    if (
+                        this.sites.some(site =>
+                            this.normalizeDomain(site.domain) === domain
+                        )
+                    ) {
+                        throw new Error(
+                            "This domain already exists."
+                        );
                     }
 
                     this.sites.push({
@@ -340,7 +463,11 @@ class SitesUI extends Framework.BaseSettings {
                     enabledInput.checked = true;
 
                     renderSites();
-                    showStatus("Site added successfully.", true);
+
+                    showStatus(
+                        "Site added successfully.",
+                        true
+                    );
 
                 } catch (error) {
                     showStatus(error.message);
@@ -349,14 +476,45 @@ class SitesUI extends Framework.BaseSettings {
             "#285238"
         );
 
-        const currentDomain = window.location.hostname;
+        // --------------------------------------------------
+        // CURRENT SITE
+        // --------------------------------------------------
 
         const currentButton = this.createButton(
             "Use Current Site",
             () => {
-                domainInput.value = currentDomain;
+                domainInput.value = window.location.hostname;
             }
         );
+
+        // --------------------------------------------------
+        // SEARCH
+        // --------------------------------------------------
+
+        searchInput.addEventListener("input", () => {
+            this.searchQuery = searchInput.value;
+            renderSites();
+        });
+
+        // --------------------------------------------------
+        // REFRESH BUTTON
+        // --------------------------------------------------
+
+        const refreshButton = this.createButton(
+            "Refresh List",
+            () => {
+                if (refreshSites()) {
+                    showStatus(
+                        "Site list refreshed from shared storage.",
+                        true
+                    );
+                }
+            }
+        );
+
+        // --------------------------------------------------
+        // PAGE LAYOUT
+        // --------------------------------------------------
 
         container.append(
             this.createElement("h3", {
@@ -366,7 +524,7 @@ class SitesUI extends Framework.BaseSettings {
 
             this.createField(
                 "Domain",
-                "Enter a hostname without protocol or path.",
+                "Enter a hostname. Both example.com and *.example.com include the root domain and all subdomains.",
                 domainInput
             ),
 
@@ -383,7 +541,7 @@ class SitesUI extends Framework.BaseSettings {
             ),
 
             this.createElement("div", {
-                style: "display:flex;gap:8px;margin-top:15px;"
+                style: "display:flex;gap:8px;margin-top:15px;flex-wrap:wrap;"
             }, [
                 addButton,
                 currentButton
@@ -394,11 +552,23 @@ class SitesUI extends Framework.BaseSettings {
                 style: "font-size:16px;margin-top:30px;"
             }),
 
+            this.createField(
+                "Search",
+                "Filter sites by domain or module ID.",
+                searchInput
+            ),
+
+            this.createElement("div", {
+                style: "margin-top:12px;"
+            }, [
+                refreshButton
+            ]),
+
             siteList,
             status
         );
 
-        renderSites();
+        refreshSites();
 
         return container;
     }

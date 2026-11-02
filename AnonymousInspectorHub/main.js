@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -6,6 +5,7 @@
     const MAX_CONCURRENT_MODULES = 4;
 
     const CONFIG_KEY = "aih_general_config";
+    const SITES_CONFIG_KEY = "aih_sites_config";
 
     const DEFAULT_CONFIG = Object.freeze({
         maxConcurrentModules: MAX_CONCURRENT_MODULES,
@@ -73,14 +73,11 @@
 
     function loadConfig() {
         try {
-            let saved = null;
-
-            if (typeof GM_getValue === "function") {
-                saved = GM_getValue(CONFIG_KEY, null);
-            } else {
-                const raw = localStorage.getItem(CONFIG_KEY);
-                saved = raw ? JSON.parse(raw) : null;
+            if (typeof GM_getValue !== "function") {
+                throw new Error("GM_getValue is unavailable.");
             }
+
+            const saved = GM_getValue(CONFIG_KEY, null);
 
             if (saved && typeof saved === "object") {
                 state.config = normalizeConfig(saved);
@@ -130,15 +127,11 @@
         }
 
         try {
-            if (typeof GM_setValue === "function") {
-                GM_setValue(CONFIG_KEY, normalized);
-            } else {
-                localStorage.setItem(
-                    CONFIG_KEY,
-                    JSON.stringify(normalized)
-                );
+            if (typeof GM_setValue !== "function") {
+                throw new Error("GM_setValue is unavailable.");
             }
 
+            GM_setValue(CONFIG_KEY, normalized);
             state.config = normalized;
 
         } catch (error) {
@@ -148,6 +141,87 @@
         }
 
         return getConfig();
+    }
+
+    function loadSitesConfig() {
+        if (typeof GM_getValue !== "function") {
+            throw new Error("GM_getValue is unavailable.");
+        }
+
+        const saved = GM_getValue(SITES_CONFIG_KEY, []);
+
+        if (!Array.isArray(saved)) {
+            return [];
+        }
+
+        return saved.filter(site =>
+            site &&
+            typeof site.domain === "string" &&
+            typeof site.enabled === "boolean" &&
+            Array.isArray(site.modules)
+        );
+    }
+
+    function normalizeSiteDomain(value) {
+        let domain = String(value || "")
+            .trim()
+            .toLowerCase();
+
+        domain = domain.replace(/^https?:\/\//, "");
+        domain = domain.replace(/^\*\./, "");
+        domain = domain.split("/")[0];
+        domain = domain.split(":")[0];
+
+        return domain;
+    }
+
+    function matchesSiteDomain(rule, hostname) {
+        const baseDomain = normalizeSiteDomain(rule);
+        const currentDomain = String(hostname || "").toLowerCase();
+
+        if (!baseDomain || !currentDomain) {
+            return false;
+        }
+
+        return (
+            currentDomain === baseDomain ||
+            currentDomain.endsWith("." + baseDomain)
+        );
+    }
+
+    function getAllowedModules(moduleIds) {
+        const sites = loadSitesConfig();
+        const hostname = window.location.hostname.toLowerCase();
+
+        const matchingSites = sites
+            .filter(site => matchesSiteDomain(site.domain, hostname))
+            .sort((a, b) =>
+                normalizeSiteDomain(b.domain).length -
+                normalizeSiteDomain(a.domain).length
+            );
+
+        // No matching site configuration: preserve the original behavior.
+        if (!matchingSites.length) {
+            return moduleIds;
+        }
+
+        // The most specific matching rule takes priority.
+        const site = matchingSites[0];
+
+        // Disabled site: do not run any modules.
+        if (!site.enabled) {
+            return [];
+        }
+
+        const allowed = new Set(
+            site.modules.filter(id =>
+                typeof id === "string" &&
+                /^[a-zA-Z0-9_-]+$/.test(id)
+            )
+        );
+
+        // An empty Allowed Modules list means no modules.
+        return moduleIds.filter(id => allowed.has(id));
     }
 
     // --------------------------------------------------
@@ -1189,7 +1263,21 @@
 
         const uniqueIds = [...new Set(moduleIds)];
 
-        state.progress.total = uniqueIds.length;
+        let allowedIds;
+
+        try {
+            allowedIds = getAllowedModules(uniqueIds);
+        } catch (error) {
+            console.error(
+                "[Anonymous Inspector] Site configuration load failed:",
+                error
+            );
+
+            // Fail closed if the shared site configuration cannot be read.
+            allowedIds = [];
+        }
+
+        state.progress.total = allowedIds.length;
         state.progress.completed = 0;
         state.progress.failed = 0;
 
@@ -1200,18 +1288,18 @@
 
         const settingsPromise = loadSettings();
 
-        const results = new Array(uniqueIds.length).fill(null);
+        const results = new Array(allowedIds.length).fill(null);
         let nextIndex = 0;
 
         async function worker() {
             while (true) {
                 const index = nextIndex++;
 
-                if (index >= uniqueIds.length) {
+                if (index >= allowedIds.length) {
                     return;
                 }
 
-                const id = uniqueIds[index];
+                const id = allowedIds[index];
                 const instance = await initializeModule(id);
 
                 results[index] = instance;
@@ -1231,7 +1319,7 @@
 
         const workerCount = Math.min(
             state.config.maxConcurrentModules,
-            uniqueIds.length
+            allowedIds.length
         );
 
         const workers = Array.from(
@@ -1256,7 +1344,9 @@
                     total: state.progress.total,
                     loaded: state.active.length,
                     failed: state.progress.failed,
-                    settings: state.activeSettings.length
+                    settings: state.activeSettings.length,
+                    hostname: window.location.hostname,
+                    allowedModules: allowedIds
                 }
             );
         }
