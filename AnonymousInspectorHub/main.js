@@ -1,45 +1,97 @@
+
 (function (root) {
     "use strict";
 
-    const VERSION = "1.5.0";
-    const MAX_CONCURRENT_MODULES = 4;
-
-    const CONFIG_KEY = "aih_general_config";
-    const SITES_CONFIG_KEY = "aih_sites_config";
-    const MODULES_CONFIG_KEY = "aih_modules_config";
-
-    const DEFAULT_CONFIG = Object.freeze({
-        maxConcurrentModules: MAX_CONCURRENT_MODULES,
-        requestTimeout: 20000,
-        showInitializationSummary: true
-    });
+    const VERSION = "2.0.0";
 
     const BASE_URL =
         "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/";
 
-    const MODULE_BASE = BASE_URL + "Modules/";
-    const SETTINGS_BASE = BASE_URL + "Settings/";
-    const SETTINGS_MANIFEST = SETTINGS_BASE + "manifest.json";
+    const CORE_FILES = [
+        "Core/Application.js",
+        "Core/Framework.js",
+        "Core/ModuleManager.js",
+        "Core/SettingsManager.js",
+        "Core/SiteManager.js",
+        "Core/CryptoManager.js",
+        "Core/StorageManager.js",
+        "Storage/IndexedDBAdapter.js"
+    ];
+
+    const CONFIG_KEY = "aih_general_config";
+    const MODULES_CONFIG_KEY = "aih_modules_config";
+    const CRYPTO_KEY = "aih_encryption_key";
+
+    const DEFAULT_CONFIG = Object.freeze({
+        maxConcurrentModules: 4,
+        requestTimeout: 20000,
+        showInitializationSummary: true
+    });
 
     const state = {
-        modules: new Map(),
-        active: [],
-
-        settings: new Map(),
-        activeSettings: [],
-
-        config: { ...DEFAULT_CONFIG },
-
-        configuredModuleIds: [],
-
-        ui: null,
         started: false,
-        settingsLoaded: false,
-
+        config: { ...DEFAULT_CONFIG },
+        configuredModuleIds: [],
+        activeModules: [],
+        activeSettings: [],
         progress: {
             total: 0,
             completed: 0,
             failed: 0
+        },
+        ui: null,
+        application: null,
+        services: {},
+        Framework: null
+    };
+
+    // --------------------------------------------------
+    // TAMPERMONKEY STORAGE
+    // --------------------------------------------------
+
+    const GM = {
+        getValue(key, fallback) {
+            if (typeof GM_getValue !== "function") {
+                throw new Error("GM_getValue is unavailable.");
+            }
+
+            return GM_getValue(key, fallback);
+        },
+
+        setValue(key, value) {
+            if (typeof GM_setValue !== "function") {
+                throw new Error("GM_setValue is unavailable.");
+            }
+
+            return GM_setValue(key, value);
+        },
+
+        deleteValue(key) {
+            if (typeof GM_deleteValue === "function") {
+                return GM_deleteValue(key);
+            }
+
+            if (typeof GM_setValue === "function") {
+                return GM_setValue(key, null);
+            }
+
+            throw new Error("GM storage is unavailable.");
+        },
+
+        get api() {
+            return {
+                getValue: this.getValue.bind(this),
+                setValue: this.setValue.bind(this),
+                deleteValue: this.deleteValue.bind(this),
+                xmlHttpRequest:
+                    typeof GM_xmlhttpRequest === "function"
+                        ? GM_xmlhttpRequest
+                        : undefined,
+                setClipboard:
+                    typeof GM_setClipboard === "function"
+                        ? GM_setClipboard
+                        : undefined
+            };
         }
     };
 
@@ -55,7 +107,8 @@
             config.maxConcurrentModules >= 1 &&
             config.maxConcurrentModules <= 10
         ) {
-            result.maxConcurrentModules = config.maxConcurrentModules;
+            result.maxConcurrentModules =
+                config.maxConcurrentModules;
         }
 
         if (
@@ -75,24 +128,11 @@
     }
 
     function loadConfig() {
-        try {
-            if (typeof GM_getValue !== "function") {
-                throw new Error("GM_getValue is unavailable.");
-            }
+        const saved = GM.getValue(CONFIG_KEY, null);
 
-            const saved = GM_getValue(CONFIG_KEY, null);
-
-            if (saved && typeof saved === "object") {
-                state.config = normalizeConfig(saved);
-            }
-        } catch (error) {
-            console.error(
-                "[Anonymous Inspector] Configuration load failed:",
-                error
-            );
-
-            state.config = { ...DEFAULT_CONFIG };
-        }
+        state.config = saved && typeof saved === "object"
+            ? normalizeConfig(saved)
+            : { ...DEFAULT_CONFIG };
     }
 
     function getConfig() {
@@ -105,23 +145,21 @@
             typeof updates !== "object" ||
             Array.isArray(updates)
         ) {
-            throw new Error("Invalid configuration object");
+            throw new Error("Invalid configuration.");
         }
 
-        const allowedKeys = Object.keys(DEFAULT_CONFIG);
+        const allowed = Object.keys(DEFAULT_CONFIG);
 
         for (const key of Object.keys(updates)) {
-            if (!allowedKeys.includes(key)) {
+            if (!allowed.includes(key)) {
                 throw new Error("Unknown configuration key: " + key);
             }
         }
 
-        const merged = {
+        const normalized = normalizeConfig({
             ...state.config,
             ...updates
-        };
-
-        const normalized = normalizeConfig(merged);
+        });
 
         for (const key of Object.keys(updates)) {
             if (normalized[key] !== updates[key]) {
@@ -129,52 +167,10 @@
             }
         }
 
-        try {
-            if (typeof GM_setValue !== "function") {
-                throw new Error("GM_setValue is unavailable.");
-            }
-
-            GM_setValue(CONFIG_KEY, normalized);
-            state.config = normalized;
-
-        } catch (error) {
-            throw new Error(
-                "Configuration storage failed: " + error.message
-            );
-        }
+        GM.setValue(CONFIG_KEY, normalized);
+        state.config = normalized;
 
         return getConfig();
-    }
-
-    function loadSitesConfig() {
-        if (typeof GM_getValue !== "function") {
-            throw new Error("GM_getValue is unavailable.");
-        }
-
-        const saved = GM_getValue(SITES_CONFIG_KEY, []);
-
-        if (!Array.isArray(saved)) {
-            return [];
-        }
-
-        return saved.filter(site =>
-            site &&
-            typeof site.domain === "string" &&
-            typeof site.enabled === "boolean" &&
-            Array.isArray(site.modules)
-        );
-    }
-
-    function saveSitesConfig(sites) {
-        if (!Array.isArray(sites)) {
-            throw new Error("Invalid sites configuration.");
-        }
-
-        if (typeof GM_setValue !== "function") {
-            throw new Error("GM_setValue is unavailable.");
-        }
-
-        GM_setValue(SITES_CONFIG_KEY, sites);
     }
 
     // --------------------------------------------------
@@ -182,11 +178,7 @@
     // --------------------------------------------------
 
     function getDisabledModules() {
-        if (typeof GM_getValue !== "function") {
-            throw new Error("GM_getValue is unavailable.");
-        }
-
-        const saved = GM_getValue(MODULES_CONFIG_KEY, []);
+        const saved = GM.getValue(MODULES_CONFIG_KEY, []);
 
         if (!Array.isArray(saved)) {
             return [];
@@ -224,79 +216,9 @@
             disabled.add(id);
         }
 
-        if (typeof GM_setValue !== "function") {
-            throw new Error("GM_setValue is unavailable.");
-        }
-
-        GM_setValue(MODULES_CONFIG_KEY, [...disabled]);
+        GM.setValue(MODULES_CONFIG_KEY, [...disabled]);
 
         return enabled;
-    }
-
-    // --------------------------------------------------
-    // SITE MATCHING
-    // --------------------------------------------------
-
-    function normalizeSiteDomain(value) {
-        let domain = String(value || "")
-            .trim()
-            .toLowerCase();
-
-        domain = domain.replace(/^https?:\/\//, "");
-        domain = domain.replace(/^\*\./, "");
-        domain = domain.split("/")[0];
-        domain = domain.split(":")[0];
-
-        return domain;
-    }
-
-    function matchesSiteDomain(rule, hostname) {
-        const baseDomain = normalizeSiteDomain(rule);
-        const currentDomain = String(hostname || "").toLowerCase();
-
-        if (!baseDomain || !currentDomain) {
-            return false;
-        }
-
-        return (
-            currentDomain === baseDomain ||
-            currentDomain.endsWith("." + baseDomain)
-        );
-    }
-
-    function getAllowedModules(moduleIds) {
-        const sites = loadSitesConfig();
-        const hostname = window.location.hostname.toLowerCase();
-
-        const matchingSites = sites
-            .filter(site => matchesSiteDomain(site.domain, hostname))
-            .sort((a, b) =>
-                normalizeSiteDomain(b.domain).length -
-                normalizeSiteDomain(a.domain).length
-            );
-
-        // No matching site configuration: preserve the original behavior.
-        if (!matchingSites.length) {
-            return moduleIds;
-        }
-
-        // The most specific matching rule takes priority.
-        const site = matchingSites[0];
-
-        // Disabled site: do not run any modules.
-        if (!site.enabled) {
-            return [];
-        }
-
-        const allowed = new Set(
-            site.modules.filter(id =>
-                typeof id === "string" &&
-                /^[a-zA-Z0-9_-]+$/.test(id)
-            )
-        );
-
-        // An empty Allowed Modules list means no modules.
-        return moduleIds.filter(id => allowed.has(id));
     }
 
     // --------------------------------------------------
@@ -306,25 +228,39 @@
     function createCacheBustedUrl(url) {
         const separator = url.includes("?") ? "&" : "?";
 
-        return url + separator + "_aih=" + Date.now() +
+        return url + separator +
+            "_aih=" + Date.now() +
             "_" + Math.random().toString(36).slice(2);
     }
 
-    function requestText(url) {
+    function request(url, responseType = "text") {
         return new Promise((resolve, reject) => {
+            if (typeof GM_xmlhttpRequest !== "function") {
+                reject(new Error("GM_xmlhttpRequest is unavailable."));
+                return;
+            }
+
             GM_xmlhttpRequest({
                 method: "GET",
                 url: createCacheBustedUrl(url),
+                responseType:
+                    responseType === "arraybuffer"
+                        ? "arraybuffer"
+                        : "text",
+                timeout: state.config.requestTimeout,
                 headers: {
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Cache-Control": "no-cache, no-store",
                     "Pragma": "no-cache",
                     "Expires": "0"
                 },
-                timeout: state.config.requestTimeout,
 
                 onload(response) {
                     if (response.status >= 200 && response.status < 300) {
-                        resolve(response.responseText);
+                        resolve(
+                            responseType === "arraybuffer"
+                                ? response.response
+                                : response.responseText
+                        );
                         return;
                     }
 
@@ -337,56 +273,26 @@
                 },
 
                 onerror() {
-                    reject(new Error("Network request failed"));
+                    reject(new Error("Network request failed."));
                 },
 
                 ontimeout() {
-                    reject(new Error("Request timed out"));
+                    reject(new Error("Request timed out."));
                 }
             });
         });
+    }
+
+    function requestText(url) {
+        return request(url, "text");
     }
 
     function requestArrayBuffer(url) {
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: createCacheBustedUrl(url),
-                responseType: "arraybuffer",
-                headers: {
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0"
-                },
-                timeout: state.config.requestTimeout,
-
-                onload(response) {
-                    if (response.status >= 200 && response.status < 300) {
-                        resolve(response.response);
-                        return;
-                    }
-
-                    if ([401, 403, 404].includes(response.status)) {
-                        resolve(null);
-                        return;
-                    }
-
-                    reject(new Error("HTTP " + response.status));
-                },
-
-                onerror() {
-                    reject(new Error("Network request failed"));
-                },
-
-                ontimeout() {
-                    reject(new Error("Request timed out"));
-                }
-            });
-        });
+        return request(url, "arraybuffer");
     }
 
     // --------------------------------------------------
-    // HELPERS
+    // DOM HELPERS
     // --------------------------------------------------
 
     function createElement(tag, attributes = {}, children = []) {
@@ -401,7 +307,7 @@
                 element.innerHTML = value;
             } else if (key.startsWith("on") && typeof value === "function") {
                 element.addEventListener(
-                    key.substring(2).toLowerCase(),
+                    key.slice(2).toLowerCase(),
                     value
                 );
             } else if (value !== null && value !== undefined) {
@@ -413,300 +319,200 @@
             if (child instanceof Node) {
                 element.appendChild(child);
             } else if (child !== null && child !== undefined) {
-                element.appendChild(document.createTextNode(String(child)));
+                element.appendChild(
+                    document.createTextNode(String(child))
+                );
             }
         }
 
         return element;
     }
 
-    function getCurrentDirectory() {
-        return new URL(".", window.location.href).href;
-    }
-
-    function copy(text) {
+    function copy(value) {
         if (typeof GM_setClipboard === "function") {
-            GM_setClipboard(String(text));
+            GM_setClipboard(String(value));
             return;
         }
 
-        navigator.clipboard.writeText(String(text));
+        return navigator.clipboard.writeText(String(value));
     }
 
     function open(url) {
         window.open(url, "_blank", "noopener,noreferrer");
     }
 
-    // --------------------------------------------------
-    // MODULE SYSTEM
-    // --------------------------------------------------
-
-    class BaseModule {
-        constructor() {
-            this.available = false;
-            this.error = null;
-        }
-
-        static getMetadata() {
-            return {
-                id: this.id,
-                title: this.title,
-                description: this.description,
-                icon: this.icon
-            };
-        }
-
-        getMetadata() {
-            return this.constructor.getMetadata();
-        }
-
-        async init() {
-            throw new Error("Module must implement init()");
-        }
-
-        render() {
-            throw new Error("Module must implement render()");
-        }
-
-        destroy() { }
-    }
-
-    function register(id, ModuleClass) {
-        if (!id || typeof id !== "string") {
-            throw new Error("Invalid module ID");
-        }
-
-        if (typeof ModuleClass !== "function") {
-            throw new Error("Invalid module class");
-        }
-
-        if (!(ModuleClass.prototype instanceof BaseModule)) {
-            throw new Error("Module must extend BaseModule");
-        }
-
-        state.modules.set(id, ModuleClass);
+    function getCurrentDirectory() {
+        return new URL(".", window.location.href).href;
     }
 
     // --------------------------------------------------
-    // SETTINGS SYSTEM
+    // CORE LOADER
     // --------------------------------------------------
 
-    class BaseSettings {
-        constructor() {
-            this.available = true;
-            this.error = null;
-        }
+    async function loadCore() {
+        for (const path of CORE_FILES) {
+            const url = BASE_URL + path;
+            const source = await requestText(url);
 
-        static getMetadata() {
-            return {
-                id: this.id,
-                title: this.title,
-                description: this.description,
-                icon: this.icon
-            };
-        }
-
-        getMetadata() {
-            return this.constructor.getMetadata();
-        }
-
-        async init() {
-            this.available = true;
-        }
-
-        createElement(tag, attributes = {}, children = []) {
-            return Framework.createElement(tag, attributes, children);
-        }
-
-        render() {
-            throw new Error("Settings module must implement render()");
-        }
-
-        destroy() { }
-    }
-
-    function registerSettings(id, SettingsClass) {
-        if (!id || typeof id !== "string") {
-            throw new Error("Invalid settings ID");
-        }
-
-        if (typeof SettingsClass !== "function") {
-            throw new Error("Invalid settings class");
-        }
-
-        if (!(SettingsClass.prototype instanceof BaseSettings)) {
-            throw new Error("Settings must extend BaseSettings");
-        }
-
-        state.settings.set(id, SettingsClass);
-    }
-
-    // --------------------------------------------------
-    // DYNAMIC MODULE EXECUTION
-    // --------------------------------------------------
-
-    function executeModuleSource(source, url) {
-        const gmDeleteValue =
-            typeof GM_deleteValue === "function"
-                ? GM_deleteValue
-                : typeof GM_setValue === "function"
-                    ? key => GM_setValue(key, null)
-                    : undefined;
-
-        const execute = new Function(
-            "Framework",
-            "GM_getValue",
-            "GM_setValue",
-            "GM_deleteValue",
-            "GM_xmlhttpRequest",
-            "GM_setClipboard",
-            source + "\n//# sourceURL=" + url
-        );
-
-        execute(
-            Framework,
-
-            typeof GM_getValue === "function"
-                ? GM_getValue
-                : undefined,
-
-            typeof GM_setValue === "function"
-                ? GM_setValue
-                : undefined,
-
-            gmDeleteValue,
-
-            typeof GM_xmlhttpRequest === "function"
-                ? GM_xmlhttpRequest
-                : undefined,
-
-            typeof GM_setClipboard === "function"
-                ? GM_setClipboard
-                : undefined
-        );
-    }
-
-    async function loadSettingsModule(id) {
-        if (state.settings.has(id)) {
-            return state.settings.get(id);
-        }
-
-        if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-            throw new Error("Invalid settings filename");
-        }
-
-        const url = SETTINGS_BASE + id + ".js";
-        const source = await requestText(url);
-
-        if (source === null) {
-            throw new Error("Settings file unavailable: " + id);
-        }
-
-        executeModuleSource(source, url);
-
-        if (!state.settings.has(id)) {
-            throw new Error("Settings did not register: " + id);
-        }
-
-        return state.settings.get(id);
-    }
-
-    async function loadSettings() {
-        if (state.settingsLoaded) return;
-
-        state.settingsLoaded = true;
-
-        try {
-            const source = await requestText(SETTINGS_MANIFEST);
-
-            if (!source) {
-                return;
+            if (typeof source !== "string" || !source.trim()) {
+                throw new Error("Core file unavailable: " + path);
             }
 
-            const manifest = JSON.parse(source);
+            new Function(
+                source + "\n//# sourceURL=" + url
+            )();
+        }
 
-            const settingsIds = Array.isArray(manifest)
-                ? manifest
-                : manifest.modules;
+        const required = [
+            "AnonymousInspectorApplication",
+            "AnonymousInspectorFrameworkFactory",
+            "AnonymousInspectorModuleManager",
+            "AnonymousInspectorSettingsManager",
+            "AnonymousInspectorSiteManager",
+            "AnonymousInspectorCryptoManager",
+            "AnonymousInspectorStorageManager",
+            "AnonymousInspectorIndexedDBAdapter"
+        ];
 
-            if (!Array.isArray(settingsIds)) {
-                throw new Error("Invalid settings manifest");
+        for (const name of required) {
+            if (typeof root[name] !== "function") {
+                throw new Error("Core component not loaded: " + name);
             }
+        }
+    }
 
-            for (const id of settingsIds) {
-                try {
-                    const SettingsClass = await loadSettingsModule(id);
-                    const instance = new SettingsClass();
+    // --------------------------------------------------
+    // SERVICE CONSTRUCTION
+    // --------------------------------------------------
 
-                    try {
-                        if (typeof instance.init === "function") {
-                            await instance.init();
-                        }
+    function createServices() {
+        const Application = root.AnonymousInspectorApplication;
+        const FrameworkFactory = root.AnonymousInspectorFrameworkFactory;
 
-                        if (instance.available) {
-                            state.activeSettings.push(instance);
-                        } else {
-                            safelyDestroy(instance);
-                        }
-                    } catch (error) {
-                        safelyDestroy(instance);
-                        throw error;
-                    }
-                } catch (error) {
+        const application = new Application({
+            version: VERSION
+        });
+
+        const siteManager = new root.AnonymousInspectorSiteManager({
+            storageKey: "aih_sites_config",
+            getValue: GM.getValue,
+            setValue: GM.setValue
+        });
+
+        const cryptoManager = new root.AnonymousInspectorCryptoManager({
+            storageKey: CRYPTO_KEY,
+            getValue: GM.getValue,
+            setValue: GM.setValue
+        });
+
+        const indexedDBAdapter =
+            new root.AnonymousInspectorIndexedDBAdapter({
+                databaseName: "AnonymousInspectorHub",
+                databaseVersion: 1
+            });
+
+        const storageManager =
+            new root.AnonymousInspectorStorageManager({
+                defaultAdapter: "indexedDB"
+            });
+
+        storageManager.registerAdapter(
+            "indexedDB",
+            indexedDBAdapter
+        );
+
+        const frameworkFactory = new FrameworkFactory({
+            version: VERSION,
+
+            registerModule: (id, ModuleClass) =>
+                moduleManager.register(id, ModuleClass),
+
+            registerSettings: (id, SettingsClass) =>
+                settingsManager.register(id, SettingsClass),
+
+            requestText,
+            requestArrayBuffer,
+            createElement,
+            getCurrentDirectory,
+            copy,
+            open,
+
+            getConfig,
+            setConfig,
+
+            getSitesConfig: () => siteManager.getAll(),
+            setSitesConfig: sites => siteManager.setAll(sites),
+
+            getConfiguredModules,
+            setModuleEnabled,
+
+            openSettings,
+            closeSettings
+        });
+
+        const Framework = frameworkFactory.create();
+
+        const moduleManager =
+            new root.AnonymousInspectorModuleManager({
+                baseUrl: BASE_URL + "Modules/",
+                requestText,
+                Framework,
+                BaseModule: Framework.BaseModule,
+                gm: GM.api,
+                onError(id, error) {
                     console.error(
-                        "[Anonymous Inspector] Settings load failed:",
+                        "[Anonymous Inspector] Module error:",
                         id,
                         error
                     );
                 }
-            }
+            });
 
-            refreshMenu();
+        const settingsManager =
+            new root.AnonymousInspectorSettingsManager({
+                manifestUrl: BASE_URL + "Settings/manifest.json",
+                baseUrl: BASE_URL + "Settings/",
+                requestText,
+                Framework,
+                BaseSettings: Framework.BaseSettings,
+                gm: GM.api,
+                onRefresh: refreshMenu,
+                onError(id, error) {
+                    console.error(
+                        "[Anonymous Inspector] Settings error:",
+                        id,
+                        error
+                    );
+                }
+            });
 
-        } catch (error) {
-            console.error(
-                "[Anonymous Inspector] Settings initialization failed:",
-                error
-            );
-        }
+        application.registerService("sites", siteManager);
+        application.registerService("crypto", cryptoManager);
+        application.registerService("storage", storageManager);
+
+        application.registerService("settings", {
+            initialize: () => settingsManager.loadAll(),
+            destroy: () => settingsManager.destroyAll()
+        });
+
+        state.application = application;
+        state.Framework = Framework;
+
+        state.services = {
+            application,
+            frameworkFactory,
+            Framework,
+            moduleManager,
+            settingsManager,
+            siteManager,
+            cryptoManager,
+            storageManager,
+            indexedDBAdapter
+        };
     }
 
     // --------------------------------------------------
-    // FRAMEWORK API
-    // --------------------------------------------------
-
-    const Framework = Object.freeze({
-        version: VERSION,
-
-        BaseModule,
-        BaseSettings,
-
-        register,
-        registerSettings,
-
-        requestText,
-        requestArrayBuffer,
-
-        createElement,
-        getCurrentDirectory,
-        copy,
-        open,
-
-        getConfig,
-        setConfig,
-
-        getSitesConfig: loadSitesConfig,
-        setSitesConfig: saveSitesConfig,
-
-        getConfiguredModules,
-        setModuleEnabled,
-
-        openSettings,
-        closeSettings
-    });
-
-    // --------------------------------------------------
-    // STYLES
+    // UI
     // --------------------------------------------------
 
     function injectStyles() {
@@ -730,15 +536,9 @@
                     border: 1px solid #555;
                     border-radius: 50%;
                     background: #171717;
-                    color: #fff;
-                    font-size: 25px;
+                    color: white;
+                    font-size: 24px;
                     cursor: pointer;
-                    box-shadow: 0 3px 12px rgba(0,0,0,.45);
-                }
-
-                #aih-button:disabled {
-                    cursor: wait;
-                    opacity: .8;
                 }
 
                 #aih-menu {
@@ -748,16 +548,14 @@
                     bottom: 58px;
                     width: 280px;
                     max-height: 65vh;
-                    overflow-y: auto;
+                    overflow: auto;
                     background: #171717;
                     border: 1px solid #444;
                     border-radius: 8px;
-                    box-shadow: 0 5px 20px rgba(0,0,0,.5);
                 }
 
                 .aih-menu-item {
                     display: flex;
-                    align-items: center;
                     gap: 12px;
                     width: 100%;
                     padding: 12px;
@@ -773,28 +571,6 @@
                     background: #292929;
                 }
 
-                .aih-menu-icon {
-                    width: 28px;
-                    font-size: 21px;
-                    text-align: center;
-                }
-
-                .aih-menu-title {
-                    font-size: 13px;
-                    font-weight: bold;
-                }
-
-                .aih-menu-description {
-                    margin-top: 4px;
-                    color: #aaa;
-                    font-size: 11px;
-                }
-
-                .aih-menu-divider {
-                    height: 1px;
-                    background: #444;
-                }
-
                 #aih-progress {
                     position: absolute;
                     right: 0;
@@ -804,17 +580,10 @@
                     background: #171717;
                     border: 1px solid #444;
                     border-radius: 8px;
-                    box-shadow: 0 5px 20px rgba(0,0,0,.5);
-                }
-
-                #aih-progress-label {
-                    margin-bottom: 8px;
-                    color: #ddd;
-                    font-size: 12px;
+                    pointer-events: none;
                 }
 
                 #aih-progress-track {
-                    width: 100%;
                     height: 5px;
                     overflow: hidden;
                     background: #333;
@@ -822,10 +591,9 @@
                 }
 
                 #aih-progress-bar {
-                    width: 0%;
+                    width: 0;
                     height: 100%;
                     background: #4caf50;
-                    transition: width .2s ease;
                 }
 
                 #aih-panel {
@@ -839,20 +607,15 @@
                     color: #eee;
                     border: 1px solid #555;
                     border-radius: 8px;
-                    box-shadow: 0 5px 30px rgba(0,0,0,.7);
                 }
 
                 #aih-panel-close {
-                    position: sticky;
-                    top: 0;
                     float: right;
                     padding: 7px 12px;
-                    border: 1px solid #555;
-                    border-radius: 5px;
                     background: #333;
-                    color: #fff;
+                    color: white;
+                    border: 1px solid #555;
                     cursor: pointer;
-                    z-index: 2;
                 }
 
                 #aih-panel-content {
@@ -860,21 +623,14 @@
                     padding-top: 15px;
                 }
 
-                .aih-settings-header {
-                    margin: 0 0 15px;
-                    font-size: 20px;
-                }
-
                 .aih-settings-layout {
                     display: flex;
                     gap: 20px;
-                    min-height: 300px;
                 }
 
                 .aih-settings-nav {
-                    flex: 0 0 190px;
-                    border-right: 1px solid #444;
-                    padding-right: 12px;
+                    width: 190px;
+                    flex-shrink: 0;
                 }
 
                 .aih-settings-nav button {
@@ -882,16 +638,15 @@
                     width: 100%;
                     padding: 10px;
                     margin-bottom: 5px;
-                    border: 0;
-                    border-radius: 5px;
                     background: transparent;
                     color: #ddd;
+                    border: 0;
                     text-align: left;
                     cursor: pointer;
                 }
 
-                .aih-settings-nav button:hover,
-                .aih-settings-nav button.active {
+                .aih-settings-nav button.active,
+                .aih-settings-nav button:hover {
                     background: #303030;
                 }
 
@@ -900,28 +655,10 @@
                     min-width: 0;
                 }
 
-                .aih-settings-empty {
-                    padding: 20px;
-                    color: #aaa;
-                    font-size: 13px;
-                }
-
-                @media (max-width: 600px) {
-                    #aih-panel {
-                        inset: 2%;
-                        padding: 12px;
-                    }
-
-                    .aih-settings-layout {
-                        flex-direction: column;
-                    }
-
-                    .aih-settings-nav {
-                        flex: none;
-                        border-right: 0;
-                        border-bottom: 1px solid #444;
-                        padding: 0 0 10px;
-                    }
+                @media(max-width:600px) {
+                    #aih-panel { inset: 2%; padding: 12px; }
+                    .aih-settings-layout { flex-direction: column; }
+                    .aih-settings-nav { width: 100%; }
                 }
             `
         });
@@ -929,105 +666,63 @@
         document.head.appendChild(style);
     }
 
-    // --------------------------------------------------
-    // PANEL MANAGEMENT
-    // --------------------------------------------------
-
     function closePanel() {
         const panel = document.getElementById("aih-panel");
         const content = document.getElementById("aih-panel-content");
 
-        if (panel) {
-            panel.style.display = "none";
-        }
-
-        if (content) {
-            content.replaceChildren();
-        }
+        if (panel) panel.style.display = "none";
+        if (content) content.replaceChildren();
     }
 
-    function showPanel(module) {
-        const panel = document.getElementById("aih-panel");
-        const content = document.getElementById("aih-panel-content");
-        const menu = document.getElementById("aih-menu");
-
-        content.replaceChildren();
-
-        try {
-            const result = module.render();
-
-            if (result === null || result === undefined) {
-                menu.style.display = "none";
-                return;
-            }
-
-            if (result instanceof Node) {
-                content.appendChild(result);
-            } else {
-                content.textContent = String(result);
-            }
-        } catch (error) {
-            content.textContent =
-                "Module rendering failed: " + error.message;
-        }
-
-        panel.style.display = "block";
-        menu.style.display = "none";
-    }
-
-    function showSettingsModule(instance, activeButton, view) {
-        view.replaceChildren();
-
-        const buttons = document.querySelectorAll(
-            ".aih-settings-nav button"
-        );
-
-        buttons.forEach(button => button.classList.remove("active"));
-        activeButton.classList.add("active");
+    function renderModule(instance, target) {
+        target.replaceChildren();
 
         try {
             const result = instance.render();
 
-            if (result === null || result === undefined) {
-                return;
-            }
-
             if (result instanceof Node) {
-                view.appendChild(result);
-            } else {
-                view.textContent = String(result);
+                target.appendChild(result);
+            } else if (result !== null && result !== undefined) {
+                target.textContent = String(result);
             }
         } catch (error) {
-            view.textContent =
-                "Settings rendering failed: " + error.message;
+            target.textContent = "Rendering failed: " + error.message;
         }
     }
 
+    function showModule(instance) {
+        const panel = document.getElementById("aih-panel");
+        const content = document.getElementById("aih-panel-content");
+
+        renderModule(instance, content);
+        panel.style.display = "block";
+
+        document.getElementById("aih-menu").style.display = "none";
+    }
+
+    function showSettings(instance, button, view) {
+        document.querySelectorAll(".aih-settings-nav button")
+            .forEach(item => item.classList.remove("active"));
+
+        button.classList.add("active");
+        renderModule(instance, view);
+    }
+
     function openSettings() {
-        if (!state.ui) {
-            createUI();
-        }
+        if (!state.ui) return;
 
         const panel = document.getElementById("aih-panel");
         const content = document.getElementById("aih-panel-content");
-        const menu = document.getElementById("aih-menu");
 
         content.replaceChildren();
-        menu.style.display = "none";
 
-        const heading = createElement("h2", {
-            className: "aih-settings-header",
+        content.appendChild(createElement("h2", {
             textContent: "Anonymous Inspector Settings"
-        });
-
-        content.appendChild(heading);
+        }));
 
         if (!state.activeSettings.length) {
-            content.appendChild(createElement("div", {
-                className: "aih-settings-empty",
-                textContent: state.settingsLoaded
-                    ? "No settings modules are available."
-                    : "Settings are loading or no settings manifest exists."
+            content.appendChild(createElement("p", {
+                textContent: "No settings modules are available."
             }));
 
             panel.style.display = "block";
@@ -1055,31 +750,28 @@
             const button = createElement("button", {
                 type: "button",
                 textContent:
-                    (metadata.icon ? metadata.icon + "  " : "") +
+                    (metadata.icon ? metadata.icon + " " : "") +
                     (metadata.title || metadata.id)
             });
 
             button.addEventListener("click", () => {
-                showSettingsModule(instance, button, view);
+                showSettings(instance, button, view);
             });
 
             nav.appendChild(button);
 
             if (index === 0) {
-                showSettingsModule(instance, button, view);
+                showSettings(instance, button, view);
             }
         });
 
         panel.style.display = "block";
+        document.getElementById("aih-menu").style.display = "none";
     }
 
     function closeSettings() {
         closePanel();
     }
-
-    // --------------------------------------------------
-    // MENU
-    // --------------------------------------------------
 
     function refreshMenu() {
         const menu = document.getElementById("aih-menu");
@@ -1089,70 +781,34 @@
 
         const settingsButton = createElement("button", {
             className: "aih-menu-item",
-            type: "button"
+            textContent: "Settings"
         });
-
-        settingsButton.append(
-            createElement("span", {
-                className: "aih-menu-icon",
-                textContent: "⚙"
-            }),
-            createElement("div", {}, [
-                createElement("div", {
-                    className: "aih-menu-title",
-                    textContent: "Settings"
-                }),
-                createElement("div", {
-                    className: "aih-menu-description",
-                    textContent: "Configure Anonymous Inspector"
-                })
-            ])
-        );
 
         settingsButton.addEventListener("click", openSettings);
         menu.appendChild(settingsButton);
 
-        if (state.active.length) {
-            menu.appendChild(createElement("div", {
-                className: "aih-menu-divider"
-            }));
-        }
+        for (const instance of state.activeModules) {
+            const metadata = instance.getMetadata();
 
-        for (const module of state.active) {
-            const metadata = module.getMetadata();
-
-            const item = createElement("button", {
-                className: "aih-menu-item",
-                type: "button"
+            const button = createElement("button", {
+                className: "aih-menu-item"
             });
 
-            const icon = createElement("span", {
-                className: "aih-menu-icon",
+            button.appendChild(createElement("span", {
                 textContent: metadata.icon || "◉"
-            });
+            }));
 
-            const details = createElement("div");
-
-            details.appendChild(createElement("div", {
-                className: "aih-menu-title",
+            button.appendChild(createElement("span", {
                 textContent: metadata.title || metadata.id
             }));
 
-            details.appendChild(createElement("div", {
-                className: "aih-menu-description",
-                textContent: metadata.description || ""
-            }));
+            button.addEventListener("click", () => {
+                showModule(instance);
+            });
 
-            item.append(icon, details);
-            item.addEventListener("click", () => showPanel(module));
-
-            menu.appendChild(item);
+            menu.appendChild(button);
         }
     }
-
-    // --------------------------------------------------
-    // PROGRESS
-    // --------------------------------------------------
 
     function updateProgress() {
         const progress = state.progress;
@@ -1162,7 +818,7 @@
         if (!label || !bar) return;
 
         const percent = progress.total
-            ? Math.round((progress.completed / progress.total) * 100)
+            ? Math.round(progress.completed / progress.total * 100)
             : 100;
 
         label.textContent =
@@ -1176,22 +832,16 @@
 
     function finishProgress() {
         const progress = document.getElementById("aih-progress");
+
+        if (progress) progress.style.display = "none";
+
         const button = document.getElementById("aih-button");
 
-        if (progress) {
-            progress.style.display = "none";
-        }
-
         if (button) {
-            button.disabled = false;
             button.textContent = "◉";
             button.title = "Anonymous Inspector";
         }
     }
-
-    // --------------------------------------------------
-    // UI CREATION
-    // --------------------------------------------------
 
     function createUI() {
         if (state.ui) return;
@@ -1205,11 +855,9 @@
         const button = createElement("button", {
             id: "aih-button",
             type: "button",
-            title: "Initializing Anonymous Inspector",
-            textContent: "..."
+            title: "Anonymous Inspector",
+            textContent: "◉"
         });
-
-        button.disabled = true;
 
         const menu = createElement("div", {
             id: "aih-menu"
@@ -1219,21 +867,21 @@
             id: "aih-progress"
         });
 
-        const progressLabel = createElement("div", {
+        const label = createElement("div", {
             id: "aih-progress-label",
             textContent: "Initializing..."
         });
 
-        const progressTrack = createElement("div", {
+        const track = createElement("div", {
             id: "aih-progress-track"
         });
 
-        const progressBar = createElement("div", {
+        const bar = createElement("div", {
             id: "aih-progress-bar"
         });
 
-        progressTrack.appendChild(progressBar);
-        progress.append(progressLabel, progressTrack);
+        track.appendChild(bar);
+        progress.append(label, track);
 
         const panel = createElement("div", {
             id: "aih-panel"
@@ -1252,15 +900,12 @@
         closeButton.addEventListener("click", closePanel);
 
         button.addEventListener("click", () => {
-            if (button.disabled) return;
-
             menu.style.display =
                 menu.style.display === "block" ? "none" : "block";
         });
 
         panel.append(closeButton, content);
         rootElement.append(button, menu, progress);
-
         document.body.append(rootElement, panel);
 
         state.ui = rootElement;
@@ -1285,71 +930,42 @@
     }
 
     // --------------------------------------------------
-    // MODULE LOADING
+    // MODULE EXECUTION
     // --------------------------------------------------
 
-    async function loadModule(id) {
-        if (state.modules.has(id)) {
-            return state.modules.get(id);
-        }
+    async function runModules(moduleIds) {
+        state.progress = {
+            total: moduleIds.length,
+            completed: 0,
+            failed: 0
+        };
 
-        if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-            throw new Error("Invalid module filename");
-        }
+        updateProgress();
 
-        const url = MODULE_BASE + id + ".js";
-        const source = await requestText(url);
+        const result = await state.services.moduleManager.initializeMany(
+            moduleIds,
+            {
+                concurrency: state.config.maxConcurrentModules,
 
-        if (source === null) {
-            throw new Error("Module file unavailable: " + id);
-        }
+                onProgress(progress) {
+                    state.progress.completed = progress.completed;
+                    state.progress.failed = progress.failed;
 
-        executeModuleSource(source, url);
+                    state.activeModules =
+                        state.services.moduleManager.getActiveInstances();
 
-        if (!state.modules.has(id)) {
-            throw new Error("Module did not register: " + id);
-        }
-
-        return state.modules.get(id);
-    }
-
-    function safelyDestroy(instance) {
-        if (!instance || typeof instance.destroy !== "function") return;
-
-        try {
-            instance.destroy();
-        } catch (error) {
-            console.error(
-                "[Anonymous Inspector] Destroy failed:",
-                error
-            );
-        }
-    }
-
-    async function initializeModule(id) {
-        try {
-            const ModuleClass = await loadModule(id);
-            const instance = new ModuleClass();
-
-            try {
-                await instance.init();
-
-                if (instance.available) {
-                    return instance;
+                    refreshMenu();
+                    updateProgress();
                 }
-
-                safelyDestroy(instance);
-                return null;
-
-            } catch (error) {
-                safelyDestroy(instance);
-                throw error;
             }
+        );
 
-        } catch (error) {
-            console.error("[Anonymous Inspector]", id, error);
-            return null;
-        }
+        state.activeModules =
+            state.services.moduleManager.getActiveInstances();
+
+        finishProgress();
+
+        return result;
     }
 
     // --------------------------------------------------
@@ -1357,12 +973,7 @@
     // --------------------------------------------------
 
     function registerTampermonkeyMenu() {
-        if (typeof GM_registerMenuCommand !== "function") {
-            console.warn(
-                "[Anonymous Inspector] GM_registerMenuCommand is unavailable."
-            );
-            return;
-        }
+        if (typeof GM_registerMenuCommand !== "function") return;
 
         GM_registerMenuCommand(
             "Anonymous Inspector Hub - Settings",
@@ -1379,105 +990,71 @@
 
         state.started = true;
 
-        loadConfig();
-
-        const uniqueIds = [...new Set(moduleIds)];
-
-        state.configuredModuleIds = uniqueIds;
-
-        let allowedIds;
-
         try {
-            const disabledModules = new Set(getDisabledModules());
+            loadConfig();
 
-            const globallyEnabledIds = uniqueIds.filter(id =>
-                !disabledModules.has(id)
+            state.configuredModuleIds = [
+                ...new Set(moduleIds)
+            ];
+
+            await loadCore();
+            createServices();
+
+            await state.application.start();
+
+            state.activeSettings =
+                state.services.settingsManager.getActiveInstances();
+
+            const disabled = new Set(getDisabledModules());
+
+            const globallyEnabled = state.configuredModuleIds.filter(
+                id => !disabled.has(id)
             );
 
-            allowedIds = getAllowedModules(globallyEnabledIds);
+            const allowed = state.services.siteManager.getAllowedModules(
+                globallyEnabled,
+                window.location.hostname
+            );
+
+            createUI();
+
+            await new Promise(resolve =>
+                requestAnimationFrame(resolve)
+            );
+
+            const result = await runModules(allowed);
+
+            refreshMenu();
+
+            if (state.config.showInitializationSummary) {
+                console.info(
+                    "[Anonymous Inspector] Initialization complete:",
+                    {
+                        version: VERSION,
+                        total: result.total,
+                        loaded: result.loaded,
+                        failed: result.failed,
+                        settings: state.activeSettings.length,
+                        hostname: window.location.hostname,
+                        allowedModules: allowed
+                    }
+                );
+            }
 
         } catch (error) {
             console.error(
-                "[Anonymous Inspector] Module/site configuration load failed:",
+                "[Anonymous Inspector] Startup failed:",
                 error
             );
 
-            // Fail closed if the configuration cannot be read.
-            allowedIds = [];
-        }
-
-        state.progress.total = allowedIds.length;
-        state.progress.completed = 0;
-        state.progress.failed = 0;
-
-        createUI();
-        updateProgress();
-
-        await new Promise(resolve => requestAnimationFrame(resolve));
-
-        const settingsPromise = loadSettings();
-
-        const results = new Array(allowedIds.length).fill(null);
-        let nextIndex = 0;
-
-        async function worker() {
-            while (true) {
-                const index = nextIndex++;
-
-                if (index >= allowedIds.length) {
-                    return;
-                }
-
-                const id = allowedIds[index];
-                const instance = await initializeModule(id);
-
-                results[index] = instance;
-
-                if (!instance) {
-                    state.progress.failed++;
-                }
-
-                state.progress.completed++;
-
-                state.active = results.filter(Boolean);
-
-                refreshMenu();
-                updateProgress();
-            }
-        }
-
-        const workerCount = Math.min(
-            state.config.maxConcurrentModules,
-            allowedIds.length
-        );
-
-        const workers = Array.from(
-            { length: workerCount },
-            () => worker()
-        );
-
-        await Promise.all(workers);
-        await settingsPromise;
-
-        state.active = results.filter(Boolean);
-
-        refreshMenu();
-        updateProgress();
-        finishProgress();
-
-        if (state.config.showInitializationSummary) {
-            console.info(
-                "[Anonymous Inspector] Initialization complete:",
-                {
-                    version: VERSION,
-                    total: state.progress.total,
-                    loaded: state.active.length,
-                    failed: state.progress.failed,
-                    settings: state.activeSettings.length,
-                    hostname: window.location.hostname,
-                    allowedModules: allowedIds
-                }
+            const label = document.getElementById(
+                "aih-progress-label"
             );
+
+            if (label) {
+                label.textContent = "Initialization failed: " +
+                    error.message;
+            }
         }
     }
 
@@ -1485,7 +1062,7 @@
     // GLOBAL EXPORTS
     // --------------------------------------------------
 
-    root.AnonymousInspectorFramework = Framework;
+    root.AnonymousInspectorFramework = null;
     root.AnonymousInspector = AnonymousInspector;
 
     registerTampermonkeyMenu();
