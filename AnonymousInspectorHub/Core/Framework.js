@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -228,6 +227,13 @@
                 saveWebsite(website) {
                     return factory.invoke(
                         "storageSaveWebsite",
+                        [website]
+                    );
+                },
+
+                upsertWebsite(website) {
+                    return factory.invoke(
+                        "storageUpsertWebsite",
                         [website]
                     );
                 },

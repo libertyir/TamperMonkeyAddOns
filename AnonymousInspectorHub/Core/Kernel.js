@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -576,6 +575,9 @@
 
                 storageSaveWebsite: website =>
                     this.storageManager.saveWebsite(website),
+
+                storageUpsertWebsite: website =>
+                    this.storageManager.upsertWebsite(website),
 
                 storageDeleteWebsite: guid =>
                     this.storageManager.deleteWebsite(guid),
