@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -13,6 +12,7 @@
             this.available = false;
             this.results = [];
             this.timeout = 7000;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -27,6 +27,7 @@
         async init() {
             this.available = false;
             this.results = [];
+            this.scannedAt = new Date().toISOString();
 
             const paths = [
                 "/",
@@ -71,6 +72,22 @@
             }
 
             this.available = this.results.length > 0;
+        }
+
+        getResult() {
+            if (!this.available || !this.results.length) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                totalChecked: this.results.length,
+                results: this.results.map(result => ({
+                    ...result,
+                    headers: { ...result.headers }
+                }))
+            };
         }
 
         async checkUrl(url) {

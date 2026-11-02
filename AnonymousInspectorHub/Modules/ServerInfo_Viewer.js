@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -13,6 +12,7 @@
             this.available = false;
             this.info = null;
             this.error = null;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -28,6 +28,7 @@
             this.available = false;
             this.info = null;
             this.error = null;
+            this.scannedAt = new Date().toISOString();
 
             try {
                 const response = await fetch(location.href, {
@@ -69,6 +70,27 @@
             } catch (error) {
                 this.error = error.message || "Unable to inspect server response.";
             }
+        }
+
+        getResult() {
+            if (!this.available || !this.info) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                info: {
+                    ...this.info,
+                    headers: { ...this.info.headers },
+                    technologies: [...this.info.technologies],
+                    security: this.info.security.map(item => ({ ...item })),
+                    infrastructure: this.info.infrastructure.map(item => ({
+                        ...item,
+                        indicators: [...item.indicators]
+                    }))
+                }
+            };
         }
 
         detectTechnologies(headers) {

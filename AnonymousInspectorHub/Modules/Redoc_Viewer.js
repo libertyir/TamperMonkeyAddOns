@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -12,6 +11,7 @@
             super();
             this.available = false;
             this.foundPages = [];
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -26,6 +26,7 @@
         async init() {
             this.available = false;
             this.foundPages = [];
+            this.scannedAt = new Date().toISOString();
 
             const paths = [
                 "redoc",
@@ -97,6 +98,21 @@
                     // Ignore inaccessible paths.
                 }
             }
+        }
+
+        getResult() {
+            if (!this.available || !this.foundPages.length) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                totalFound: this.foundPages.length,
+                foundPages: this.foundPages.map(page => ({
+                    ...page
+                }))
+            };
         }
 
         isRedocPage(html) {

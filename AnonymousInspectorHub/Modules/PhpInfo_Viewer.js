@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -15,6 +14,7 @@
             this.content = null;
             this.fileUrl = null;
             this.links = [];
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -28,6 +28,7 @@
 
         async init() {
             this.available = false;
+            this.scannedAt = new Date().toISOString();
 
             this.fileUrl = new URL(
                 "phpinfo.php",
@@ -69,6 +70,30 @@
                 this.error = error;
                 console.warn("[PHP Info Viewer]", error);
             }
+        }
+
+        getResult() {
+            if (!this.available || !this.content) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                fileUrl: this.fileUrl,
+                fileName: "phpinfo.php",
+                scannedAt: this.scannedAt,
+                contentLength: (
+                    this.content.body.innerText ||
+                    this.content.body.textContent ||
+                    ""
+                ).length,
+                content: (
+                    this.content.body.innerText ||
+                    this.content.body.textContent ||
+                    ""
+                ),
+                links: [...new Set(this.links)]
+            };
         }
 
         isPhpInfo(doc) {

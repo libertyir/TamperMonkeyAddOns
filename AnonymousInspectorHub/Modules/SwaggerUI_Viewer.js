@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -12,6 +11,7 @@
         constructor() {
             super();
             this.swaggerUrl = null;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -25,6 +25,8 @@
 
         async init() {
             this.available = false;
+            this.swaggerUrl = null;
+            this.scannedAt = new Date().toISOString();
 
             const base = new URL(".", window.location.href);
 
@@ -56,6 +58,18 @@
                     return;
                 }
             }
+        }
+
+        getResult() {
+            if (!this.available || !this.swaggerUrl) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                swaggerUrl: this.swaggerUrl
+            };
         }
 
         async checkHead(url) {
