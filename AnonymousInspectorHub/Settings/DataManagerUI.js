@@ -34,20 +34,23 @@ class DataManagerUI extends Framework.BaseSettings {
     }
 
     readStorage(key) {
-        if (typeof GM_getValue === "function") {
-            return GM_getValue(key, null);
+        if (typeof GM_getValue !== "function") {
+            throw new Error(
+                "GM_getValue is unavailable. Check userscript @grant."
+            );
         }
 
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : null;
+        return GM_getValue(key, null);
     }
 
     writeStorage(key, value) {
-        if (typeof GM_setValue === "function") {
-            GM_setValue(key, value);
-        } else {
-            localStorage.setItem(key, JSON.stringify(value));
+        if (typeof GM_setValue !== "function") {
+            throw new Error(
+                "GM_setValue is unavailable. Check userscript @grant."
+            );
         }
+
+        return GM_setValue(key, value);
     }
 
     createButton(text, callback, color = "#303030") {
@@ -209,8 +212,6 @@ class DataManagerUI extends Framework.BaseSettings {
 
         const settings = backup.settings;
 
-        // Restore IndexedDB data when available.
-        // Version 1 backups contain settings only.
         if (backup.storage) {
             await Framework.Storage.importAll(
                 backup.storage,
@@ -218,7 +219,6 @@ class DataManagerUI extends Framework.BaseSettings {
             );
         }
 
-        // Restore application settings.
         if (settings.general !== undefined) {
             Framework.setConfig(settings.general);
         }
@@ -307,8 +307,8 @@ class DataManagerUI extends Framework.BaseSettings {
                     const result = await this.restoreBackup(file);
 
                     const message = result.storageRestored
-                        ? "Backup restored successfully, including database records."
-                        : "Legacy settings backup restored successfully. Database records were not included.";
+                        ? "Backup restored successfully, including stored records."
+                        : "Legacy settings backup restored successfully. Stored records were not included.";
 
                     showStatus(
                         message + " Reload the page to apply all changes.",
