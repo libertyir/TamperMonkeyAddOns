@@ -90,7 +90,7 @@ class DataManagerUI extends Framework.BaseSettings {
     }
 
     async collectBackup() {
-        const storage = await Framework.exportAll();
+        const storage = await Framework.Storage.exportAll();
 
         return {
             application: "AnonymousInspectorHub",
@@ -212,7 +212,7 @@ class DataManagerUI extends Framework.BaseSettings {
         // Restore IndexedDB data when available.
         // Version 1 backups contain settings only.
         if (backup.storage) {
-            await Framework.importAll(
+            await Framework.Storage.importAll(
                 backup.storage,
                 { replace: true }
             );
