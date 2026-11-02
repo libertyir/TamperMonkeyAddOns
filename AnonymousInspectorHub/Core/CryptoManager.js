@@ -3,77 +3,431 @@
     "use strict";
 
     class CryptoManager {
-        constructor(options = {}) {
-            this.storageKey = options.storageKey || "aih_encryption_key";
+        constructor() {
+            // Fixed shared AES-128 key: "AIH-Static-Key01"
+            this.key = new Uint8Array([
+                0x41, 0x49, 0x48, 0x2D,
+                0x53, 0x74, 0x61, 0x74,
+                0x69, 0x63, 0x2D, 0x4B,
+                0x65, 0x79, 0x30, 0x31
+            ]);
 
-            this.getValue = options.getValue;
-            this.setValue = options.setValue;
+            // Fixed 128-bit zero IV
+            this.iv = new Uint8Array(16);
 
-            this.iterations = 600000;
-
-            this.algorithm = Object.freeze({
-                encryption: "AES-256-GCM",
-                keyDerivation: "PBKDF2",
-                hash: "SHA-256",
-                iterations: this.iterations,
-                keyLength: 256,
-                keyCharacters: 12
-            });
-
-            this.key = null;
             this.initialized = false;
             this.initializePromise = null;
 
+            this.algorithm = Object.freeze({
+                encryption: "AES-128-CBC",
+                keyLength: 128,
+                ivLength: 128,
+                iv: "00000000000000000000000000000000",
+                padding: "PKCS7",
+                encoding: "Base64"
+            });
+
             this.encoder = new TextEncoder();
             this.decoder = new TextDecoder();
+
+            this.sbox = new Uint8Array(256);
+            this.invSbox = new Uint8Array(256);
+
+            this.createSBox();
         }
 
         // --------------------------------------------------
-        // CRYPTO AVAILABILITY
+        // AES PRIMITIVES
         // --------------------------------------------------
 
-        getCrypto() {
-            if (
-                !root.crypto ||
-                !root.crypto.subtle ||
-                typeof root.crypto.getRandomValues !== "function"
-            ) {
-                throw new Error(
-                    "Web Crypto API is unavailable."
-                );
+        gfMultiply(a, b) {
+            let result = 0;
+
+            while (b) {
+                if (b & 1) {
+                    result ^= a;
+                }
+
+                a = (a << 1) ^ ((a & 0x80) ? 0x11B : 0);
+                b >>>= 1;
             }
 
-            return root.crypto;
+            return result & 0xFF;
+        }
+
+        gfPower(value, power) {
+            let result = 1;
+
+            while (power > 0) {
+                if (power & 1) {
+                    result = this.gfMultiply(result, value);
+                }
+
+                value = this.gfMultiply(value, value);
+                power >>>= 1;
+            }
+
+            return result;
+        }
+
+        rotateByte(value, count) {
+            return (
+                (value << count) |
+                (value >>> (8 - count))
+            ) & 0xFF;
+        }
+
+        createSBox() {
+            for (let i = 0; i < 256; i++) {
+                const inverse = i === 0
+                    ? 0
+                    : this.gfPower(i, 254);
+
+                const value =
+                    inverse ^
+                    this.rotateByte(inverse, 1) ^
+                    this.rotateByte(inverse, 2) ^
+                    this.rotateByte(inverse, 3) ^
+                    this.rotateByte(inverse, 4) ^
+                    0x63;
+
+                this.sbox[i] = value;
+                this.invSbox[value] = i;
+            }
         }
 
         // --------------------------------------------------
-        // RANDOM GENERATION
+        // KEY EXPANSION
         // --------------------------------------------------
 
-        randomBytes(length) {
-            const crypto = this.getCrypto();
-            const bytes = new Uint8Array(length);
+        expandKey(key) {
+            const expanded = new Uint8Array(176);
+            expanded.set(key);
 
-            crypto.getRandomValues(bytes);
+            let generated = 16;
+            let roundConstant = 1;
+            const temp = new Uint8Array(4);
+
+            while (generated < 176) {
+                for (let i = 0; i < 4; i++) {
+                    temp[i] = expanded[generated - 4 + i];
+                }
+
+                if (generated % 16 === 0) {
+                    const first = temp[0];
+
+                    temp[0] = this.sbox[temp[1]];
+                    temp[1] = this.sbox[temp[2]];
+                    temp[2] = this.sbox[temp[3]];
+                    temp[3] = this.sbox[first];
+
+                    temp[0] ^= roundConstant;
+                    roundConstant = this.gfMultiply(
+                        roundConstant,
+                        2
+                    );
+                }
+
+                for (let i = 0; i < 4; i++) {
+                    expanded[generated] =
+                        expanded[generated - 16] ^ temp[i];
+
+                    generated++;
+                }
+            }
+
+            return expanded;
+        }
+
+        addRoundKey(state, expandedKey, round) {
+            const offset = round * 16;
+
+            for (let i = 0; i < 16; i++) {
+                state[i] ^= expandedKey[offset + i];
+            }
+        }
+
+        // --------------------------------------------------
+        // AES STATE OPERATIONS
+        // --------------------------------------------------
+
+        subBytes(state) {
+            for (let i = 0; i < 16; i++) {
+                state[i] = this.sbox[state[i]];
+            }
+        }
+
+        invSubBytes(state) {
+            for (let i = 0; i < 16; i++) {
+                state[i] = this.invSbox[state[i]];
+            }
+        }
+
+        shiftRows(state) {
+            const copy = state.slice();
+
+            for (let row = 1; row < 4; row++) {
+                for (let col = 0; col < 4; col++) {
+                    state[row + 4 * col] =
+                        copy[row + 4 * ((col + row) % 4)];
+                }
+            }
+        }
+
+        invShiftRows(state) {
+            const copy = state.slice();
+
+            for (let row = 1; row < 4; row++) {
+                for (let col = 0; col < 4; col++) {
+                    state[row + 4 * col] =
+                        copy[row + 4 * ((col - row + 4) % 4)];
+                }
+            }
+        }
+
+        mixColumns(state) {
+            for (let col = 0; col < 4; col++) {
+                const i = col * 4;
+
+                const a = state[i];
+                const b = state[i + 1];
+                const c = state[i + 2];
+                const d = state[i + 3];
+
+                state[i] =
+                    this.gfMultiply(a, 2) ^
+                    this.gfMultiply(b, 3) ^ c ^ d;
+
+                state[i + 1] =
+                    a ^
+                    this.gfMultiply(b, 2) ^
+                    this.gfMultiply(c, 3) ^ d;
+
+                state[i + 2] =
+                    a ^ b ^
+                    this.gfMultiply(c, 2) ^
+                    this.gfMultiply(d, 3);
+
+                state[i + 3] =
+                    this.gfMultiply(a, 3) ^
+                    b ^ c ^
+                    this.gfMultiply(d, 2);
+            }
+        }
+
+        invMixColumns(state) {
+            for (let col = 0; col < 4; col++) {
+                const i = col * 4;
+
+                const a = state[i];
+                const b = state[i + 1];
+                const c = state[i + 2];
+                const d = state[i + 3];
+
+                state[i] =
+                    this.gfMultiply(a, 14) ^
+                    this.gfMultiply(b, 11) ^
+                    this.gfMultiply(c, 13) ^
+                    this.gfMultiply(d, 9);
+
+                state[i + 1] =
+                    this.gfMultiply(a, 9) ^
+                    this.gfMultiply(b, 14) ^
+                    this.gfMultiply(c, 11) ^
+                    this.gfMultiply(d, 13);
+
+                state[i + 2] =
+                    this.gfMultiply(a, 13) ^
+                    this.gfMultiply(b, 9) ^
+                    this.gfMultiply(c, 14) ^
+                    this.gfMultiply(d, 11);
+
+                state[i + 3] =
+                    this.gfMultiply(a, 11) ^
+                    this.gfMultiply(b, 13) ^
+                    this.gfMultiply(c, 9) ^
+                    this.gfMultiply(d, 14);
+            }
+        }
+
+        // --------------------------------------------------
+        // AES BLOCK ENCRYPTION
+        // --------------------------------------------------
+
+        encryptBlock(block, expandedKey) {
+            const state = block.slice();
+
+            this.addRoundKey(state, expandedKey, 0);
+
+            for (let round = 1; round < 10; round++) {
+                this.subBytes(state);
+                this.shiftRows(state);
+                this.mixColumns(state);
+                this.addRoundKey(state, expandedKey, round);
+            }
+
+            this.subBytes(state);
+            this.shiftRows(state);
+            this.addRoundKey(state, expandedKey, 10);
+
+            return state;
+        }
+
+        // --------------------------------------------------
+        // AES BLOCK DECRYPTION
+        // --------------------------------------------------
+
+        decryptBlock(block, expandedKey) {
+            const state = block.slice();
+
+            this.addRoundKey(state, expandedKey, 10);
+
+            for (let round = 9; round > 0; round--) {
+                this.invShiftRows(state);
+                this.invSubBytes(state);
+                this.addRoundKey(state, expandedKey, round);
+                this.invMixColumns(state);
+            }
+
+            this.invShiftRows(state);
+            this.invSubBytes(state);
+            this.addRoundKey(state, expandedKey, 0);
+
+            return state;
+        }
+
+        // --------------------------------------------------
+        // CBC ENCRYPTION
+        // --------------------------------------------------
+
+        encryptBytes(plaintext) {
+            const padding = 16 - (plaintext.length % 16);
+            const padded = new Uint8Array(
+                plaintext.length + padding
+            );
+
+            padded.set(plaintext);
+            padded.fill(padding, plaintext.length);
+
+            const expandedKey = this.expandKey(this.key);
+            const output = new Uint8Array(padded.length);
+
+            let previous = this.iv.slice();
+
+            for (let offset = 0; offset < padded.length; offset += 16) {
+                const block = padded.slice(offset, offset + 16);
+
+                for (let i = 0; i < 16; i++) {
+                    block[i] ^= previous[i];
+                }
+
+                const encrypted = this.encryptBlock(
+                    block,
+                    expandedKey
+                );
+
+                output.set(encrypted, offset);
+                previous = encrypted;
+            }
+
+            return output;
+        }
+
+        // --------------------------------------------------
+        // CBC DECRYPTION
+        // --------------------------------------------------
+
+        decryptBytes(ciphertext) {
+            if (
+                !(ciphertext instanceof Uint8Array) ||
+                ciphertext.length === 0 ||
+                ciphertext.length % 16 !== 0
+            ) {
+                throw new Error("Invalid ciphertext length.");
+            }
+
+            const expandedKey = this.expandKey(this.key);
+            const output = new Uint8Array(ciphertext.length);
+
+            let previous = this.iv.slice();
+
+            for (let offset = 0; offset < ciphertext.length; offset += 16) {
+                const block = ciphertext.slice(offset, offset + 16);
+
+                const decrypted = this.decryptBlock(
+                    block,
+                    expandedKey
+                );
+
+                for (let i = 0; i < 16; i++) {
+                    output[offset + i] =
+                        decrypted[i] ^ previous[i];
+                }
+
+                previous = block;
+            }
+
+            const padding = output[output.length - 1];
+
+            if (padding < 1 || padding > 16) {
+                throw new Error("Invalid PKCS7 padding.");
+            }
+
+            for (
+                let i = output.length - padding;
+                i < output.length;
+                i++
+            ) {
+                if (output[i] !== padding) {
+                    throw new Error("Invalid PKCS7 padding.");
+                }
+            }
+
+            return output.slice(
+                0,
+                output.length - padding
+            );
+        }
+
+        // --------------------------------------------------
+        // BASE64
+        // --------------------------------------------------
+
+        toBase64(bytes) {
+            let binary = "";
+
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+
+            return btoa(binary);
+        }
+
+        fromBase64(value) {
+            if (
+                typeof value !== "string" ||
+                !value.length ||
+                value.length % 4 !== 0 ||
+                !/^[A-Za-z0-9+/]*={0,2}$/.test(value)
+            ) {
+                throw new Error("Invalid Base64 data.");
+            }
+
+            const binary = atob(value);
+            const bytes = new Uint8Array(binary.length);
+
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
 
             return bytes;
         }
 
-        generateKey() {
-            const alphabet =
-                "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-                "abcdefghijklmnopqrstuvwxyz" +
-                "0123456789-_";
-
-            const bytes = this.randomBytes(12);
-
-            let key = "";
-
-            for (const byte of bytes) {
-                key += alphabet[byte & 63];
-            }
-
-            return key;
+        toHex(bytes) {
+            return Array.from(
+                bytes,
+                byte => byte.toString(16).padStart(2, "0")
+            ).join("");
         }
 
         // --------------------------------------------------
@@ -89,61 +443,15 @@
                 return this.initializePromise;
             }
 
-            this.initializePromise = this.initializeKey();
+            this.initializePromise = Promise.resolve(this);
 
             try {
                 await this.initializePromise;
+                this.initialized = true;
                 return this;
             } finally {
                 this.initializePromise = null;
             }
-        }
-
-        async initializeKey() {
-            this.getCrypto();
-
-            if (typeof this.getValue !== "function") {
-                throw new Error(
-                    "Encryption key storage is unavailable."
-                );
-            }
-
-            if (typeof this.setValue !== "function") {
-                throw new Error(
-                    "Encryption key storage is unavailable."
-                );
-            }
-
-            let savedKey = await this.getValue(
-                this.storageKey,
-                null
-            );
-
-            if (savedKey !== null && savedKey !== undefined) {
-                if (
-                    typeof savedKey !== "string" ||
-                    !/^[A-Za-z0-9_-]{12}$/.test(savedKey)
-                ) {
-                    throw new Error(
-                        "Stored encryption key is invalid."
-                    );
-                }
-
-                this.key = savedKey;
-                this.initialized = true;
-
-                return;
-            }
-
-            const newKey = this.generateKey();
-
-            await this.setValue(
-                this.storageKey,
-                newKey
-            );
-
-            this.key = newKey;
-            this.initialized = true;
         }
 
         // --------------------------------------------------
@@ -151,80 +459,26 @@
         // --------------------------------------------------
 
         getKey() {
-            this.ensureInitialized();
+            return this.toHex(this.key);
+        }
 
-            return this.key;
+        getIV() {
+            return this.toHex(this.iv);
         }
 
         getAlgorithm() {
-            return { ...this.algorithm };
+            return {
+                ...this.algorithm,
+                key: this.getKey()
+            };
         }
 
         ensureInitialized() {
-            if (!this.initialized || !this.key) {
+            if (!this.initialized) {
                 throw new Error(
                     "CryptoManager has not been initialized."
                 );
             }
-        }
-
-        // --------------------------------------------------
-        // BASE64 UTILITIES
-        // --------------------------------------------------
-
-        toBase64(bytes) {
-            let binary = "";
-
-            for (let i = 0; i < bytes.length; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-
-            return btoa(binary);
-        }
-
-        fromBase64(value) {
-            const binary = atob(value);
-            const bytes = new Uint8Array(binary.length);
-
-            for (let i = 0; i < binary.length; i++) {
-                bytes[i] = binary.charCodeAt(i);
-            }
-
-            return bytes;
-        }
-
-        // --------------------------------------------------
-        // KEY DERIVATION
-        // --------------------------------------------------
-
-        async deriveKey(salt) {
-            this.ensureInitialized();
-
-            const crypto = this.getCrypto();
-
-            const passwordMaterial = await crypto.subtle.importKey(
-                "raw",
-                this.encoder.encode(this.key),
-                "PBKDF2",
-                false,
-                ["deriveKey"]
-            );
-
-            return crypto.subtle.deriveKey(
-                {
-                    name: "PBKDF2",
-                    salt,
-                    iterations: this.iterations,
-                    hash: "SHA-256"
-                },
-                passwordMaterial,
-                {
-                    name: "AES-GCM",
-                    length: 256
-                },
-                false,
-                ["encrypt", "decrypt"]
-            );
         }
 
         // --------------------------------------------------
@@ -234,37 +488,17 @@
         async encrypt(data) {
             this.ensureInitialized();
 
-            const crypto = this.getCrypto();
-
-            const salt = this.randomBytes(16);
-            const iv = this.randomBytes(12);
-
-            const encryptionKey = await this.deriveKey(salt);
-
             const plaintext = this.encoder.encode(
                 JSON.stringify(data)
             );
 
-            const encrypted = await crypto.subtle.encrypt(
-                {
-                    name: "AES-GCM",
-                    iv,
-                    tagLength: 128
-                },
-                encryptionKey,
-                plaintext
-            );
+            const ciphertext = this.encryptBytes(plaintext);
 
             return {
                 version: 1,
-                algorithm: "AES-256-GCM",
-                kdf: "PBKDF2-SHA256",
-                iterations: this.iterations,
-                salt: this.toBase64(salt),
-                iv: this.toBase64(iv),
-                ciphertext: this.toBase64(
-                    new Uint8Array(encrypted)
-                )
+                algorithm: "AES-128-CBC",
+                iv: this.getIV(),
+                ciphertext: this.toBase64(ciphertext)
             };
         }
 
@@ -279,13 +513,8 @@
                 !payload ||
                 typeof payload !== "object" ||
                 payload.version !== 1 ||
-                payload.algorithm !== "AES-256-GCM" ||
-                payload.kdf !== "PBKDF2-SHA256" ||
-                !Number.isInteger(payload.iterations) ||
-                payload.iterations < 1 ||
-                payload.iterations > 2000000 ||
-                typeof payload.salt !== "string" ||
-                typeof payload.iv !== "string" ||
+                payload.algorithm !== "AES-128-CBC" ||
+                payload.iv !== this.getIV() ||
                 typeof payload.ciphertext !== "string"
             ) {
                 throw new Error(
@@ -293,44 +522,14 @@
                 );
             }
 
-            const crypto = this.getCrypto();
-
-            const salt = this.fromBase64(payload.salt);
-            const iv = this.fromBase64(payload.iv);
             const ciphertext = this.fromBase64(
                 payload.ciphertext
             );
 
-            if (salt.length !== 16 || iv.length !== 12) {
-                throw new Error(
-                    "Invalid encryption parameters."
-                );
-            }
+            const plaintext = this.decryptBytes(ciphertext);
+            const decoded = this.decoder.decode(plaintext);
 
-            const originalIterations = this.iterations;
-
-            try {
-                this.iterations = payload.iterations;
-
-                const encryptionKey = await this.deriveKey(salt);
-
-                const decrypted = await crypto.subtle.decrypt(
-                    {
-                        name: "AES-GCM",
-                        iv,
-                        tagLength: 128
-                    },
-                    encryptionKey,
-                    ciphertext
-                );
-
-                const plaintext = this.decoder.decode(decrypted);
-
-                return JSON.parse(plaintext);
-
-            } finally {
-                this.iterations = originalIterations;
-            }
+            return JSON.parse(decoded);
         }
 
         // --------------------------------------------------
@@ -341,7 +540,7 @@
             return {
                 initialized: this.initialized,
                 algorithm: this.getAlgorithm(),
-                keyAvailable: Boolean(this.key)
+                keyAvailable: true
             };
         }
 
@@ -350,7 +549,6 @@
         // --------------------------------------------------
 
         destroy() {
-            this.key = null;
             this.initialized = false;
             this.initializePromise = null;
         }
