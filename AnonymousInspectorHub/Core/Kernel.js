@@ -11,6 +11,9 @@
                 "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/"
             ).replace(/\/?$/, "/");
 
+            // Tampermonkey APIs injected by main.js
+            this.gm = options.gm || {};
+
             this.configKey = "aih_general_config";
             this.modulesConfigKey = "aih_modules_config";
             this.sitesConfigKey = "aih_sites_config";
@@ -49,30 +52,36 @@
         // --------------------------------------------------
 
         get GM() {
+            const api = this.gm;
+
             return {
                 getValue: (key, fallback) => {
-                    if (typeof GM_getValue !== "function") {
-                        throw new Error("GM_getValue is unavailable.");
+                    if (typeof api.getValue !== "function") {
+                        throw new Error(
+                            "GM_getValue is unavailable. Check userscript @grant."
+                        );
                     }
 
-                    return GM_getValue(key, fallback);
+                    return api.getValue(key, fallback);
                 },
 
                 setValue: (key, value) => {
-                    if (typeof GM_setValue !== "function") {
-                        throw new Error("GM_setValue is unavailable.");
+                    if (typeof api.setValue !== "function") {
+                        throw new Error(
+                            "GM_setValue is unavailable. Check userscript @grant."
+                        );
                     }
 
-                    return GM_setValue(key, value);
+                    return api.setValue(key, value);
                 },
 
                 deleteValue: key => {
-                    if (typeof GM_deleteValue === "function") {
-                        return GM_deleteValue(key);
+                    if (typeof api.deleteValue === "function") {
+                        return api.deleteValue(key);
                     }
 
-                    if (typeof GM_setValue === "function") {
-                        return GM_setValue(key, null);
+                    if (typeof api.setValue === "function") {
+                        return api.setValue(key, null);
                     }
 
                     throw new Error("GM storage is unavailable.");
@@ -84,15 +93,8 @@
                         setValue: this.setValue,
                         deleteValue: this.deleteValue,
 
-                        xmlHttpRequest:
-                            typeof GM_xmlhttpRequest === "function"
-                                ? GM_xmlhttpRequest
-                                : undefined,
-
-                        setClipboard:
-                            typeof GM_setClipboard === "function"
-                                ? GM_setClipboard
-                                : undefined
+                        xmlHttpRequest: api.xmlHttpRequest || undefined,
+                        setClipboard: api.setClipboard || undefined
                     };
                 }
             };
@@ -258,14 +260,18 @@
 
         request(url, responseType = "text") {
             return new Promise((resolve, reject) => {
-                if (typeof GM_xmlhttpRequest !== "function") {
+                const requestAPI = this.gm.xmlHttpRequest;
+
+                if (typeof requestAPI !== "function") {
                     reject(
-                        new Error("GM_xmlhttpRequest is unavailable.")
+                        new Error(
+                            "GM_xmlhttpRequest is unavailable. Check userscript @grant."
+                        )
                     );
                     return;
                 }
 
-                GM_xmlhttpRequest({
+                requestAPI({
                     method: "GET",
                     url: this.createCacheBustedUrl(url),
 
@@ -381,8 +387,10 @@
         }
 
         copy(value) {
-            if (typeof GM_setClipboard === "function") {
-                GM_setClipboard(String(value));
+            const clipboardAPI = this.gm.setClipboard;
+
+            if (typeof clipboardAPI === "function") {
+                clipboardAPI(String(value));
                 return;
             }
 
@@ -706,13 +714,14 @@
         // --------------------------------------------------
 
         registerTampermonkeyMenu() {
-            if (
-                typeof GM_registerMenuCommand !== "function"
-            ) {
+            const registerMenuCommand =
+                this.gm.registerMenuCommand;
+
+            if (typeof registerMenuCommand !== "function") {
                 return;
             }
 
-            GM_registerMenuCommand(
+            registerMenuCommand(
                 "Anonymous Inspector Hub - Settings",
                 () => this.uiManager.openSettings()
             );

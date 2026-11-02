@@ -8,17 +8,52 @@
     let kernel = null;
     let loading = null;
 
+    // Capture Tampermonkey APIs from the userscript scope.
+    const gmAPI = {
+        getValue:
+            typeof GM_getValue === "function"
+                ? GM_getValue
+                : null,
+
+        setValue:
+            typeof GM_setValue === "function"
+                ? GM_setValue
+                : null,
+
+        deleteValue:
+            typeof GM_deleteValue === "function"
+                ? GM_deleteValue
+                : null,
+
+        xmlHttpRequest:
+            typeof GM_xmlhttpRequest === "function"
+                ? GM_xmlhttpRequest
+                : null,
+
+        setClipboard:
+            typeof GM_setClipboard === "function"
+                ? GM_setClipboard
+                : null,
+
+        registerMenuCommand:
+            typeof GM_registerMenuCommand === "function"
+                ? GM_registerMenuCommand
+                : null
+    };
+
     async function loadKernel() {
         if (kernel) return kernel;
         if (loading) return loading;
 
         loading = new Promise((resolve, reject) => {
-            if (typeof GM_xmlhttpRequest !== "function") {
-                reject(new Error("GM_xmlhttpRequest is unavailable."));
+            if (!gmAPI.xmlHttpRequest) {
+                reject(
+                    new Error("GM_xmlhttpRequest is unavailable.")
+                );
                 return;
             }
 
-            GM_xmlhttpRequest({
+            gmAPI.xmlHttpRequest({
                 method: "GET",
                 url: KERNEL_URL + "?_aih=" + Date.now(),
                 timeout: 20000,
@@ -57,7 +92,8 @@
                         }
 
                         kernel = new KernelClass({
-                            version: "2.0.0"
+                            version: "2.0.0",
+                            gm: gmAPI
                         });
 
                         root.AIHKernel = kernel;
