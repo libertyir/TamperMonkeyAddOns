@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -18,6 +17,7 @@
             this.KaitaiStream = null;
             this.DsStore = null;
             this.error = null;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -31,6 +31,7 @@
 
         async init() {
             this.available = false;
+            this.scannedAt = new Date().toISOString();
 
             this.fileUrl = new URL(
                 ".DS_Store",
@@ -56,6 +57,25 @@
                 this.error = error;
                 console.warn("[DS_Store Viewer]", error);
             }
+        }
+
+        getResult() {
+            return {
+                page: window.location.href,
+                fileUrl: this.fileUrl,
+                scannedAt: this.scannedAt,
+                fileSize: this.buffer
+                    ? this.buffer.byteLength
+                    : 0,
+                totalRecords: this.records.length,
+                records: this.records.map(record => ({
+                    name: record.name,
+                    property: record.property
+                })),
+                error: this.error
+                    ? this.error.message || String(this.error)
+                    : null
+            };
         }
 
         async loadParser() {
