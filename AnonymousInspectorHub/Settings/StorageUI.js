@@ -1,4 +1,3 @@
-
 class StorageUI extends Framework.BaseSettings {
 
     static get id() {
@@ -43,20 +42,23 @@ class StorageUI extends Framework.BaseSettings {
     }
 
     readValue(key) {
-        if (typeof GM_getValue === "function") {
-            return GM_getValue(key, null);
+        if (typeof GM_getValue !== "function") {
+            throw new Error(
+                "GM_getValue is unavailable. Check userscript @grant."
+            );
         }
 
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : null;
+        return GM_getValue(key, null);
     }
 
     deleteValue(key) {
-        if (typeof GM_setValue === "function") {
-            GM_setValue(key, null);
-        } else {
-            localStorage.removeItem(key);
+        if (typeof GM_deleteValue !== "function") {
+            throw new Error(
+                "GM_deleteValue is unavailable. Check userscript @grant."
+            );
         }
+
+        return GM_deleteValue(key);
     }
 
     getSize(value) {
@@ -132,6 +134,7 @@ class StorageUI extends Framework.BaseSettings {
                 }
 
                 const exists = value !== null && value !== undefined;
+
                 const serialized = exists
                     ? JSON.stringify(value)
                     : "";
@@ -190,7 +193,9 @@ class StorageUI extends Framework.BaseSettings {
                     "Clear",
                     () => {
                         if (!exists) {
-                            showStatus("This storage item is already empty.");
+                            showStatus(
+                                "This storage item is already empty."
+                            );
                             return;
                         }
 
@@ -203,10 +208,12 @@ class StorageUI extends Framework.BaseSettings {
                         try {
                             this.deleteValue(item.key);
                             renderStorage();
+
                             showStatus(
                                 item.title + " cleared successfully.",
                                 true
                             );
+
                         } catch (error) {
                             showStatus(
                                 "Clear failed: " + error.message
@@ -241,7 +248,10 @@ class StorageUI extends Framework.BaseSettings {
             "Refresh",
             () => {
                 renderStorage();
-                showStatus("Storage information refreshed.", true);
+                showStatus(
+                    "Storage information refreshed.",
+                    true
+                );
             }
         );
 
