@@ -1,3 +1,4 @@
+
 (function (root) {
     "use strict";
 
@@ -171,6 +172,161 @@
         }
 
         // --------------------------------------------------
+        // STORAGE API
+        // --------------------------------------------------
+
+        createStorageAPI() {
+            const factory = this;
+
+            return Object.freeze({
+                // Generic operations
+
+                get(store, key) {
+                    return factory.invoke(
+                        "storageGet",
+                        [store, key]
+                    );
+                },
+
+                put(store, key, value) {
+                    return factory.invoke(
+                        "storagePut",
+                        [store, key, value]
+                    );
+                },
+
+                delete(store, key) {
+                    return factory.invoke(
+                        "storageDelete",
+                        [store, key]
+                    );
+                },
+
+                getAll(store) {
+                    return factory.invoke(
+                        "storageGetAll",
+                        [store]
+                    );
+                },
+
+                clear(store) {
+                    return factory.invoke(
+                        "storageClear",
+                        [store]
+                    );
+                },
+
+                // Website operations
+
+                getWebsite(guid) {
+                    return factory.invoke(
+                        "storageGetWebsite",
+                        [guid]
+                    );
+                },
+
+                saveWebsite(website) {
+                    return factory.invoke(
+                        "storageSaveWebsite",
+                        [website]
+                    );
+                },
+
+                deleteWebsite(guid) {
+                    return factory.invoke(
+                        "storageDeleteWebsite",
+                        [guid]
+                    );
+                },
+
+                getAllWebsites() {
+                    return factory.invoke(
+                        "storageGetAllWebsites",
+                        []
+                    );
+                },
+
+                // Result operations
+
+                getResult(resultGuid) {
+                    return factory.invoke(
+                        "storageGetResult",
+                        [resultGuid]
+                    );
+                },
+
+                saveResult(result) {
+                    return factory.invoke(
+                        "storageSaveResult",
+                        [result]
+                    );
+                },
+
+                deleteResult(resultGuid) {
+                    return factory.invoke(
+                        "storageDeleteResult",
+                        [resultGuid]
+                    );
+                },
+
+                getAllResults() {
+                    return factory.invoke(
+                        "storageGetAllResults",
+                        []
+                    );
+                },
+
+                // Metadata operations
+
+                getMetadata(key) {
+                    return factory.invoke(
+                        "storageGetMetadata",
+                        [key]
+                    );
+                },
+
+                saveMetadata(key, value) {
+                    return factory.invoke(
+                        "storageSaveMetadata",
+                        [key, value]
+                    );
+                },
+
+                deleteMetadata(key) {
+                    return factory.invoke(
+                        "storageDeleteMetadata",
+                        [key]
+                    );
+                },
+
+                // Import / Export
+
+                exportAll() {
+                    return factory.invoke(
+                        "storageExportAll",
+                        []
+                    );
+                },
+
+                importAll(payload, options = {}) {
+                    return factory.invoke(
+                        "storageImportAll",
+                        [payload, options]
+                    );
+                },
+
+                // Status
+
+                getStatus() {
+                    return factory.invoke(
+                        "storageGetStatus",
+                        []
+                    );
+                }
+            });
+        }
+
+        // --------------------------------------------------
         // FRAMEWORK CREATION
         // --------------------------------------------------
 
@@ -308,7 +464,10 @@
                 },
 
                 // Encryption services
-                Crypto: factory.createCryptoAPI()
+                Crypto: factory.createCryptoAPI(),
+
+                // Storage services
+                Storage: factory.createStorageAPI()
             };
 
             this.framework = Object.freeze(api);
