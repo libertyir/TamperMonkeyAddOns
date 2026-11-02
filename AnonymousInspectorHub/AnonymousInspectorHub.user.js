@@ -16,6 +16,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_listValues
+// @grant        GM_deleteValue
 // @connect      libertyir.github.io
 // @connect      cdn.jsdelivr.net
 // @connect      formats.kaitai.io

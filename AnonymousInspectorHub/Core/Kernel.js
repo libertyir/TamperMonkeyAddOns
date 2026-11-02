@@ -119,11 +119,22 @@
                     throw new Error("GM storage is unavailable.");
                 },
 
+                listValues: () => {
+                    if (typeof api.listValues !== "function") {
+                        throw new Error(
+                            "GM_listValues is unavailable. Check userscript @grant."
+                        );
+                    }
+
+                    return api.listValues();
+                },
+
                 get api() {
                     return {
                         getValue: this.getValue,
                         setValue: this.setValue,
                         deleteValue: this.deleteValue,
+                        listValues: this.listValues,
 
                         xmlHttpRequest: api.xmlHttpRequest || undefined,
                         setClipboard: api.setClipboard || undefined
