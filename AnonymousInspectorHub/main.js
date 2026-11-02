@@ -514,6 +514,10 @@
             this.available = true;
         }
 
+        createElement(tag, attributes = {}, children = []) {
+            return Framework.createElement(tag, attributes, children);
+        }
+
         render() {
             throw new Error("Settings module must implement render()");
         }
@@ -537,6 +541,51 @@
         state.settings.set(id, SettingsClass);
     }
 
+    // --------------------------------------------------
+    // DYNAMIC MODULE EXECUTION
+    // --------------------------------------------------
+
+    function executeModuleSource(source, url) {
+        const gmDeleteValue =
+            typeof GM_deleteValue === "function"
+                ? GM_deleteValue
+                : typeof GM_setValue === "function"
+                    ? key => GM_setValue(key, null)
+                    : undefined;
+
+        const execute = new Function(
+            "Framework",
+            "GM_getValue",
+            "GM_setValue",
+            "GM_deleteValue",
+            "GM_xmlhttpRequest",
+            "GM_setClipboard",
+            source + "\n//# sourceURL=" + url
+        );
+
+        execute(
+            Framework,
+
+            typeof GM_getValue === "function"
+                ? GM_getValue
+                : undefined,
+
+            typeof GM_setValue === "function"
+                ? GM_setValue
+                : undefined,
+
+            gmDeleteValue,
+
+            typeof GM_xmlhttpRequest === "function"
+                ? GM_xmlhttpRequest
+                : undefined,
+
+            typeof GM_setClipboard === "function"
+                ? GM_setClipboard
+                : undefined
+        );
+    }
+
     async function loadSettingsModule(id) {
         if (state.settings.has(id)) {
             return state.settings.get(id);
@@ -553,12 +602,7 @@
             throw new Error("Settings file unavailable: " + id);
         }
 
-        const executeSettings = new Function(
-            "Framework",
-            source + "\n//# sourceURL=" + url
-        );
-
-        executeSettings(Framework);
+        executeModuleSource(source, url);
 
         if (!state.settings.has(id)) {
             throw new Error("Settings did not register: " + id);
@@ -1260,12 +1304,7 @@
             throw new Error("Module file unavailable: " + id);
         }
 
-        const executeModule = new Function(
-            "Framework",
-            source + "\n//# sourceURL=" + url
-        );
-
-        executeModule(Framework);
+        executeModuleSource(source, url);
 
         if (!state.modules.has(id)) {
             throw new Error("Module did not register: " + id);
