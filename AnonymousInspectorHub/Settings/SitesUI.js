@@ -40,14 +40,7 @@ class SitesUI extends Framework.BaseSettings {
 
     loadSites() {
         try {
-            if (typeof GM_getValue !== "function") {
-                throw new Error("GM_getValue is unavailable.");
-            }
-
-            const saved = GM_getValue(
-                this.constructor.STORAGE_KEY,
-                []
-            );
+            const saved = Framework.getSitesConfig();
 
             this.sites = Array.isArray(saved)
                 ? saved.filter(site =>
@@ -75,15 +68,7 @@ class SitesUI extends Framework.BaseSettings {
 
     saveSites() {
         try {
-            if (typeof GM_setValue !== "function") {
-                throw new Error("GM_setValue is unavailable.");
-            }
-
-            GM_setValue(
-                this.constructor.STORAGE_KEY,
-                this.sites
-            );
-
+            Framework.setSitesConfig(this.sites);
             return true;
 
         } catch (error) {

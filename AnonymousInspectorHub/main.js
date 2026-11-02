@@ -162,6 +162,18 @@
         );
     }
 
+    function saveSitesConfig(sites) {
+        if (!Array.isArray(sites)) {
+            throw new Error("Invalid sites configuration.");
+        }
+
+        if (typeof GM_setValue !== "function") {
+            throw new Error("GM_setValue is unavailable.");
+        }
+
+        GM_setValue(SITES_CONFIG_KEY, sites);
+    }
+
     function normalizeSiteDomain(value) {
         let domain = String(value || "")
             .trim()
@@ -575,6 +587,9 @@
 
         getConfig,
         setConfig,
+
+        getSitesConfig: loadSitesConfig,
+        setSitesConfig: saveSitesConfig,
 
         openSettings,
         closeSettings
