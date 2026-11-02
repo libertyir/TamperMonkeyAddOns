@@ -181,7 +181,7 @@ class GeneralUI extends Framework.BaseSettings {
         const cryptoStatus = Framework.Crypto.getStatus();
         const algorithm = Framework.Crypto.getAlgorithm();
         const encryptionKey = Framework.Crypto.getKey();
-        const iv = Framework.Crypto.getIV();
+        const iv = "00000000000000000000000000000000";
 
         if (!cryptoStatus.initialized || !cryptoStatus.keyAvailable) {
             throw new Error("Encryption service is not initialized.");
