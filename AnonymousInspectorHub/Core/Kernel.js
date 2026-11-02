@@ -502,7 +502,7 @@
             this.indexedDBAdapter =
                 new root.AnonymousInspectorIndexedDBAdapter({
                     databaseName: "AnonymousInspectorHub",
-                    databaseVersion: 1
+                    databaseVersion: 2
                 });
 
             this.storageManager =

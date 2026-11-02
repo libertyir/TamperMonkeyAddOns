@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -16,7 +15,8 @@
             this.stores = Object.freeze({
                 websites: "websites",
                 results: "results",
-                metadata: "metadata"
+                metadata: "metadata",
+                executions: "executions"
             });
         }
 
@@ -154,9 +154,11 @@
         validateStore(store) {
             if (
                 typeof store !== "string" ||
-                !store.trim()
+                !Object.values(this.stores).includes(store)
             ) {
-                throw new Error("Invalid storage name.");
+                throw new Error(
+                    "Unknown storage name: " + store
+                );
             }
 
             return store;
@@ -488,6 +490,100 @@
         }
 
         // --------------------------------------------------
+        // EXECUTION HISTORY OPERATIONS
+        // --------------------------------------------------
+
+        async getExecution(guid) {
+            return this.get(
+                this.stores.executions,
+                guid
+            );
+        }
+
+        async saveExecution(record) {
+            if (
+                !record ||
+                typeof record !== "object" ||
+                Array.isArray(record)
+            ) {
+                throw new Error("Invalid execution record.");
+            }
+
+            if (
+                typeof record.guid !== "string" ||
+                !record.guid.trim()
+            ) {
+                throw new Error(
+                    "Execution GUID is required."
+                );
+            }
+
+            if (
+                typeof record.moduleId !== "string" ||
+                !record.moduleId.trim()
+            ) {
+                throw new Error(
+                    "Execution module ID is required."
+                );
+            }
+
+            if (
+                typeof record.status !== "string" ||
+                !record.status.trim()
+            ) {
+                throw new Error(
+                    "Execution status is required."
+                );
+            }
+
+            if (
+                typeof record.startedAt !== "string" ||
+                !record.startedAt.trim()
+            ) {
+                throw new Error(
+                    "Execution start time is required."
+                );
+            }
+
+            return this.put(
+                this.stores.executions,
+                record.guid,
+                record
+            );
+        }
+
+        async deleteExecution(guid) {
+            return this.delete(
+                this.stores.executions,
+                guid
+            );
+        }
+
+        async getAllExecutions() {
+            return this.getAll(
+                this.stores.executions
+            );
+        }
+
+        async getExecutionsByModule(moduleId) {
+            if (
+                typeof moduleId !== "string" ||
+                !moduleId.trim()
+            ) {
+                throw new Error("Invalid module ID.");
+            }
+
+            const executions = await this.getAllExecutions();
+
+            return executions
+                .filter(record => record.moduleId === moduleId)
+                .sort((a, b) =>
+                    new Date(b.startedAt).getTime() -
+                    new Date(a.startedAt).getTime()
+                );
+        }
+
+        // --------------------------------------------------
         // METADATA OPERATIONS
         // --------------------------------------------------
 
@@ -522,6 +618,7 @@
 
             const websites = await this.getAllWebsites();
             const results = await this.getAllResults();
+            const executions = await this.getAllExecutions();
             const metadata = await this.getAll(
                 this.stores.metadata
             );
@@ -534,6 +631,7 @@
                 data: {
                     websites,
                     results,
+                    executions,
                     metadata
                 }
             };
@@ -561,11 +659,13 @@
 
             const websites = payload.data.websites || [];
             const results = payload.data.results || [];
+            const executions = payload.data.executions || [];
             const metadata = payload.data.metadata || [];
 
             if (
                 !Array.isArray(websites) ||
                 !Array.isArray(results) ||
+                !Array.isArray(executions) ||
                 !Array.isArray(metadata)
             ) {
                 throw new Error(
@@ -578,6 +678,7 @@
             if (replace) {
                 await this.clear(this.stores.websites);
                 await this.clear(this.stores.results);
+                await this.clear(this.stores.executions);
                 await this.clear(this.stores.metadata);
             }
 
@@ -606,6 +707,10 @@
                 await this.saveResult(result);
             }
 
+            for (const execution of executions) {
+                await this.saveExecution(execution);
+            }
+
             for (const item of metadata) {
                 if (
                     !item ||
@@ -625,6 +730,7 @@
             return {
                 websites: websites.length,
                 results: results.length,
+                executions: executions.length,
                 metadata: metadata.length,
                 replaced: replace
             };
