@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -14,6 +13,8 @@
 
             this.content = "";
             this.fileUrl = null;
+            this.scannedAt = null;
+            this.error = null;
         }
 
         getMetadata() {
@@ -27,6 +28,9 @@
 
         async init() {
             this.available = false;
+            this.content = "";
+            this.error = null;
+            this.scannedAt = new Date().toISOString();
 
             this.fileUrl = new URL(
                 ".git/config",
@@ -54,6 +58,21 @@
                 this.error = error;
                 console.warn("[Git Config Viewer]", error);
             }
+        }
+
+        getResult() {
+            if (!this.available) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                fileUrl: this.fileUrl,
+                fileName: ".git/config",
+                scannedAt: this.scannedAt,
+                contentLength: this.content.length,
+                content: this.content
+            };
         }
 
         render() {

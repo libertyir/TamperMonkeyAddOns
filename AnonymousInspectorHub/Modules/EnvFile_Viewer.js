@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -13,6 +12,7 @@
             super();
             this.fileUrl = null;
             this.fileContent = null;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -26,6 +26,9 @@
 
         async init() {
             this.available = false;
+            this.fileUrl = null;
+            this.fileContent = null;
+            this.scannedAt = new Date().toISOString();
 
             const url = new URL(".env", window.location.href);
 
@@ -52,6 +55,21 @@
             }
         }
 
+        getResult() {
+            if (this.fileContent === null) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                fileUrl: this.fileUrl,
+                fileName: ".env",
+                scannedAt: this.scannedAt,
+                contentLength: this.fileContent.length,
+                content: this.fileContent
+            };
+        }
+
         render() {
             const container = Framework.createElement("div");
 
@@ -66,7 +84,6 @@
                 target: "_blank",
                 rel: "noopener noreferrer"
             });
-
 
             downloadLink.style.display = "inline-block";
             downloadLink.style.marginBottom = "15px";

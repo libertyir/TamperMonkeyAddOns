@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -16,6 +15,7 @@
             this.maxCandidates = 60;
             this.maxResponseSize = 256 * 1024;
             this.timeout = 5000;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -198,6 +198,7 @@
         async init() {
             this.available = false;
             this.results = [];
+            this.scannedAt = new Date().toISOString();
 
             this.collectDirectories();
 
@@ -232,6 +233,34 @@
             );
 
             this.available = this.results.length > 0;
+        }
+
+        getResult() {
+            return {
+                page: location.href,
+                scannedAt: this.scannedAt,
+                baseDomain: this.getBaseDomain(location.hostname),
+                checkedDirectories: this.candidates.length,
+                openListings: this.results.length,
+                totalEntries: this.results.reduce(
+                    (sum, result) => sum + result.entries.length,
+                    0
+                ),
+                results: this.results.map(result => ({
+                    url: result.url,
+                    requestedUrl: result.requestedUrl,
+                    source: result.source,
+                    status: result.status,
+                    responseTime: result.responseTime,
+                    title: result.title,
+                    format: result.format,
+                    entries: result.entries.map(entry => ({
+                        name: entry.name,
+                        url: entry.url,
+                        type: entry.type
+                    }))
+                }))
+            };
         }
 
         async readLimited(response) {
@@ -793,7 +822,7 @@
         buildReport() {
             return JSON.stringify({
                 page: location.href,
-                scannedAt: new Date().toISOString(),
+                scannedAt: this.scannedAt,
                 baseDomain: this.getBaseDomain(location.hostname),
                 checkedDirectories: this.candidates.length,
                 openListings: this.results.length,
