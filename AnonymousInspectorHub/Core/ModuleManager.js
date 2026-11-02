@@ -112,11 +112,7 @@
                     );
                 }
 
-                await this.Framework.Storage.put(
-                    "executions",
-                    record.guid,
-                    record
-                );
+                await this.Framework.Storage.saveExecution(record);
 
                 return record;
 
@@ -131,17 +127,24 @@
         }
 
         async recordExecution(id, status, details = {}) {
-            const now = new Date().toISOString();
+            const completedTimestamp = Date.now();
+            const completedAt = new Date(
+                completedTimestamp
+            ).toISOString();
+
+            const startedTimestamp =
+                details.startedTimestamp || completedTimestamp;
 
             const record = {
                 guid: this.createExecutionGuid(),
                 moduleId: id,
                 status,
-                startedAt: details.startedAt || now,
-                completedAt: now,
-                duration: details.startedAt
-                    ? Date.now() - details.startedTimestamp
-                    : 0,
+                startedAt: details.startedAt || completedAt,
+                completedAt,
+                duration: Math.max(
+                    0,
+                    completedTimestamp - startedTimestamp
+                ),
                 error: details.error
                     ? {
                         name: details.error.name || "Error",
@@ -154,6 +157,92 @@
             await this.saveExecution(record);
 
             return record;
+        }
+
+        // --------------------------------------------------
+        // MODULE RESULT PERSISTENCE
+        // --------------------------------------------------
+
+        createResultGuid() {
+            return this.createExecutionGuid();
+        }
+
+        async saveModuleResult(id, instance, execution) {
+            try {
+                if (
+                    !this.Framework ||
+                    !this.Framework.Storage
+                ) {
+                    throw new Error(
+                        "Framework Storage is unavailable."
+                    );
+                }
+
+                if (
+                    !instance ||
+                    typeof instance.getResult !== "function"
+                ) {
+                    return null;
+                }
+
+                const data = await instance.getResult();
+
+                if (
+                    data === null ||
+                    data === undefined
+                ) {
+                    return null;
+                }
+
+                const resultGuid = this.createResultGuid();
+
+                const result = {
+                    guid: resultGuid,
+                    moduleId: id,
+                    executionGuid: execution.guid,
+                    createdAt: new Date().toISOString(),
+                    data
+                };
+
+                await this.Framework.Storage.saveResult(result);
+
+                return resultGuid;
+
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Module result save failed:",
+                    id,
+                    error
+                );
+
+                return null;
+            }
+        }
+
+        async saveModuleMetadata(id, updates = {}) {
+            try {
+                const key = "module:" + id;
+
+                const current =
+                    await this.Framework.Storage.getMetadata(key) || {};
+
+                await this.Framework.Storage.saveMetadata(
+                    key,
+                    {
+                        ...current,
+                        ...updates,
+                        moduleId: id,
+                        updatedAt: new Date().toISOString()
+                    }
+                );
+
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Module metadata save failed:",
+                    id,
+                    error
+                );
+            }
         }
 
         // --------------------------------------------------
@@ -301,7 +390,9 @@
             let instance = null;
 
             const startedTimestamp = Date.now();
-            const startedAt = new Date(startedTimestamp).toISOString();
+            const startedAt = new Date(
+                startedTimestamp
+            ).toISOString();
 
             try {
                 const ModuleClass = await this.load(id);
@@ -322,7 +413,7 @@
                 if (instance.available) {
                     this.activeInstances.set(id, instance);
 
-                    await this.recordExecution(
+                    const execution = await this.recordExecution(
                         id,
                         "success",
                         {
@@ -331,12 +422,33 @@
                         }
                     );
 
+                    if (execution) {
+                        const resultGuid = await this.saveModuleResult(
+                            id,
+                            instance,
+                            execution
+                        );
+
+                        execution.resultGuid = resultGuid;
+
+                        if (resultGuid) {
+                            await this.saveExecution(execution);
+                        }
+
+                        await this.saveModuleMetadata(id, {
+                            lastExecutionGuid: execution.guid,
+                            lastResultGuid: resultGuid,
+                            lastExecutionStatus: "success",
+                            lastExecutedAt: execution.completedAt
+                        });
+                    }
+
                     return instance;
                 }
 
                 await this.destroyInstance(instance);
 
-                await this.recordExecution(
+                const execution = await this.recordExecution(
                     id,
                     "unavailable",
                     {
@@ -345,6 +457,14 @@
                     }
                 );
 
+                if (execution) {
+                    await this.saveModuleMetadata(id, {
+                        lastExecutionGuid: execution.guid,
+                        lastExecutionStatus: "unavailable",
+                        lastExecutedAt: execution.completedAt
+                    });
+                }
+
                 return null;
 
             } catch (error) {
@@ -352,7 +472,7 @@
                     await this.destroyInstance(instance);
                 }
 
-                await this.recordExecution(
+                const execution = await this.recordExecution(
                     id,
                     "failed",
                     {
@@ -361,6 +481,14 @@
                         error
                     }
                 );
+
+                if (execution) {
+                    await this.saveModuleMetadata(id, {
+                        lastExecutionGuid: execution.guid,
+                        lastExecutionStatus: "failed",
+                        lastExecutedAt: execution.completedAt
+                    });
+                }
 
                 this.onError(id, error);
 
