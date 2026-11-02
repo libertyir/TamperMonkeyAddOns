@@ -16,6 +16,8 @@
             this.loadingPromises = new Map();
             this.initializingPromises = new Map();
 
+            this.websiteGuid = null;
+
             this.onError = options.onError || (
                 (id, error) => {
                     console.error(
@@ -137,6 +139,7 @@
 
             const record = {
                 guid: this.createExecutionGuid(),
+                websiteGuid: this.websiteGuid,
                 moduleId: id,
                 status,
                 startedAt: details.startedAt || completedAt,
@@ -178,6 +181,12 @@
                     );
                 }
 
+                if (!this.websiteGuid) {
+                    throw new Error(
+                        "Website has not been registered."
+                    );
+                }
+
                 if (
                     !instance ||
                     typeof instance.getResult !== "function"
@@ -197,7 +206,8 @@
                 const resultGuid = this.createResultGuid();
 
                 const result = {
-                    guid: resultGuid,
+                    resultGuid,
+                    websiteGuid: this.websiteGuid,
                     moduleId: id,
                     executionGuid: execution.guid,
                     createdAt: new Date().toISOString(),

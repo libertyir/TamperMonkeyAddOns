@@ -10,7 +10,7 @@ class DataManagerUI extends Framework.BaseSettings {
     }
 
     static get description() {
-        return "Backup and restore application settings";
+        return "Backup and restore application data";
     }
 
     static get icon() {
@@ -18,7 +18,7 @@ class DataManagerUI extends Framework.BaseSettings {
     }
 
     static get BACKUP_VERSION() {
-        return 1;
+        return 2;
     }
 
     static get STORAGE_KEYS() {
@@ -89,7 +89,9 @@ class DataManagerUI extends Framework.BaseSettings {
         return row;
     }
 
-    collectBackup() {
+    async collectBackup() {
+        const storage = await Framework.exportAll();
+
         return {
             application: "AnonymousInspectorHub",
             backupVersion: this.constructor.BACKUP_VERSION,
@@ -97,13 +99,17 @@ class DataManagerUI extends Framework.BaseSettings {
 
             settings: {
                 general: Framework.getConfig(),
+
                 sites: this.readStorage(
                     this.constructor.STORAGE_KEYS.sites
                 ),
+
                 modules: this.readStorage(
                     this.constructor.STORAGE_KEYS.modules
                 )
-            }
+            },
+
+            storage
         };
     }
 
@@ -116,7 +122,10 @@ class DataManagerUI extends Framework.BaseSettings {
             throw new Error("This file is not an application backup.");
         }
 
-        if (data.backupVersion !== this.constructor.BACKUP_VERSION) {
+        if (
+            data.backupVersion !== 1 &&
+            data.backupVersion !== this.constructor.BACKUP_VERSION
+        ) {
             throw new Error("Unsupported backup version.");
         }
 
@@ -151,11 +160,23 @@ class DataManagerUI extends Framework.BaseSettings {
             throw new Error("Invalid general configuration.");
         }
 
+        if (data.backupVersion >= 2) {
+            if (
+                !data.storage ||
+                data.storage.format !== "AnonymousInspectorHub" ||
+                data.storage.version !== 1 ||
+                !data.storage.data ||
+                typeof data.storage.data !== "object"
+            ) {
+                throw new Error("Storage backup data is missing or invalid.");
+            }
+        }
+
         return true;
     }
 
-    downloadBackup() {
-        const backup = this.collectBackup();
+    async downloadBackup() {
+        const backup = await this.collectBackup();
         const content = JSON.stringify(backup, null, 4);
 
         const blob = new Blob(
@@ -188,6 +209,16 @@ class DataManagerUI extends Framework.BaseSettings {
 
         const settings = backup.settings;
 
+        // Restore IndexedDB data when available.
+        // Version 1 backups contain settings only.
+        if (backup.storage) {
+            await Framework.importAll(
+                backup.storage,
+                { replace: true }
+            );
+        }
+
+        // Restore application settings.
         if (settings.general !== undefined) {
             Framework.setConfig(settings.general);
         }
@@ -205,6 +236,11 @@ class DataManagerUI extends Framework.BaseSettings {
                 settings.modules
             );
         }
+
+        return {
+            storageRestored: !!backup.storage,
+            backupVersion: backup.backupVersion
+        };
     }
 
     render() {
@@ -223,12 +259,18 @@ class DataManagerUI extends Framework.BaseSettings {
 
         const exportButton = this.createButton(
             "Export Backup",
-            () => {
+            async () => {
                 try {
-                    this.downloadBackup();
-                    showStatus("Backup exported successfully.", true);
+                    await this.downloadBackup();
+
+                    showStatus(
+                        "Backup exported successfully.",
+                        true
+                    );
                 } catch (error) {
-                    showStatus("Export failed: " + error.message);
+                    showStatus(
+                        "Export failed: " + error.message
+                    );
                 }
             },
             "#285238"
@@ -256,16 +298,20 @@ class DataManagerUI extends Framework.BaseSettings {
                 }
 
                 if (!confirm(
-                    "Restoring a backup will overwrite current settings. Continue?"
+                    "Restoring a backup will replace current stored data and settings. Continue?"
                 )) {
                     return;
                 }
 
                 try {
-                    await this.restoreBackup(file);
+                    const result = await this.restoreBackup(file);
+
+                    const message = result.storageRestored
+                        ? "Backup restored successfully, including database records."
+                        : "Legacy settings backup restored successfully. Database records were not included.";
 
                     showStatus(
-                        "Backup restored successfully. Reload the page to apply all changes.",
+                        message + " Reload the page to apply all changes.",
                         true
                     );
 
@@ -287,8 +333,8 @@ class DataManagerUI extends Framework.BaseSettings {
             }),
 
             this.createField(
-                "Export Settings",
-                "Download a JSON backup containing general settings, site configurations and module configurations.",
+                "Export Application Data",
+                "Download a JSON backup containing application settings, site configurations, module configurations, websites, module results, execution history and metadata.",
                 exportButton
             ),
 
