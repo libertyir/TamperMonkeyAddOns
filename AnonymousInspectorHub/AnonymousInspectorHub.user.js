@@ -15,6 +15,7 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_listValues
 // @connect      libertyir.github.io
 // @connect      cdn.jsdelivr.net
 // @connect      formats.kaitai.io
