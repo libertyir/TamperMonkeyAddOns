@@ -43,6 +43,10 @@
                     throw new Error("Module must implement render()");
                 }
 
+                getResult() {
+                    return null;
+                }
+
                 destroy() { }
             };
         }

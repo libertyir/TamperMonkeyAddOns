@@ -152,6 +152,17 @@
             this.available = this.results.length > 0;
         }
 
+        getResult() {
+            return {
+                page: location.href,
+                scannedAt: new Date().toISOString(),
+                results: this.results.map(result => ({
+                    ...result,
+                    indicators: [...result.indicators]
+                }))
+            };
+        }
+
         async checkTarget(target) {
             const startedAt = performance.now();
 
