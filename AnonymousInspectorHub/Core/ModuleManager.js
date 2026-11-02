@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -79,6 +78,82 @@
 
         getRegisteredIds() {
             return [...this.modules.keys()];
+        }
+
+        // --------------------------------------------------
+        // EXECUTION HISTORY
+        // --------------------------------------------------
+
+        createExecutionGuid() {
+            if (
+                root.crypto &&
+                typeof root.crypto.randomUUID === "function"
+            ) {
+                return root.crypto.randomUUID();
+            }
+
+            return (
+                Date.now().toString(36) +
+                "-" +
+                Math.random().toString(36).slice(2) +
+                "-" +
+                Math.random().toString(36).slice(2)
+            );
+        }
+
+        async saveExecution(record) {
+            try {
+                if (
+                    !this.Framework ||
+                    !this.Framework.Storage
+                ) {
+                    throw new Error(
+                        "Framework Storage is unavailable."
+                    );
+                }
+
+                await this.Framework.Storage.put(
+                    "executions",
+                    record.guid,
+                    record
+                );
+
+                return record;
+
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Execution history save failed:",
+                    error
+                );
+
+                return null;
+            }
+        }
+
+        async recordExecution(id, status, details = {}) {
+            const now = new Date().toISOString();
+
+            const record = {
+                guid: this.createExecutionGuid(),
+                moduleId: id,
+                status,
+                startedAt: details.startedAt || now,
+                completedAt: now,
+                duration: details.startedAt
+                    ? Date.now() - details.startedTimestamp
+                    : 0,
+                error: details.error
+                    ? {
+                        name: details.error.name || "Error",
+                        message: details.error.message || String(details.error)
+                    }
+                    : null,
+                resultGuid: details.resultGuid || null
+            };
+
+            await this.saveExecution(record);
+
+            return record;
         }
 
         // --------------------------------------------------
@@ -225,6 +300,9 @@
         async initializeInstance(id) {
             let instance = null;
 
+            const startedTimestamp = Date.now();
+            const startedAt = new Date(startedTimestamp).toISOString();
+
             try {
                 const ModuleClass = await this.load(id);
 
@@ -243,10 +321,29 @@
 
                 if (instance.available) {
                     this.activeInstances.set(id, instance);
+
+                    await this.recordExecution(
+                        id,
+                        "success",
+                        {
+                            startedAt,
+                            startedTimestamp
+                        }
+                    );
+
                     return instance;
                 }
 
                 await this.destroyInstance(instance);
+
+                await this.recordExecution(
+                    id,
+                    "unavailable",
+                    {
+                        startedAt,
+                        startedTimestamp
+                    }
+                );
 
                 return null;
 
@@ -254,6 +351,16 @@
                 if (instance) {
                     await this.destroyInstance(instance);
                 }
+
+                await this.recordExecution(
+                    id,
+                    "failed",
+                    {
+                        startedAt,
+                        startedTimestamp,
+                        error
+                    }
+                );
 
                 this.onError(id, error);
 
