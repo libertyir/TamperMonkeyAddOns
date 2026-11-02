@@ -238,6 +238,102 @@
         }
 
         // --------------------------------------------------
+        // WEBSITE HELPERS
+        // --------------------------------------------------
+
+        normalizeDomain(value) {
+            if (
+                typeof value !== "string" ||
+                !value.trim()
+            ) {
+                throw new Error("Invalid website domain.");
+            }
+
+            let domain = value.trim().toLowerCase();
+
+            try {
+                if (!/^https?:\/\//i.test(domain)) {
+                    domain = "https://" + domain;
+                }
+
+                domain = new URL(domain).hostname;
+            } catch {
+                throw new Error("Invalid website domain.");
+            }
+
+            return domain.replace(/\.$/, "");
+        }
+
+        createGuid() {
+            if (
+                root.crypto &&
+                typeof root.crypto.randomUUID === "function"
+            ) {
+                return root.crypto.randomUUID();
+            }
+
+            return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+                /[xy]/g,
+                character => {
+                    const random = Math.random() * 16 | 0;
+
+                    const value = character === "x"
+                        ? random
+                        : (random & 0x3 | 0x8);
+
+                    return value.toString(16);
+                }
+            );
+        }
+
+        validateWebsite(website) {
+            if (
+                !website ||
+                typeof website !== "object" ||
+                Array.isArray(website)
+            ) {
+                throw new Error("Invalid website record.");
+            }
+
+            if (
+                typeof website.domain !== "string" ||
+                !website.domain.trim()
+            ) {
+                throw new Error(
+                    "Website domain is required."
+                );
+            }
+
+            if (
+                website.ip !== undefined &&
+                website.ip !== null &&
+                typeof website.ip !== "string"
+            ) {
+                throw new Error("Invalid website IP address.");
+            }
+
+            if (
+                website.identity !== undefined &&
+                website.identity !== null &&
+                (
+                    typeof website.identity !== "object" ||
+                    Array.isArray(website.identity)
+                )
+            ) {
+                throw new Error("Invalid website identity.");
+            }
+
+            if (
+                website.technologies !== undefined &&
+                !Array.isArray(website.technologies)
+            ) {
+                throw new Error(
+                    "Website technologies must be an array."
+                );
+            }
+        }
+
+        // --------------------------------------------------
         // WEBSITE OPERATIONS
         // --------------------------------------------------
 
@@ -248,22 +344,86 @@
             );
         }
 
+        async getWebsiteByDomain(domain) {
+            const normalizedDomain = this.normalizeDomain(domain);
+            const websites = await this.getAllWebsites();
+
+            return websites.find(website =>
+                website.domain === normalizedDomain
+            ) || null;
+        }
+
         async saveWebsite(website) {
+            this.validateWebsite(website);
+
             if (
-                !website ||
-                typeof website !== "object" ||
-                !website.guid
+                typeof website.guid !== "string" ||
+                !website.guid.trim()
             ) {
                 throw new Error(
-                    "Invalid website record."
+                    "Website GUID is required."
                 );
             }
 
+            const normalized = {
+                ...website,
+                domain: this.normalizeDomain(website.domain)
+            };
+
             return this.put(
                 this.stores.websites,
-                website.guid,
-                website
+                normalized.guid,
+                normalized
             );
+        }
+
+        async upsertWebsite(website) {
+            this.ensureInitialized();
+            this.validateWebsite(website);
+
+            const domain = this.normalizeDomain(website.domain);
+
+            const existing = await this.getWebsiteByDomain(domain);
+            const now = new Date().toISOString();
+
+            const record = {
+                ...(existing || {}),
+                ...website,
+
+                guid:
+                    website.guid ||
+                    (existing && existing.guid) ||
+                    this.createGuid(),
+
+                domain,
+
+                ip:
+                    website.ip !== undefined
+                        ? website.ip
+                        : existing?.ip ?? null,
+
+                firstSeenAt:
+                    existing?.firstSeenAt ||
+                    website.firstSeenAt ||
+                    now,
+
+                lastCheckedAt:
+                    website.lastCheckedAt || now,
+
+                identity:
+                    website.identity !== undefined
+                        ? website.identity
+                        : existing?.identity ?? null,
+
+                technologies:
+                    website.technologies !== undefined
+                        ? [...website.technologies]
+                        : [...(existing?.technologies || [])]
+            };
+
+            await this.saveWebsite(record);
+
+            return record;
         }
 
         async deleteWebsite(guid) {
