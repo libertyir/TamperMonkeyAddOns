@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -13,7 +12,8 @@
             this.storeNames = [
                 "websites",
                 "results",
-                "metadata"
+                "metadata",
+                "executions"
             ];
 
             this.database = null;
