@@ -32,7 +32,7 @@
     }
 
     AnonymousInspector(
-        // "DS_Store_Viewer", // Temporarily disabled: parser constructor error
+        "DS_Store_Viewer", 
         "GitConfig_Viewer",
         "PhpInfo_Viewer",
         "EnvFile_Viewer",
@@ -42,16 +42,16 @@
         "ApiDocs_Viewer",
         "ApachiServerStatus_Viewer",
         "DirectoryBrowsing_Viewer",
-        "GraphQL_Viewer"
+        "GraphQL_Viewer",
 
-        // "CommonTestFiles_Viewer",
-        // "Redoc_Viewer",
-        // "Scalar_Viewer",
-        // "ServerInfo_Viewer",
-        // "Status_Viewer",
-        // "Metrics_Viewer",
-        // "HealthCheck_Viewer",
-        // "AdminPanel_Viewer"
+        "CommonTestFiles_Viewer",
+        "Redoc_Viewer",
+        "Scalar_Viewer",
+        "ServerInfo_Viewer",
+        "Status_Viewer",
+        "Metrics_Viewer",
+        "HealthCheck_Viewer",
+        "AdminPanel_Viewer"
     );
 
 })();
