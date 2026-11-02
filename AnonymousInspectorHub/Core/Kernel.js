@@ -1,6 +1,35 @@
 (function (root) {
     "use strict";
 
+    // --------------------------------------------------
+    // STORAGE ADAPTER CONFIGURATION
+    // --------------------------------------------------
+
+    const STORAGE_ADAPTER = "gm";
+
+    const STORAGE_ADAPTER_REGISTRY = Object.freeze({
+        gm: {
+            path: "Storage/GMStorageAdapter.js",
+            className: "AnonymousInspectorGMStorageAdapter",
+
+            create: (AdapterClass, kernel) =>
+                new AdapterClass({
+                    gm: kernel.gm
+                })
+        },
+
+        indexedDB: {
+            path: "Storage/IndexedDBAdapter.js",
+            className: "AnonymousInspectorIndexedDBAdapter",
+
+            create: AdapterClass =>
+                new AdapterClass({
+                    databaseName: "AnonymousInspectorHub",
+                    databaseVersion: 2
+                })
+        }
+    });
+
     class Kernel {
         constructor(options = {}) {
             this.version = options.version || "2.0.0";
@@ -40,8 +69,10 @@
             this.siteManager = null;
             this.cryptoManager = null;
             this.storageManager = null;
-            this.indexedDBAdapter = null;
+            this.storageAdapter = null;
             this.uiManager = null;
+
+            this.storageAdapterName = STORAGE_ADAPTER;
 
             this.websiteGuid = null;
 
@@ -411,6 +442,24 @@
         }
 
         // --------------------------------------------------
+        // STORAGE ADAPTER REGISTRY
+        // --------------------------------------------------
+
+        getStorageAdapterDefinition() {
+            const definition =
+                STORAGE_ADAPTER_REGISTRY[this.storageAdapterName];
+
+            if (!definition) {
+                throw new Error(
+                    "Unknown storage adapter: " +
+                    this.storageAdapterName
+                );
+            }
+
+            return definition;
+        }
+
+        // --------------------------------------------------
         // CORE LOADER
         // --------------------------------------------------
 
@@ -423,9 +472,14 @@
                 "Core/SiteManager.js",
                 "Core/CryptoManager.js",
                 "Core/StorageManager.js",
-                "Storage/IndexedDBAdapter.js",
-                "Core/UIManager.js"
+                "Storage/StorageAdapter.js"
             ];
+
+            const adapterDefinition =
+                this.getStorageAdapterDefinition();
+
+            files.push(adapterDefinition.path);
+            files.push("Core/UIManager.js");
 
             for (const path of files) {
                 const url = this.baseUrl + path;
@@ -453,7 +507,8 @@
                 "AnonymousInspectorSiteManager",
                 "AnonymousInspectorCryptoManager",
                 "AnonymousInspectorStorageManager",
-                "AnonymousInspectorIndexedDBAdapter",
+                "AnonymousInspectorStorageAdapter",
+                adapterDefinition.className,
                 "AnonymousInspectorUIManager"
             ];
 
@@ -501,20 +556,26 @@
                     setValue: GM.setValue
                 });
 
-            this.indexedDBAdapter =
-                new root.AnonymousInspectorIndexedDBAdapter({
-                    databaseName: "AnonymousInspectorHub",
-                    databaseVersion: 2
-                });
+            const adapterDefinition =
+                this.getStorageAdapterDefinition();
+
+            const AdapterClass =
+                root[adapterDefinition.className];
+
+            this.storageAdapter =
+                adapterDefinition.create(
+                    AdapterClass,
+                    this
+                );
 
             this.storageManager =
                 new root.AnonymousInspectorStorageManager({
-                    defaultAdapter: "indexedDB"
+                    defaultAdapter: this.storageAdapterName
                 });
 
             this.storageManager.registerAdapter(
-                "indexedDB",
-                this.indexedDBAdapter
+                this.storageAdapterName,
+                this.storageAdapter
             );
 
             this.frameworkFactory = new FrameworkFactory({
@@ -721,7 +782,7 @@
                 siteManager: this.siteManager,
                 cryptoManager: this.cryptoManager,
                 storageManager: this.storageManager,
-                indexedDBAdapter: this.indexedDBAdapter,
+                storageAdapter: this.storageAdapter,
                 uiManager
             };
 
@@ -905,6 +966,7 @@
                         "[Anonymous Inspector] Initialization complete:",
                         {
                             version: this.version,
+                            storageAdapter: this.storageAdapterName,
                             totalModules: allowed.length,
                             loaded: this.moduleManager.getActiveIds().length,
                             settings:
