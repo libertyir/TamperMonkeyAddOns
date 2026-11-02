@@ -588,17 +588,32 @@
         // --------------------------------------------------
 
         async getMetadata(key) {
-            return this.get(
+            const record = await this.get(
                 this.stores.metadata,
                 key
             );
+
+            if (
+                record &&
+                typeof record === "object" &&
+                Object.prototype.hasOwnProperty.call(record, "key") &&
+                Object.prototype.hasOwnProperty.call(record, "value") &&
+                String(record.key) === String(key)
+            ) {
+                return record.value;
+            }
+
+            return record;
         }
 
         async saveMetadata(key, value) {
             return this.put(
                 this.stores.metadata,
                 key,
-                value
+                {
+                    key,
+                    value
+                }
             );
         }
 
