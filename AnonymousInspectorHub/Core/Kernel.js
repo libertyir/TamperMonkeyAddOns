@@ -598,6 +598,22 @@
                 storageGetAllResults: () =>
                     this.storageManager.getAllResults(),
 
+                // Execution storage
+                storageGetExecution: guid =>
+                    this.storageManager.getExecution(guid),
+
+                storageSaveExecution: record =>
+                    this.storageManager.saveExecution(record),
+
+                storageDeleteExecution: guid =>
+                    this.storageManager.deleteExecution(guid),
+
+                storageGetAllExecutions: () =>
+                    this.storageManager.getAllExecutions(),
+
+                storageGetExecutionsByModule: moduleId =>
+                    this.storageManager.getExecutionsByModule(moduleId),
+
                 // Metadata storage
                 storageGetMetadata: key =>
                     this.storageManager.getMetadata(key),

@@ -282,6 +282,43 @@
                     );
                 },
 
+                // Execution operations
+
+                getExecution(guid) {
+                    return factory.invoke(
+                        "storageGetExecution",
+                        [guid]
+                    );
+                },
+
+                saveExecution(record) {
+                    return factory.invoke(
+                        "storageSaveExecution",
+                        [record]
+                    );
+                },
+
+                deleteExecution(guid) {
+                    return factory.invoke(
+                        "storageDeleteExecution",
+                        [guid]
+                    );
+                },
+
+                getAllExecutions() {
+                    return factory.invoke(
+                        "storageGetAllExecutions",
+                        []
+                    );
+                },
+
+                getExecutionsByModule(moduleId) {
+                    return factory.invoke(
+                        "storageGetExecutionsByModule",
+                        [moduleId]
+                    );
+                },
+
                 // Metadata operations
 
                 getMetadata(key) {
