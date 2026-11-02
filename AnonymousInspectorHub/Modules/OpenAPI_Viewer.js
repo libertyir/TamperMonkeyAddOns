@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -12,6 +11,7 @@
             super();
             this.specifications = [];
             this.available = false;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -26,6 +26,7 @@
         async init() {
             this.available = false;
             this.specifications = [];
+            this.scannedAt = new Date().toISOString();
 
             const paths = [
                 "openapi.json",
@@ -106,6 +107,21 @@
                     // Ignore unavailable or invalid specification paths.
                 }
             }
+        }
+
+        getResult() {
+            if (!this.available || !this.specifications.length) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                totalSpecifications: this.specifications.length,
+                specifications: this.specifications.map(spec => ({
+                    ...spec
+                }))
+            };
         }
 
         parseSpecification(content) {

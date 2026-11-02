@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -16,6 +15,7 @@
             this.schema = null;
             this.types = [];
             this.errors = [];
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -29,6 +29,7 @@
 
         async init() {
             this.available = false;
+            this.scannedAt = new Date().toISOString();
 
             const base = new URL(
                 ".",
@@ -105,6 +106,20 @@
                     // Ignore unavailable or unsupported endpoints.
                 }
             }
+        }
+
+        getResult() {
+            if (!this.available || !this.schema) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                endpoint: this.endpoint,
+                scannedAt: this.scannedAt,
+                schema: this.schema,
+                errors: this.errors
+            };
         }
 
         getIntrospectionQuery() {

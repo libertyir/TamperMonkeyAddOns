@@ -13,6 +13,7 @@
             this.results = [];
             this.timeout = 6000;
             this.maxResponseSize = 16384;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -54,6 +55,7 @@
         async init() {
             this.available = false;
             this.results = [];
+            this.scannedAt = new Date().toISOString();
 
             const candidates = this.getCandidates();
 
@@ -70,6 +72,23 @@
             }
 
             this.available = this.results.length > 0;
+        }
+
+        getResult() {
+            if (!this.available || !this.results.length) {
+                return null;
+            }
+
+            return {
+                page: location.href,
+                scannedAt: this.scannedAt,
+                totalEndpoints: this.results.length,
+                results: this.results.map(result => ({
+                    ...result,
+                    healthDetails: [...result.healthDetails],
+                    headers: { ...result.headers }
+                }))
+            };
         }
 
         async checkEndpoint(path) {
@@ -420,7 +439,7 @@
             const normalized = body
                 .trim()
                 .toLowerCase()
-                .replace(/^["']|["']$/g, "");
+                .replace(/^[\"']|[\"']$/g, "");
 
             const healthyPatterns = [
                 /^ok$/,
@@ -825,7 +844,7 @@
         buildReport() {
             return JSON.stringify({
                 page: location.href,
-                scannedAt: new Date().toISOString(),
+                scannedAt: this.scannedAt,
                 totalEndpoints: this.results.length,
                 results: this.results
             }, null, 2);

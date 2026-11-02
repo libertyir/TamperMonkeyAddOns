@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -13,6 +12,7 @@
             this.available = false;
             this.results = [];
             this.timeout = 6000;
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -27,6 +27,7 @@
         async init() {
             this.available = false;
             this.results = [];
+            this.scannedAt = new Date().toISOString();
 
             const paths = [
                 "/metrics",
@@ -62,6 +63,22 @@
             }
 
             this.available = this.results.length > 0;
+        }
+
+        getResult() {
+            if (!this.available || !this.results.length) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                totalEndpoints: this.results.length,
+                results: this.results.map(item => ({
+                    ...item,
+                    headers: { ...item.headers }
+                }))
+            };
         }
 
         async checkEndpoint(url) {
