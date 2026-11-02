@@ -554,6 +554,69 @@
                 decrypt: payload =>
                     this.cryptoManager.decrypt(payload),
 
+                // STORAGE API
+                storageGet: (store, key) =>
+                    this.storageManager.get(store, key),
+
+                storagePut: (store, key, value) =>
+                    this.storageManager.put(store, key, value),
+
+                storageDelete: (store, key) =>
+                    this.storageManager.delete(store, key),
+
+                storageGetAll: store =>
+                    this.storageManager.getAll(store),
+
+                storageClear: store =>
+                    this.storageManager.clear(store),
+
+                // Website storage
+                storageGetWebsite: guid =>
+                    this.storageManager.getWebsite(guid),
+
+                storageSaveWebsite: website =>
+                    this.storageManager.saveWebsite(website),
+
+                storageDeleteWebsite: guid =>
+                    this.storageManager.deleteWebsite(guid),
+
+                storageGetAllWebsites: () =>
+                    this.storageManager.getAllWebsites(),
+
+                // Result storage
+                storageGetResult: guid =>
+                    this.storageManager.getResult(guid),
+
+                storageSaveResult: result =>
+                    this.storageManager.saveResult(result),
+
+                storageDeleteResult: guid =>
+                    this.storageManager.deleteResult(guid),
+
+                storageGetAllResults: () =>
+                    this.storageManager.getAllResults(),
+
+                // Metadata storage
+                storageGetMetadata: key =>
+                    this.storageManager.getMetadata(key),
+
+                storageSaveMetadata: (key, value) =>
+                    this.storageManager.saveMetadata(key, value),
+
+                storageDeleteMetadata: key =>
+                    this.storageManager.deleteMetadata(key),
+
+                // Import / Export
+                storageExportAll: () =>
+                    this.storageManager.exportAll(),
+
+                storageImportAll: (payload, options) =>
+                    this.storageManager.importAll(payload, options),
+
+                storageGetStatus: () =>
+                    this.storageManager.getStatus(),
+
+                // CONFIGURATION
                 getConfig: () => this.getConfig(),
                 setConfig: updates => this.setConfig(updates),
 
