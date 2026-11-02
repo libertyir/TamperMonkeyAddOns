@@ -3,16 +3,14 @@
     "use strict";
 
     class CryptoManager {
-        constructor() {
-            // Fixed shared AES-128 key: "AIH-Static-Key01"
-            this.key = new Uint8Array([
-                0x41, 0x49, 0x48, 0x2D,
-                0x53, 0x74, 0x61, 0x74,
-                0x69, 0x63, 0x2D, 0x4B,
-                0x65, 0x79, 0x30, 0x31
-            ]);
+        constructor(options = {}) {
+            this.storageKey =
+                options.storageKey || "aih_encryption_key";
 
-            // Fixed 128-bit zero IV
+            this.getValue = options.getValue;
+            this.setValue = options.setValue;
+
+            this.key = null;
             this.iv = new Uint8Array(16);
 
             this.initialized = false;
@@ -24,7 +22,8 @@
                 ivLength: 128,
                 iv: "00000000000000000000000000000000",
                 padding: "PKCS7",
-                encoding: "Base64"
+                encoding: "Base64",
+                keyFormat: "Hex"
             });
 
             this.encoder = new TextEncoder();
@@ -44,9 +43,7 @@
             let result = 0;
 
             while (b) {
-                if (b & 1) {
-                    result ^= a;
-                }
+                if (b & 1) result ^= a;
 
                 a = (a << 1) ^ ((a & 0x80) ? 0x11B : 0);
                 b >>>= 1;
@@ -94,6 +91,117 @@
                 this.sbox[i] = value;
                 this.invSbox[value] = i;
             }
+        }
+
+        // --------------------------------------------------
+        // KEY GENERATION AND STORAGE
+        // --------------------------------------------------
+
+        generateKey() {
+            if (
+                !root.crypto ||
+                typeof root.crypto.getRandomValues !== "function"
+            ) {
+                throw new Error(
+                    "Secure random number generation is unavailable."
+                );
+            }
+
+            const bytes = new Uint8Array(16);
+
+            root.crypto.getRandomValues(bytes);
+
+            return this.toHex(bytes);
+        }
+
+        async initialize() {
+            if (this.initialized) {
+                return this;
+            }
+
+            if (this.initializePromise) {
+                return this.initializePromise;
+            }
+
+            this.initializePromise = this.initializeKey();
+
+            try {
+                await this.initializePromise;
+                this.initialized = true;
+                return this;
+            } finally {
+                this.initializePromise = null;
+            }
+        }
+
+        async initializeKey() {
+            if (typeof this.getValue !== "function") {
+                throw new Error(
+                    "Encryption key storage is unavailable: GM_getValue."
+                );
+            }
+
+            if (typeof this.setValue !== "function") {
+                throw new Error(
+                    "Encryption key storage is unavailable: GM_setValue."
+                );
+            }
+
+            const savedKey = await this.getValue(
+                this.storageKey,
+                null
+            );
+
+            if (savedKey !== null && savedKey !== undefined) {
+                if (
+                    typeof savedKey !== "string" ||
+                    !/^[0-9a-fA-F]{32}$/.test(savedKey)
+                ) {
+                    throw new Error(
+                        "Stored encryption key is invalid."
+                    );
+                }
+
+                this.key = this.fromHex(savedKey);
+                return;
+            }
+
+            const newKey = this.generateKey();
+
+            await this.setValue(
+                this.storageKey,
+                newKey
+            );
+
+            this.key = this.fromHex(newKey);
+        }
+
+        fromHex(value) {
+            if (
+                typeof value !== "string" ||
+                !/^[0-9a-fA-F]+$/.test(value) ||
+                value.length % 2 !== 0
+            ) {
+                throw new Error("Invalid hexadecimal value.");
+            }
+
+            const bytes = new Uint8Array(value.length / 2);
+
+            for (let i = 0; i < bytes.length; i++) {
+                bytes[i] = parseInt(
+                    value.slice(i * 2, i * 2 + 2),
+                    16
+                );
+            }
+
+            return bytes;
+        }
+
+        toHex(bytes) {
+            return Array.from(
+                bytes,
+                byte => byte.toString(16).padStart(2, "0")
+            ).join("");
         }
 
         // --------------------------------------------------
@@ -302,6 +410,7 @@
 
         encryptBytes(plaintext) {
             const padding = 16 - (plaintext.length % 16);
+
             const padded = new Uint8Array(
                 plaintext.length + padding
             );
@@ -423,42 +532,12 @@
             return bytes;
         }
 
-        toHex(bytes) {
-            return Array.from(
-                bytes,
-                byte => byte.toString(16).padStart(2, "0")
-            ).join("");
-        }
-
-        // --------------------------------------------------
-        // INITIALIZATION
-        // --------------------------------------------------
-
-        async initialize() {
-            if (this.initialized) {
-                return this;
-            }
-
-            if (this.initializePromise) {
-                return this.initializePromise;
-            }
-
-            this.initializePromise = Promise.resolve(this);
-
-            try {
-                await this.initializePromise;
-                this.initialized = true;
-                return this;
-            } finally {
-                this.initializePromise = null;
-            }
-        }
-
         // --------------------------------------------------
         // KEY ACCESS
         // --------------------------------------------------
 
         getKey() {
+            this.ensureInitialized();
             return this.toHex(this.key);
         }
 
@@ -474,7 +553,7 @@
         }
 
         ensureInitialized() {
-            if (!this.initialized) {
+            if (!this.initialized || !this.key) {
                 throw new Error(
                     "CryptoManager has not been initialized."
                 );
@@ -539,8 +618,8 @@
         getStatus() {
             return {
                 initialized: this.initialized,
-                algorithm: this.getAlgorithm(),
-                keyAvailable: true
+                algorithm: this.algorithm,
+                keyAvailable: Boolean(this.key)
             };
         }
 
@@ -549,6 +628,7 @@
         // --------------------------------------------------
 
         destroy() {
+            this.key = null;
             this.initialized = false;
             this.initializePromise = null;
         }
