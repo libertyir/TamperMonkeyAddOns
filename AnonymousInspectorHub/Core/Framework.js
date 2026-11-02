@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -37,15 +36,11 @@
                 }
 
                 async init() {
-                    throw new Error(
-                        "Module must implement init()"
-                    );
+                    throw new Error("Module must implement init()");
                 }
 
                 render() {
-                    throw new Error(
-                        "Module must implement render()"
-                    );
+                    throw new Error("Module must implement render()");
                 }
 
                 destroy() { }
@@ -128,6 +123,51 @@
 
         invoke(name, args) {
             return this.requireFunction(name)(...args);
+        }
+
+        // --------------------------------------------------
+        // CRYPTO API
+        // --------------------------------------------------
+
+        createCryptoAPI() {
+            const factory = this;
+
+            return Object.freeze({
+                getKey() {
+                    return factory.invoke(
+                        "getEncryptionKey",
+                        []
+                    );
+                },
+
+                getAlgorithm() {
+                    return factory.invoke(
+                        "getCryptoAlgorithm",
+                        []
+                    );
+                },
+
+                getStatus() {
+                    return factory.invoke(
+                        "getCryptoStatus",
+                        []
+                    );
+                },
+
+                encrypt(data) {
+                    return factory.invoke(
+                        "encrypt",
+                        [data]
+                    );
+                },
+
+                decrypt(payload) {
+                    return factory.invoke(
+                        "decrypt",
+                        [payload]
+                    );
+                }
+            });
         }
 
         // --------------------------------------------------
@@ -265,7 +305,10 @@
                         "closeSettings",
                         []
                     );
-                }
+                },
+
+                // Encryption services
+                Crypto: factory.createCryptoAPI()
             };
 
             this.framework = Object.freeze(api);
