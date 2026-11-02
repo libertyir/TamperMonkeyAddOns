@@ -43,6 +43,8 @@
             this.indexedDBAdapter = null;
             this.uiManager = null;
 
+            this.websiteGuid = null;
+
             this.services = {};
         }
 
@@ -748,6 +750,24 @@
         }
 
         // --------------------------------------------------
+        // WEBSITE REGISTRATION
+        // --------------------------------------------------
+
+        async registerCurrentWebsite() {
+            const hostname = window.location.hostname;
+
+            const website = await this.storageManager.upsertWebsite({
+                domain: hostname
+            });
+
+            this.websiteGuid = website.guid;
+
+            this.moduleManager.websiteGuid = website.guid;
+
+            return website;
+        }
+
+        // --------------------------------------------------
         // MODULE EXECUTION
         // --------------------------------------------------
 
@@ -854,6 +874,8 @@
                     kernel: this,
                     hostname: window.location.hostname
                 });
+
+                await this.registerCurrentWebsite();
 
                 const disabled = new Set(
                     this.getDisabledModules()
