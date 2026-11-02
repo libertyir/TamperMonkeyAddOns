@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -15,6 +14,7 @@
             this.content = null;
             this.statusUrl = null;
             this.links = [];
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -64,12 +64,29 @@
 
                 this.content = parsed;
                 this.statusUrl = response.url || this.statusUrl;
+                this.scannedAt = new Date().toISOString();
                 this.available = true;
 
             } catch (error) {
                 this.error = error;
                 console.warn("[Apache Server Status]", error);
             }
+        }
+
+        getResult() {
+            if (!this.content) {
+                return null;
+            }
+
+            return {
+                page: window.location.href,
+                statusUrl: this.statusUrl,
+                scannedAt: this.scannedAt,
+                reportText: this.content.body
+                    ? this.content.body.innerText || ""
+                    : "",
+                links: [...new Set(this.links)]
+            };
         }
 
         isApacheStatus(doc) {
@@ -80,8 +97,6 @@
             ) || "";
 
             const normalizedTitle = title.toLowerCase();
-
-            const normalizedText = bodyText.toLowerCase();
 
             const titleMatch =
                 normalizedTitle.includes("apache server status");
