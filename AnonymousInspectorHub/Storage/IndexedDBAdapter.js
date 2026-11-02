@@ -1,8 +1,21 @@
 (function (root) {
     "use strict";
 
-    class IndexedDBAdapter {
+    const StorageAdapter =
+        root.AnonymousInspectorStorageAdapter;
+
+    if (typeof StorageAdapter !== "function") {
+        throw new Error(
+            "StorageAdapter must be loaded before IndexedDBAdapter."
+        );
+    }
+
+    class IndexedDBAdapter extends StorageAdapter {
         constructor(options = {}) {
+            super({
+                name: "indexedDB"
+            });
+
             this.databaseName =
                 options.databaseName || "AnonymousInspectorHub";
 
@@ -18,8 +31,6 @@
 
             this.database = null;
             this.openPromise = null;
-            this.initialized = false;
-            this.destroyed = false;
         }
 
         // --------------------------------------------------
@@ -138,18 +149,6 @@
             }
 
             return storeName;
-        }
-
-        validateKey(key) {
-            if (
-                (typeof key !== "string" &&
-                    typeof key !== "number") ||
-                String(key).length === 0
-            ) {
-                throw new Error("Invalid IndexedDB key.");
-            }
-
-            return key;
         }
 
         // --------------------------------------------------
@@ -410,6 +409,7 @@
         }
     }
 
-    root.AnonymousInspectorIndexedDBAdapter = IndexedDBAdapter;
+    root.AnonymousInspectorIndexedDBAdapter =
+        IndexedDBAdapter;
 
 })(globalThis);
