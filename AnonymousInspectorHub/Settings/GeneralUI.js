@@ -127,6 +127,52 @@ class GeneralUI extends Framework.BaseSettings {
         return row;
     }
 
+    createCopyButton(value, label) {
+        const container = Framework.createElement("div", {
+            style: `
+                display:flex;
+                align-items:center;
+                flex-wrap:wrap;
+                gap:8px;
+            `
+        });
+
+        const input = this.createReadOnlyInput(value);
+
+        const button = Framework.createElement("button", {
+            type: "button",
+            textContent: label,
+            style: `
+                padding:9px 14px;
+                border:1px solid #555;
+                border-radius:5px;
+                background:#303030;
+                color:#fff;
+                cursor:pointer;
+            `
+        });
+
+        const status = Framework.createElement("span", {
+            style: "font-size:12px;color:#8bcf91;"
+        });
+
+        button.addEventListener("click", async () => {
+            try {
+                await Framework.copy(value);
+                status.style.color = "#8bcf91";
+                status.textContent = "Copied.";
+
+            } catch (error) {
+                status.style.color = "#ff7777";
+                status.textContent = "Copy failed: " + error.message;
+            }
+        });
+
+        container.append(input, button, status);
+
+        return container;
+    }
+
     // --------------------------------------------------
     // CRYPTO SECTION
     // --------------------------------------------------
@@ -135,6 +181,7 @@ class GeneralUI extends Framework.BaseSettings {
         const cryptoStatus = Framework.Crypto.getStatus();
         const algorithm = Framework.Crypto.getAlgorithm();
         const encryptionKey = Framework.Crypto.getKey();
+        const iv = Framework.Crypto.getIV();
 
         if (!cryptoStatus.initialized || !cryptoStatus.keyAvailable) {
             throw new Error("Encryption service is not initialized.");
@@ -162,7 +209,7 @@ class GeneralUI extends Framework.BaseSettings {
 
         const description = Framework.createElement("div", {
             textContent:
-                "Application-wide encryption key and cryptographic configuration.",
+                "Application-wide encryption configuration. The same key is shared across all websites.",
             style: `
                 font-size:12px;
                 color:#aaa;
@@ -170,58 +217,16 @@ class GeneralUI extends Framework.BaseSettings {
             `
         });
 
-        const keyInput = this.createReadOnlyInput(encryptionKey);
-
-        const keyContainer = Framework.createElement("div", {
-            style: `
-                display:flex;
-                align-items:center;
-                flex-wrap:wrap;
-                gap:8px;
-            `
-        });
-
-        const copyButton = Framework.createElement("button", {
-            type: "button",
-            textContent: "Copy Key",
-            style: `
-                padding:9px 14px;
-                border:1px solid #555;
-                border-radius:5px;
-                background:#303030;
-                color:#fff;
-                cursor:pointer;
-            `
-        });
-
-        const copyStatus = Framework.createElement("span", {
-            style: "font-size:12px;color:#8bcf91;"
-        });
-
-        copyButton.addEventListener("click", async () => {
-            try {
-                await Framework.copy(encryptionKey);
-
-                copyStatus.style.color = "#8bcf91";
-                copyStatus.textContent = "Key copied.";
-
-            } catch (error) {
-                copyStatus.style.color = "#ff7777";
-                copyStatus.textContent =
-                    "Copy failed: " + error.message;
-            }
-        });
-
-        keyContainer.append(
-            keyInput,
-            copyButton,
-            copyStatus
+        const keyField = this.createField(
+            "Encryption Key (Hex)",
+            "A randomly generated 128-bit key. Generated once and stored in shared userscript GM Storage. Keep a backup of this key.",
+            this.createCopyButton(encryptionKey, "Copy Key")
         );
 
-        const keyField = this.createField(
-            "Encryption Key",
-            "Fixed 12-character application key. Read-only. Keep this key safe; encrypted data cannot be recovered without it.",
-            keyContainer
+        const ivField = this.createField(
+            "Initialization Vector (IV)",
+            "Fixed 16-byte zero IV. This value is included in encrypted payloads.",
+            this.createCopyButton(iv, "Copy IV")
         );
 
         const algorithmContainer = Framework.createElement("div", {
@@ -243,38 +248,71 @@ class GeneralUI extends Framework.BaseSettings {
 
             this.createInfoLine(
                 "Encryption",
-                algorithm.encryption
+                "AES-128-CBC"
             ),
 
             this.createInfoLine(
-                "Key Derivation",
-                algorithm.keyDerivation
-            ),
-
-            this.createInfoLine(
-                "Hash",
-                algorithm.hash
-            ),
-
-            this.createInfoLine(
-                "PBKDF2 Iterations",
-                algorithm.iterations.toLocaleString()
+                "Padding",
+                "PKCS7"
             ),
 
             this.createInfoLine(
                 "Key Length",
-                algorithm.keyLength + " bits"
+                "128 bits (16 bytes)"
             ),
 
             this.createInfoLine(
-                "Key Characters",
-                algorithm.keyCharacters
+                "Key Format",
+                "32-character hexadecimal"
+            ),
+
+            this.createInfoLine(
+                "IV Length",
+                "128 bits (16 bytes)"
+            ),
+
+            this.createInfoLine(
+                "IV Format",
+                "Fixed zero IV"
+            ),
+
+            this.createInfoLine(
+                "Key Storage",
+                "Userscript GM Storage"
             )
         );
 
+        const opensslCommand =
+            "openssl enc -d -aes-128-cbc -a " +
+            "-K " + encryptionKey + " " +
+            "-iv " + iv;
+
+        const opensslField = this.createField(
+            "OpenSSL Decryption Command",
+            "Extract the Base64 ciphertext value from the payload and pass it to this command through standard input.",
+            this.createCopyButton(opensslCommand, "Copy Command")
+        );
+
+        const opensslExample = Framework.createElement("div", {
+            textContent:
+                "echo \"BASE64_CIPHERTEXT\" | " + opensslCommand,
+            style: `
+                margin-top:8px;
+                padding:10px;
+                background:#181818;
+                border:1px solid #383838;
+                border-radius:4px;
+                color:#ddd;
+                font-family:monospace;
+                font-size:11px;
+                overflow-wrap:anywhere;
+                line-height:1.6;
+            `
+        });
+
         const warning = Framework.createElement("div", {
             textContent:
-                "Warning: Losing this key means losing access to data encrypted with it.",
+                "Warning: This encryption is intended for lightweight obfuscation, not strong security. Anyone who can access the userscript source or GM Storage can recover the encryption key. Losing the key means losing access to encrypted data.",
             style: `
                 margin-top:16px;
                 padding:10px;
@@ -290,7 +328,10 @@ class GeneralUI extends Framework.BaseSettings {
             heading,
             description,
             keyField,
+            ivField,
             algorithmContainer,
+            opensslField,
+            opensslExample,
             warning
         );
 
