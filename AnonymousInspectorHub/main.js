@@ -34,23 +34,29 @@
                         response.status >= 300 ||
                         !response.responseText
                     ) {
-                        reject(new Error("Kernel loading failed: HTTP " + response.status));
+                        reject(
+                            new Error(
+                                "Kernel loading failed: HTTP " +
+                                response.status
+                            )
+                        );
                         return;
                     }
 
                     try {
-                        new Function(
+                        const KernelClass = new Function(
                             response.responseText +
+                            "\nreturn globalThis.AnonymousInspectorKernel;" +
                             "\n//# sourceURL=" + KERNEL_URL
                         )();
 
-                        if (
-                            typeof root.AnonymousInspectorKernel !== "function"
-                        ) {
-                            throw new Error("Kernel class was not registered.");
+                        if (typeof KernelClass !== "function") {
+                            throw new Error(
+                                "Kernel class could not be loaded from Kernel.js."
+                            );
                         }
 
-                        kernel = new root.AnonymousInspectorKernel({
+                        kernel = new KernelClass({
                             version: "2.0.0"
                         });
 
@@ -64,17 +70,22 @@
                 },
 
                 onerror() {
-                    reject(new Error("Kernel network request failed."));
+                    reject(
+                        new Error("Kernel network request failed.")
+                    );
                 },
 
                 ontimeout() {
-                    reject(new Error("Kernel request timed out."));
+                    reject(
+                        new Error("Kernel request timed out.")
+                    );
                 }
             });
         });
 
         try {
             return await loading;
+
         } catch (error) {
             loading = null;
             throw error;
