@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -12,6 +11,7 @@
             super();
             this.available = false;
             this.foundPages = [];
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -26,6 +26,7 @@
         async init() {
             this.available = false;
             this.foundPages = [];
+            this.scannedAt = new Date().toISOString();
 
             const paths = [
                 "api-docs",
@@ -117,6 +118,18 @@
                     // Ignore inaccessible paths.
                 }
             }
+        }
+
+        getResult() {
+            return {
+                page: location.href,
+                scannedAt: this.scannedAt,
+                totalFound: this.foundPages.length,
+                foundPages: this.foundPages.map(page => ({
+                    ...page,
+                    indicators: [...page.indicators]
+                }))
+            };
         }
 
         detectPlatform(html) {

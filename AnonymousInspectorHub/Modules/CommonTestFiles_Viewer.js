@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -12,6 +11,7 @@
         constructor() {
             super();
             this.foundFiles = [];
+            this.scannedAt = null;
         }
 
         getMetadata() {
@@ -26,6 +26,7 @@
         async init() {
             this.available = false;
             this.foundFiles = [];
+            this.scannedAt = new Date().toISOString();
 
             const base = new URL(
                 ".",
@@ -80,6 +81,18 @@
             }
 
             this.available = this.foundFiles.length > 0;
+        }
+
+        getResult() {
+            return {
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                totalFound: this.foundFiles.length,
+                foundFiles: this.foundFiles.map(file => ({
+                    path: file.path,
+                    url: file.url
+                }))
+            };
         }
 
         render() {
