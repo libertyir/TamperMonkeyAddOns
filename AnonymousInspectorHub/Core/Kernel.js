@@ -530,6 +530,22 @@
                 copy: value => this.copy(value),
                 open: url => this.open(url),
 
+                // CRYPTO API
+                getEncryptionKey: () =>
+                    this.cryptoManager.getKey(),
+
+                getCryptoAlgorithm: () =>
+                    this.cryptoManager.getAlgorithm(),
+
+                getCryptoStatus: () =>
+                    this.cryptoManager.getStatus(),
+
+                encrypt: data =>
+                    this.cryptoManager.encrypt(data),
+
+                decrypt: payload =>
+                    this.cryptoManager.decrypt(payload),
+
                 getConfig: () => this.getConfig(),
                 setConfig: updates => this.setConfig(updates),
 
