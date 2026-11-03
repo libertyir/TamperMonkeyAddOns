@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -95,13 +94,17 @@
         getTargets() {
             const currentHost = location.hostname.toLowerCase();
             const protocol = location.protocol;
+            const port = location.port
+                ? ":" + location.port
+                : "";
+
             const targets = [];
 
             // Check the admin subdomain first; only its root is required.
             const adminHost = "admin." + currentHost;
 
             targets.push({
-                url: protocol + "//" + adminHost + "/",
+                url: protocol + "//" + adminHost + port + "/",
                 host: adminHost,
                 path: "/",
                 source: "Admin Subdomain",
@@ -111,7 +114,7 @@
             // Scan common paths only on the current hostname.
             for (const path of this.getPaths()) {
                 targets.push({
-                    url: protocol + "//" + currentHost + path,
+                    url: protocol + "//" + currentHost + port + path,
                     host: currentHost,
                     path: path,
                     source: "Current Domain"
@@ -128,6 +131,7 @@
             const targets = this.getTargets();
 
             let index = 0;
+            let scanFailed = false;
 
             const worker = async () => {
                 while (index < targets.length) {
@@ -140,7 +144,7 @@
                             this.results.push(result);
                         }
                     } catch (error) {
-                        // Ignore inaccessible targets.
+                        scanFailed = true;
                     }
                 }
             };
@@ -151,6 +155,13 @@
             );
 
             await Promise.all(workers);
+
+            if (scanFailed) {
+                this.results = [];
+                throw new Error(
+                    "Admin panel scan was incomplete due to network errors."
+                );
+            }
 
             this.results.sort((a, b) =>
                 a.url.localeCompare(b.url)
@@ -294,7 +305,9 @@
                     // Fetch cannot reliably read a cross-origin admin subdomain
                     // unless the target server explicitly allows CORS.
                     if (new URL(url).origin !== location.origin) {
-                        resolve(null);
+                        reject(new Error(
+                            "Cross-origin request requires GM_xmlhttpRequest."
+                        ));
                         return;
                     }
 
@@ -310,8 +323,14 @@
                         "Accept": "text/html"
                     },
                     onload: response => {
-                        if (response.status < 200 || response.status >= 600) {
-                            resolve(null);
+                        if (
+                            !response.status ||
+                            response.status < 100 ||
+                            response.status >= 600
+                        ) {
+                            reject(new Error(
+                                "Invalid HTTP response status."
+                            ));
                             return;
                         }
 
@@ -346,8 +365,12 @@
                                 )
                         });
                     },
-                    onerror: () => resolve(null),
-                    ontimeout: () => resolve(null)
+                    onerror: () => reject(
+                        new Error("Network request failed.")
+                    ),
+                    ontimeout: () => reject(
+                        new Error("Network request timed out.")
+                    )
                 });
             });
         }
@@ -370,8 +393,8 @@
                     signal: controller.signal
                 });
 
-                if (response.status < 200 || response.status >= 600) {
-                    return null;
+                if (response.status < 100 || response.status >= 600) {
+                    throw new Error("Invalid HTTP response status.");
                 }
 
                 const finalUrl = new URL(response.url);
