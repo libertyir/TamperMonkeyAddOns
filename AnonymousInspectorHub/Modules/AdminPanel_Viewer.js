@@ -103,13 +103,13 @@
             // Check the admin subdomain first; only its root is required.
             const adminHost = "admin." + currentHost;
 
-            targets.push({
-                url: protocol + "//" + adminHost + port + "/",
-                host: adminHost,
-                path: "/",
-                source: "Admin Subdomain",
-                rootOnly: true
-            });
+            //targets.push({
+            //   url: protocol + "//" + adminHost + port + "/",
+           //     host: adminHost,
+            //    path: "/",
+            //    source: "Admin Subdomain",
+            //    rootOnly: true
+            //});
 
             // Scan common paths only on the current hostname.
             for (const path of this.getPaths()) {
