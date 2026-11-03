@@ -286,9 +286,9 @@
                 await this.moduleManager.destroy(id);
             }
 
-            if (this.uiManager) {
-                this.uiManager.refreshMenu();
-            }
+            //if (this.uiManager) {
+            //    this.uiManager.refreshMenu();
+            //}
 
             return enabled;
         }
