@@ -689,12 +689,29 @@
                 ? Math.round(completed / total * 100)
                 : 100;
 
-            this.progressLabel.textContent =
+            const currentModule =
+                typeof progress.id === "string"
+                    ? progress.id
+                    : "";
+
+            const phase = progress.phase || "";
+
+            let message =
                 "Scanning modules: " +
                 completed + " / " + total +
-                " (" + percent + "%)" +
-                (failed ? " | Failed: " + failed : "");
+                " (" + percent + "%)";
 
+            if (currentModule && phase === "started") {
+                message += " | Running: " + currentModule;
+            } else if (currentModule && phase === "completed") {
+                message += " | Completed: " + currentModule;
+            }
+
+            if (failed) {
+                message += " | Failed: " + failed;
+            }
+
+            this.progressLabel.textContent = message;
             this.progressBar.style.width = percent + "%";
 
             this.progress.style.display =
