@@ -8,10 +8,16 @@
         static description = "Open exposed Swagger API documentation";
         static icon = "📘";
 
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
+
         constructor() {
             super();
             this.swaggerUrl = null;
             this.scannedAt = null;
+            this.timeout = 7000;
         }
 
         getMetadata() {
@@ -28,7 +34,7 @@
             this.swaggerUrl = null;
             this.scannedAt = new Date().toISOString();
 
-            const base = new URL(".", window.location.href);
+            const base = new URL("/", window.location.origin);
 
             const paths = [
                 "swagger",
@@ -72,14 +78,63 @@
             };
         }
 
+        restoreResult(data) {
+            if (
+                !data ||
+                typeof data.swaggerUrl !== "string"
+            ) {
+                return false;
+            }
+
+            try {
+                const url = new URL(data.swaggerUrl);
+
+                if (url.origin !== window.location.origin) {
+                    return false;
+                }
+
+                this.swaggerUrl = url.href;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
+        }
+
         async checkHead(url) {
+            const controller = new AbortController();
+
+            const timer = setTimeout(
+                () => controller.abort(),
+                this.timeout
+            );
+
             try {
                 const response = await fetch(url, {
                     method: "HEAD",
                     credentials: "same-origin",
                     redirect: "follow",
-                    cache: "no-store"
+                    cache: "no-store",
+                    signal: controller.signal
                 });
+
+                const finalUrl = new URL(response.url);
+
+                if (finalUrl.origin !== window.location.origin) {
+                    throw new Error(
+                        "Redirected outside the current origin."
+                    );
+                }
+
+                // Server errors are inconclusive and must not be cached.
+                if (response.status >= 500) {
+                    throw new Error(
+                        `HTTP server error: ${response.status}`
+                    );
+                }
 
                 if (!response.ok) {
                     return false;
@@ -89,15 +144,15 @@
                     response.headers.get("content-type") || ""
                 ).toLowerCase();
 
-                const finalUrl = response.url.toLowerCase();
+                const finalPath = finalUrl.href.toLowerCase();
 
                 return (
                     contentType.includes("text/html") ||
-                    finalUrl.includes("swagger")
+                    finalPath.includes("swagger")
                 );
 
-            } catch (error) {
-                return false;
+            } finally {
+                clearTimeout(timer);
             }
         }
 
