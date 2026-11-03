@@ -357,14 +357,25 @@
         }
 
         isScanRecordValid(record, ttl) {
-            if (
-                !record ||
-                !["success", "unavailable"].includes(record.status)
-            ) {
+            if (!record) {
                 return false;
             }
 
             if (ttl === "always") {
+                return false;
+            }
+
+            if (record.status === "success") {
+                if (!record.resultGuid) {
+                    return false;
+                }
+            } else if (
+                record.status === "unavailable"
+            ) {
+                if (record.resultGuid) {
+                    return false;
+                }
+            } else {
                 return false;
             }
 
@@ -389,12 +400,15 @@
                     scope
                 );
 
+                const completedAt = new Date().toISOString();
+
                 const record = {
                     moduleId: id,
                     websiteGuid: this.websiteGuid,
                     scope,
                     status,
-                    completedAt: new Date().toISOString(),
+                    attemptedAt: details.startedAt || completedAt,
+                    completedAt,
                     resultGuid: details.resultGuid || null,
                     executionGuid: details.executionGuid || null
                 };
@@ -923,15 +937,23 @@
                             lastExecutedAt: execution.completedAt
                         });
 
-                        await this.saveScanRecord(
-                            id,
-                            scope,
-                            "success",
-                            {
-                                resultGuid,
-                                executionGuid: execution.guid
-                            }
-                        );
+                        const canRestore =
+                            resultGuid &&
+                            typeof ModuleClass.prototype.restoreResult ===
+                                "function";
+
+                        if (canRestore) {
+                            await this.saveScanRecord(
+                                id,
+                                scope,
+                                "success",
+                                {
+                                    resultGuid,
+                                    executionGuid: execution.guid,
+                                    startedAt
+                                }
+                            );
+                        }
                     }
 
                     return instance;
@@ -961,7 +983,8 @@
                         scope,
                         "unavailable",
                         {
-                            executionGuid: execution.guid
+                            executionGuid: execution.guid,
+                            startedAt
                         }
                     );
                 }
