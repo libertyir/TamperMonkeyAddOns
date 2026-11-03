@@ -57,6 +57,45 @@ class ModulesUI extends Framework.BaseSettings {
         return button;
     }
 
+    createTTLSelect() {
+        const options = [
+            ["always", "Every time"],
+            ["1h", "1 hour"],
+            ["6h", "6 hours"],
+            ["12h", "12 hours"],
+            ["1d", "1 day"],
+            ["3d", "3 days"],
+            ["7d", "7 days"],
+            ["30d", "30 days"],
+            ["90d", "90 days"],
+            ["permanent", "Permanent"]
+        ];
+
+        const select = this.createElement("select", {
+            disabled: "disabled",
+            title: "Scan interval",
+            style: `
+                min-width:130px;
+                padding:7px 9px;
+                border:1px solid #555;
+                border-radius:4px;
+                background:#292929;
+                color:#fff;
+            `
+        });
+
+        for (const [value, label] of options) {
+            select.appendChild(
+                this.createElement("option", {
+                    value,
+                    textContent: label
+                })
+            );
+        }
+
+        return select;
+    }
+
     render() {
         const container = this.createElement("div", {
             style: "max-width:750px;"
@@ -157,6 +196,81 @@ class ModulesUI extends Framework.BaseSettings {
                     })
                 );
 
+                const ttlContainer = this.createElement("div", {
+                    style: `
+                        display:flex;
+                        align-items:center;
+                        gap:7px;
+                    `
+                });
+
+                const ttlLabel = this.createElement("span", {
+                    textContent: "Scan interval:",
+                    style: "font-size:12px;color:#aaa;"
+                });
+
+                const ttlSelect = this.createTTLSelect();
+
+                ttlContainer.append(
+                    ttlLabel,
+                    ttlSelect
+                );
+
+                Framework.getModuleTTL(module.id)
+                    .then(ttl => {
+                        if (!ttlSelect.isConnected) {
+                            return;
+                        }
+
+                        ttlSelect.value = ttl;
+
+                        if (!ttlSelect.value) {
+                            ttlSelect.value = "7d";
+                        }
+
+                        ttlSelect.disabled = false;
+                    })
+                    .catch(error => {
+                        if (ttlSelect.isConnected) {
+                            ttlSelect.disabled = true;
+                        }
+
+                        showStatus(
+                            "Could not load scan interval for " +
+                            module.id +
+                            ": " +
+                            error.message
+                        );
+                    });
+
+                ttlSelect.addEventListener("change", async () => {
+                    const newTTL = ttlSelect.value;
+
+                    ttlSelect.disabled = true;
+
+                    try {
+                        await Framework.setModuleTTL(
+                            module.id,
+                            newTTL
+                        );
+
+                        showStatus(
+                            "Scan interval saved for " +
+                            module.id +
+                            ".",
+                            true
+                        );
+
+                    } catch (error) {
+                        showStatus(error.message);
+
+                    } finally {
+                        if (ttlSelect.isConnected) {
+                            ttlSelect.disabled = false;
+                        }
+                    }
+                });
+
                 const toggleButton = this.createButton(
                     module.enabled ? "Disable" : "Enable",
                     () => {
@@ -184,7 +298,12 @@ class ModulesUI extends Framework.BaseSettings {
                     module.enabled ? "#542929" : "#285238"
                 );
 
-                row.append(details, toggleButton);
+                row.append(
+                    details,
+                    ttlContainer,
+                    toggleButton
+                );
+
                 moduleList.appendChild(row);
             });
         };
