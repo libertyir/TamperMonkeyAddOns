@@ -6,6 +6,10 @@
         static title = "Metrics Viewer";
         static description = "Discover monitoring and metrics endpoints";
         static icon = "📊";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -81,6 +85,66 @@
             };
         }
 
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.results) ||
+                data.results.length === 0
+            ) {
+                return false;
+            }
+
+            const restoredResults = [];
+
+            try {
+                for (const item of data.results) {
+                    if (
+                        !item ||
+                        typeof item.url !== "string" ||
+                        typeof item.finalUrl !== "string" ||
+                        typeof item.status !== "number" ||
+                        typeof item.platform !== "string" ||
+                        typeof item.format !== "string" ||
+                        typeof item.sample !== "string" ||
+                        !item.headers ||
+                        typeof item.headers !== "object" ||
+                        Array.isArray(item.headers)
+                    ) {
+                        return false;
+                    }
+
+                    const originalUrl = new URL(item.url);
+                    const finalUrl = new URL(item.finalUrl);
+
+                    if (
+                        originalUrl.origin !== location.origin ||
+                        finalUrl.origin !== location.origin ||
+                        !Number.isInteger(item.status) ||
+                        item.status < 0 ||
+                        item.status > 599
+                    ) {
+                        return false;
+                    }
+
+                    restoredResults.push({
+                        ...item,
+                        url: originalUrl.href,
+                        finalUrl: finalUrl.href,
+                        headers: { ...item.headers }
+                    });
+                }
+
+                this.results = restoredResults;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
+        }
+
         async checkEndpoint(url) {
             const controller = new AbortController();
             const timer = setTimeout(
@@ -108,7 +172,6 @@
                 const contentType =
                     response.headers.get("content-type") || "";
 
-                // Only read a small response body.
                 const reader = response.body?.getReader();
 
                 let body = "";
@@ -146,6 +209,7 @@
                 });
 
                 return {
+                    detected: true,
                     url,
                     finalUrl: response.url,
                     status: response.status,

@@ -6,6 +6,10 @@
         static title = "OpenAPI Viewer";
         static description = "Discover and inspect OpenAPI specifications";
         static icon = "📋";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -49,7 +53,7 @@
                 "swagger/v2/swagger.json"
             ];
 
-            const base = new URL(".", location.href);
+            const base = new URL("/", location.origin);
 
             for (const path of paths) {
                 const url = new URL(path, base);
@@ -122,6 +126,80 @@
                     ...spec
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.specifications) ||
+                data.specifications.length === 0
+            ) {
+                return false;
+            }
+
+            const restored = [];
+
+            try {
+                for (const spec of data.specifications) {
+                    if (
+                        !spec ||
+                        typeof spec.url !== "string" ||
+                        typeof spec.version !== "string" ||
+                        typeof spec.title !== "string" ||
+                        typeof spec.description !== "string" ||
+                        !Array.isArray(spec.servers) ||
+                        !spec.paths ||
+                        typeof spec.paths !== "object" ||
+                        Array.isArray(spec.paths) ||
+                        !spec.schemas ||
+                        typeof spec.schemas !== "object" ||
+                        Array.isArray(spec.schemas) ||
+                        !spec.securitySchemes ||
+                        typeof spec.securitySchemes !== "object" ||
+                        Array.isArray(spec.securitySchemes) ||
+                        !spec.raw ||
+                        typeof spec.raw !== "object" ||
+                        Array.isArray(spec.raw)
+                    ) {
+                        return false;
+                    }
+
+                    const url = new URL(spec.url);
+
+                    if (url.origin !== location.origin) {
+                        return false;
+                    }
+
+                    if (
+                        !spec.servers.every(
+                            server => typeof server === "string"
+                        )
+                    ) {
+                        return false;
+                    }
+
+                    restored.push({
+                        ...spec,
+                        url: url.href,
+                        servers: [...spec.servers],
+                        paths: { ...spec.paths },
+                        schemas: { ...spec.schemas },
+                        securitySchemes: {
+                            ...spec.securitySchemes
+                        },
+                        raw: spec.raw
+                    });
+                }
+
+                this.specifications = restored;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         parseSpecification(content) {

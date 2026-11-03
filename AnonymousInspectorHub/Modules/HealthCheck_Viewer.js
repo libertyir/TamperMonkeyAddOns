@@ -6,6 +6,10 @@
         static title = "Health Check Viewer";
         static description = "Discover and inspect application health check endpoints";
         static icon = "♥";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor(...args) {
             super(...args);
@@ -89,6 +93,69 @@
                     headers: { ...result.headers }
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.results) ||
+                data.results.length === 0
+            ) {
+                return false;
+            }
+
+            const restoredResults = [];
+
+            try {
+                for (const result of data.results) {
+                    if (
+                        !result ||
+                        result.detected !== true ||
+                        typeof result.path !== "string" ||
+                        typeof result.url !== "string" ||
+                        typeof result.status !== "number" ||
+                        typeof result.health !== "string" ||
+                        !Array.isArray(result.healthDetails) ||
+                        !result.healthDetails.every(
+                            item => typeof item === "string"
+                        ) ||
+                        typeof result.sample !== "string" ||
+                        typeof result.format !== "string" ||
+                        !result.headers ||
+                        typeof result.headers !== "object" ||
+                        Array.isArray(result.headers)
+                    ) {
+                        return false;
+                    }
+
+                    const endpoint = new URL(result.url);
+
+                    if (
+                        endpoint.origin !== location.origin ||
+                        !Number.isInteger(result.status) ||
+                        result.status < 0 ||
+                        result.status > 599
+                    ) {
+                        return false;
+                    }
+
+                    restoredResults.push({
+                        ...result,
+                        url: endpoint.href,
+                        healthDetails: [...result.healthDetails],
+                        headers: { ...result.headers }
+                    });
+                }
+
+                this.results = restoredResults;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         async checkEndpoint(path) {
@@ -269,8 +336,6 @@
                 }
             }
 
-            // Empty successful responses are accepted only for
-            // explicitly named health-check endpoints.
             if (
                 !result.detected &&
                 trimmed.length === 0 &&
@@ -285,8 +350,6 @@
                 result.format = "Empty Response";
             }
 
-            // A health endpoint returning an HTTP server error
-            // is relevant even if its response body is not JSON.
             if (
                 !result.detected &&
                 response.status >= 500 &&

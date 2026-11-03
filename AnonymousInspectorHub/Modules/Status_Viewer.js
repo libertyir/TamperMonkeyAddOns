@@ -7,6 +7,11 @@
         static description = "Inspect HTTP status codes and common public resources";
         static icon = "📡";
 
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "permanent"
+        };
+
         constructor() {
             super();
             this.available = false;
@@ -52,23 +57,11 @@
             for (const path of paths) {
                 const url = new URL(path, origin);
 
-                try {
-                    const result = await this.checkUrl(url.href);
-                    this.results.push(result);
-                } catch (error) {
-                    this.results.push({
-                        url: url.href,
-                        status: 0,
-                        statusText: "Request Failed",
-                        finalUrl: url.href,
-                        method: "HEAD",
-                        duration: 0,
-                        contentType: "",
-                        contentLength: "",
-                        headers: {},
-                        error: error.message || "Request failed"
-                    });
-                }
+                // Network errors and timeouts must fail the scan.
+                // They must not become permanently cached status: 0 results.
+                const result = await this.checkUrl(url.href);
+
+                this.results.push(result);
             }
 
             this.available = this.results.length > 0;
@@ -88,6 +81,85 @@
                     headers: { ...result.headers }
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.results) ||
+                data.results.length === 0
+            ) {
+                return false;
+            }
+
+            try {
+                const restored = [];
+
+                for (const result of data.results) {
+                    if (
+                        !result ||
+                        typeof result.url !== "string" ||
+                        typeof result.finalUrl !== "string" ||
+                        typeof result.status !== "number" ||
+                        result.status < 100 ||
+                        result.status > 599 ||
+                        typeof result.statusText !== "string" ||
+                        !["HEAD", "GET"].includes(result.method) ||
+                        typeof result.duration !== "number" ||
+                        typeof result.contentType !== "string" ||
+                        typeof result.contentLength !== "string" ||
+                        typeof result.redirected !== "boolean" ||
+                        !result.headers ||
+                        typeof result.headers !== "object" ||
+                        Array.isArray(result.headers) ||
+                        (
+                            result.error !== null &&
+                            typeof result.error !== "string"
+                        )
+                    ) {
+                        return false;
+                    }
+
+                    const url = new URL(result.url);
+                    const finalUrl = new URL(result.finalUrl);
+
+                    if (
+                        url.origin !== location.origin ||
+                        finalUrl.origin !== location.origin
+                    ) {
+                        return false;
+                    }
+
+                    const headers = {};
+
+                    for (const [name, value] of Object.entries(result.headers)) {
+                        if (
+                            typeof name !== "string" ||
+                            typeof value !== "string"
+                        ) {
+                            return false;
+                        }
+
+                        headers[name.toLowerCase()] = value;
+                    }
+
+                    restored.push({
+                        ...result,
+                        url: url.href,
+                        finalUrl: finalUrl.href,
+                        headers
+                    });
+                }
+
+                this.results = restored;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         async checkUrl(url) {
@@ -122,7 +194,9 @@
                 const finalUrl = new URL(response.url);
 
                 if (finalUrl.origin !== location.origin) {
-                    throw new Error("Redirected outside the current origin.");
+                    throw new Error(
+                        "Redirected outside the current origin."
+                    );
                 }
 
                 const headers = {};
@@ -344,13 +418,13 @@
             ).length;
 
             const errors = this.results.filter(
-                item => item.status >= 400 || item.status === 0
+                item => item.status >= 400
             ).length;
 
             this.addRow(summary, "Total Checked", this.results.length);
             this.addRow(summary, "Successful", successful);
             this.addRow(summary, "Redirects", redirects);
-            this.addRow(summary, "Errors / Failed", errors);
+            this.addRow(summary, "Errors", errors);
 
             root.appendChild(summary);
 

@@ -6,6 +6,10 @@
         static title = "Scalar Viewer";
         static description = "Discover Scalar API documentation interfaces";
         static icon = "◈";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -47,7 +51,7 @@
                 "documentation/"
             ];
 
-            const base = new URL(".", location.href);
+            const base = new URL("/", location.origin);
             const checked = new Set();
 
             for (const path of paths) {
@@ -58,47 +62,48 @@
 
                 checked.add(url.href);
 
-                try {
-                    const response = await fetch(url.href, {
-                        method: "GET",
-                        credentials: "same-origin",
-                        cache: "no-store",
-                        redirect: "follow"
-                    });
+                const response = await fetch(url.href, {
+                    method: "GET",
+                    credentials: "same-origin",
+                    cache: "no-store",
+                    redirect: "follow"
+                });
 
-                    if (!response.ok) continue;
-
-                    const finalUrl = new URL(response.url);
-
-                    if (finalUrl.origin !== location.origin) continue;
-
-                    const contentType =
-                        response.headers.get("content-type") || "";
-
-                    if (!contentType.includes("text/html")) continue;
-
-                    const html = await response.text();
-
-                    if (!this.isScalarPage(html)) continue;
-
-                    if (this.foundPages.some(
-                        item => item.url === finalUrl.href
-                    )) {
-                        continue;
-                    }
-
-                    this.foundPages.push({
-                        url: finalUrl.href,
-                        path: path,
-                        title: this.extractTitle(html),
-                        indicators: this.getIndicators(html)
-                    });
-
-                    this.available = true;
-
-                } catch (error) {
-                    // Ignore inaccessible paths.
+                if (response.status >= 500) {
+                    throw new Error(
+                        `Scalar scan failed with HTTP ${response.status}: ${url.href}`
+                    );
                 }
+
+                if (!response.ok) continue;
+
+                const finalUrl = new URL(response.url);
+
+                if (finalUrl.origin !== location.origin) continue;
+
+                const contentType =
+                    response.headers.get("content-type") || "";
+
+                if (!contentType.includes("text/html")) continue;
+
+                const html = await response.text();
+
+                if (!this.isScalarPage(html)) continue;
+
+                if (this.foundPages.some(
+                    item => item.url === finalUrl.href
+                )) {
+                    continue;
+                }
+
+                this.foundPages.push({
+                    url: finalUrl.href,
+                    path,
+                    title: this.extractTitle(html),
+                    indicators: this.getIndicators(html)
+                });
+
+                this.available = true;
             }
         }
 
@@ -116,6 +121,57 @@
                     indicators: [...page.indicators]
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.foundPages) ||
+                data.foundPages.length === 0
+            ) {
+                return false;
+            }
+
+            try {
+                const restored = [];
+
+                for (const page of data.foundPages) {
+                    if (
+                        !page ||
+                        typeof page.url !== "string" ||
+                        typeof page.path !== "string" ||
+                        typeof page.title !== "string" ||
+                        !Array.isArray(page.indicators) ||
+                        !page.indicators.every(
+                            item => typeof item === "string"
+                        )
+                    ) {
+                        return false;
+                    }
+
+                    const url = new URL(page.url);
+
+                    if (url.origin !== location.origin) {
+                        return false;
+                    }
+
+                    restored.push({
+                        url: url.href,
+                        path: page.path,
+                        title: page.title,
+                        indicators: [...page.indicators]
+                    });
+                }
+
+                this.foundPages = restored;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         isScalarPage(html) {

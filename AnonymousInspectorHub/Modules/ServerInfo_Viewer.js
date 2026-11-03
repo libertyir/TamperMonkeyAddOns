@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -43,13 +42,16 @@
             }, 8000);
 
             try {
-                const response = await fetch(location.href, {
-                    method: "GET",
-                    credentials: "same-origin",
-                    cache: "no-store",
-                    redirect: "follow",
-                    signal: controller.signal
-                });
+                const response = await fetch(
+                    new URL("/", location.origin).href,
+                    {
+                        method: "GET",
+                        credentials: "same-origin",
+                        cache: "no-store",
+                        redirect: "follow",
+                        signal: controller.signal
+                    }
+                );
 
                 const finalUrl = new URL(response.url);
 
@@ -65,7 +67,7 @@
                 });
 
                 this.info = {
-                    url: location.href,
+                    url: new URL("/", location.origin).href,
                     finalUrl: response.url,
                     status: response.status,
                     statusText: response.statusText,
@@ -84,6 +86,8 @@
                 this.error = controller.signal.aborted
                     ? "Server information request timed out."
                     : error.message || "Unable to inspect server response.";
+
+                throw error;
 
             } finally {
                 clearTimeout(timeoutId);
@@ -111,37 +115,98 @@
             };
         }
 
-        async restoreResult(data) {
+        restoreResult(data) {
             if (
                 !data ||
                 !data.info ||
                 typeof data.info !== "object" ||
+                typeof data.info.url !== "string" ||
+                typeof data.info.finalUrl !== "string" ||
+                typeof data.info.status !== "number" ||
+                typeof data.info.statusText !== "string" ||
                 !data.info.headers ||
+                typeof data.info.headers !== "object" ||
+                Array.isArray(data.info.headers) ||
                 !Array.isArray(data.info.technologies) ||
                 !Array.isArray(data.info.security) ||
                 !Array.isArray(data.info.infrastructure)
             ) {
-                throw new Error(
-                    "Invalid cached ServerInfo result."
-                );
+                return false;
             }
 
-            this.info = {
-                ...data.info,
-                headers: { ...data.info.headers },
-                technologies: [...data.info.technologies],
-                security: data.info.security.map(item => ({ ...item })),
-                infrastructure: data.info.infrastructure.map(item => ({
-                    ...item,
-                    indicators: Array.isArray(item.indicators)
-                        ? [...item.indicators]
-                        : []
-                }))
-            };
+            try {
+                const url = new URL(data.info.url);
+                const finalUrl = new URL(data.info.finalUrl);
 
-            this.scannedAt = data.scannedAt || null;
-            this.error = null;
-            this.available = true;
+                if (
+                    url.origin !== location.origin ||
+                    finalUrl.origin !== location.origin
+                ) {
+                    return false;
+                }
+
+                if (
+                    !data.info.technologies.every(
+                        item => typeof item === "string"
+                    ) ||
+                    !data.info.security.every(
+                        item =>
+                            item &&
+                            typeof item.name === "string" &&
+                            typeof item.present === "boolean" &&
+                            (
+                                item.value === null ||
+                                typeof item.value === "string"
+                            )
+                    ) ||
+                    !data.info.infrastructure.every(
+                        item =>
+                            item &&
+                            typeof item.name === "string" &&
+                            Array.isArray(item.indicators) &&
+                            item.indicators.every(
+                                indicator => typeof indicator === "string"
+                            )
+                    )
+                ) {
+                    return false;
+                }
+
+                const headers = {};
+
+                for (const [name, value] of Object.entries(data.info.headers)) {
+                    if (
+                        typeof name !== "string" ||
+                        typeof value !== "string"
+                    ) {
+                        return false;
+                    }
+
+                    headers[name.toLowerCase()] = value;
+                }
+
+                this.info = {
+                    ...data.info,
+                    url: url.href,
+                    finalUrl: finalUrl.href,
+                    headers,
+                    technologies: [...data.info.technologies],
+                    security: data.info.security.map(item => ({ ...item })),
+                    infrastructure: data.info.infrastructure.map(item => ({
+                        ...item,
+                        indicators: [...item.indicators]
+                    }))
+                };
+
+                this.scannedAt = data.scannedAt || null;
+                this.error = null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         detectTechnologies(headers) {

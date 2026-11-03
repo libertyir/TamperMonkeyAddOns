@@ -7,6 +7,10 @@
         static title = "PHP Info Viewer";
         static description = "Inspect exposed PHP configuration";
         static icon = "🐘";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -28,48 +32,56 @@
 
         async init() {
             this.available = false;
+            this.content = null;
+            this.links = [];
             this.scannedAt = new Date().toISOString();
 
             this.fileUrl = new URL(
-                "phpinfo.php",
-                Framework.getCurrentDirectory()
+                "/phpinfo.php",
+                window.location.origin
             ).href;
 
-            try {
-                const response = await fetch(this.fileUrl, {
-                    method: "GET",
-                    credentials: "same-origin",
-                    redirect: "follow",
-                    cache: "no-store"
-                });
+            const response = await fetch(this.fileUrl, {
+                method: "GET",
+                credentials: "same-origin",
+                redirect: "follow",
+                cache: "no-store"
+            });
 
-                if (!response.ok) {
-                    return;
+            if (!response.ok) {
+                if (response.status >= 500) {
+                    throw new Error(
+                        `PHP Info request failed with HTTP ${response.status}`
+                    );
                 }
 
-                const html = await response.text();
-
-                if (!html || html.length > 10 * 1024 * 1024) {
-                    return;
-                }
-
-                const doc = new DOMParser().parseFromString(
-                    html,
-                    "text/html"
-                );
-
-                if (!this.isPhpInfo(doc)) {
-                    return;
-                }
-
-                this.content = doc;
-                this.fileUrl = response.url || this.fileUrl;
-                this.available = true;
-
-            } catch (error) {
-                this.error = error;
-                console.warn("[PHP Info Viewer]", error);
+                return;
             }
+
+            const finalUrl = new URL(response.url);
+
+            if (finalUrl.origin !== window.location.origin) {
+                return;
+            }
+
+            const html = await response.text();
+
+            if (!html || html.length > 10 * 1024 * 1024) {
+                return;
+            }
+
+            const doc = new DOMParser().parseFromString(
+                html,
+                "text/html"
+            );
+
+            if (!this.isPhpInfo(doc)) {
+                return;
+            }
+
+            this.content = doc;
+            this.fileUrl = finalUrl.href;
+            this.available = true;
         }
 
         getResult() {
@@ -77,23 +89,72 @@
                 return null;
             }
 
+            const text =
+                this.content.body.innerText ||
+                this.content.body.textContent ||
+                "";
+
             return {
                 page: window.location.href,
                 fileUrl: this.fileUrl,
                 fileName: "phpinfo.php",
                 scannedAt: this.scannedAt,
-                contentLength: (
-                    this.content.body.innerText ||
-                    this.content.body.textContent ||
-                    ""
-                ).length,
-                content: (
-                    this.content.body.innerText ||
-                    this.content.body.textContent ||
-                    ""
-                ),
+                contentLength: text.length,
+                content: text,
+                contentHtml: this.content.body.innerHTML,
                 links: [...new Set(this.links)]
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                typeof data.fileUrl !== "string" ||
+                typeof data.contentHtml !== "string" ||
+                typeof data.content !== "string" ||
+                !Array.isArray(data.links)
+            ) {
+                return false;
+            }
+
+            try {
+                const url = new URL(data.fileUrl);
+
+                if (
+                    url.origin !== window.location.origin ||
+                    url.pathname !== "/phpinfo.php"
+                ) {
+                    return false;
+                }
+
+                if (
+                    !data.links.every(
+                        link => typeof link === "string"
+                    )
+                ) {
+                    return false;
+                }
+
+                const doc = new DOMParser().parseFromString(
+                    `<html><body>${data.contentHtml}</body></html>`,
+                    "text/html"
+                );
+
+                if (!this.isPhpInfo(doc)) {
+                    return false;
+                }
+
+                this.content = doc;
+                this.fileUrl = url.href;
+                this.links = [...new Set(data.links)];
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         isPhpInfo(doc) {
