@@ -12,6 +12,7 @@
             this.expanded = new Set(["/"]);
             this.currentDirectory = module.currentDirectory;
             this.lastRoot = null;
+            this.busy = false;
         }
 
         el(tag, attributes = {}, text = null) {
@@ -27,11 +28,31 @@
         button(label, callback, className = "") {
             const button = this.el("button", {
                 type: "button",
-                className: "wsi-button " + className
+                className: "wsi-button " + className,
+                disabled: this.busy
             }, label);
 
             button.addEventListener("click", callback);
             return button;
+        }
+
+        async execute(callback) {
+            if (this.busy) return;
+
+            this.busy = true;
+            this.refresh();
+
+            try {
+                await callback();
+            } catch (error) {
+                this.module.lastError =
+                    error && error.message
+                        ? error.message
+                        : "Operation failed.";
+            } finally {
+                this.busy = false;
+                this.refresh();
+            }
         }
 
         hasSensitive(node) {
@@ -65,7 +86,7 @@
         }
 
         getIcon(node) {
-            if (this.hasSensitive(node)) return "⚠";
+            if (this.containsSensitive(node)) return "⚠";
             if (node.type === "directory") return "📁";
             if (node.type === "javascript") return "📜";
             if (node.type === "stylesheet") return "🎨";
@@ -89,7 +110,9 @@
                 return "Directory Listing";
             }
 
+            if (node.status === "confirmed") return "Confirmed";
             if (node.status === "verified") return "Verified";
+            if (node.status === "guessed") return "Guessed";
             if (node.status === "inferred") return "Inferred";
 
             return "Observed";
@@ -101,7 +124,9 @@
             }
 
             if (this.hasSensitive(node)) return "wsi-warning";
+            if (node.status === "confirmed") return "wsi-success";
             if (node.status === "verified") return "wsi-success";
+            if (node.status === "guessed") return "wsi-info";
             if (node.status === "inferred") return "wsi-info";
 
             return "wsi-muted";
@@ -261,9 +286,11 @@
             const toggle = this.el("button", {
                 type: "button",
                 className: "wsi-toggle"
-            }, isDirectory ? (expanded ? "▾" : "▸") : " ");
+            }, isDirectory && hasChildren
+                ? (expanded ? "▾" : "▸")
+                : " ");
 
-            if (isDirectory) {
+            if (isDirectory && hasChildren) {
                 toggle.addEventListener("click", () => {
                     if (expanded) {
                         this.expanded.delete(node.path);
@@ -289,7 +316,7 @@
                     this.expanded.add(node.path);
                     this.refresh();
                 } else {
-                    Framework.open(node.url);
+                    window.open(node.url, "_blank", "noopener");
                 }
             });
 
@@ -303,12 +330,16 @@
                 row.append(
                     this.button(
                         "Scan",
-                        () => this.module.scanDirectory(node.url),
+                        () => this.execute(() =>
+                            this.module.scanDirectory(node.url)
+                        ),
                         "wsi-small"
                     ),
                     this.button(
                         "Sensitive",
-                        () => this.module.scanSensitive(node.url),
+                        () => this.execute(() =>
+                            this.module.scanSensitive(node.url)
+                        ),
                         "wsi-small"
                     )
                 );
@@ -320,7 +351,6 @@
                 for (const child of node.children.values()) {
                     if (
                         this.filter === "sensitive" &&
-                        !this.hasSensitive(child) &&
                         !this.containsSensitive(child)
                     ) {
                         continue;
@@ -328,9 +358,6 @@
 
                     if (
                         this.search &&
-                        !child.name.toLowerCase().includes(
-                            this.search.toLowerCase()
-                        ) &&
                         !this.containsSearch(child)
                     ) {
                         continue;
@@ -415,19 +442,27 @@
             toolbar.append(
                 this.button(
                     "Scan Current",
-                    () => this.module.scanDirectory(this.currentDirectory)
+                    () => this.execute(() =>
+                        this.module.scanDirectory(this.currentDirectory)
+                    )
                 ),
                 this.button(
                     "Scan Root",
-                    () => this.module.scanDirectory(location.origin + "/")
+                    () => this.execute(() =>
+                        this.module.scanDirectory(location.origin + "/")
+                    )
                 ),
                 this.button(
                     "Sensitive Search",
-                    () => this.runSensitiveSearch()
+                    () => this.execute(() =>
+                        this.runSensitiveSearch()
+                    )
                 ),
                 this.button(
                     "Grabber",
-                    () => this.module.runGrabber(location.href)
+                    () => this.execute(() =>
+                        this.module.runGrabber(location.href)
+                    )
                 )
             );
 
@@ -481,9 +516,7 @@
                 );
             }
 
-            const tree = this.module.treeBuilder.sort(
-                this.module.treeBuilder.build(records)
-            );
+            const tree = this.module.treeBuilder.build(records);
 
             this.expanded.add("/");
 
@@ -494,7 +527,6 @@
             for (const child of tree.children.values()) {
                 if (
                     this.filter === "sensitive" &&
-                    !this.hasSensitive(child) &&
                     !this.containsSensitive(child)
                 ) {
                     continue;
@@ -502,9 +534,6 @@
 
                 if (
                     this.search &&
-                    !child.name.toLowerCase().includes(
-                        this.search.toLowerCase()
-                    ) &&
                     !this.containsSearch(child)
                 ) {
                     continue;

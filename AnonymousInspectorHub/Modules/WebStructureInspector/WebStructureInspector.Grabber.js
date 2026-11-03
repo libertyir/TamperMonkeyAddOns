@@ -18,6 +18,8 @@
                 return false;
             }
 
+            if (url.username || url.password) return false;
+
             if (url.origin === location.origin) return true;
 
             if (this.module.settings.grabberScope !== "subdomain") {
@@ -44,6 +46,7 @@
 
             let output = "";
             let total = 0;
+            let truncated = false;
 
             try {
                 while (total < this.maxPageSize) {
@@ -58,10 +61,21 @@
                     output += decoder.decode(chunk, { stream: true });
                     total += chunk.length;
 
-                    if (chunk.length < value.length) break;
+                    if (chunk.length < value.length) {
+                        truncated = true;
+                        break;
+                    }
+                }
+
+                if (!truncated && total >= this.maxPageSize) {
+                    truncated = true;
                 }
 
                 output += decoder.decode();
+
+                if (truncated) {
+                    throw new Error("Page response exceeds the maximum allowed size.");
+                }
             } finally {
                 reader.cancel().catch(() => {});
             }
@@ -80,14 +94,12 @@
                     );
 
                     url.hash = "";
-                    url.search = "";
 
                     if (!this.isAllowed(url)) continue;
                     if (!this.isPageUrl(url)) continue;
 
                     links.add(url.href);
                 } catch {
-                    // Ignore invalid links.
                 }
             }
 
@@ -96,13 +108,19 @@
 
         extractResources(doc, baseUrl) {
             const resources = [];
+            const seen = new Set();
 
             const selectors = [
                 "script[src]",
                 "link[href]",
                 "img[src]",
                 "source[src]",
-                "iframe[src]"
+                "iframe[src]",
+                "video[src]",
+                "audio[src]",
+                "track[src]",
+                "object[data]",
+                "embed[src]"
             ];
 
             for (const element of doc.querySelectorAll(
@@ -110,26 +128,33 @@
             )) {
                 const raw =
                     element.getAttribute("src") ||
-                    element.getAttribute("href");
+                    element.getAttribute("href") ||
+                    element.getAttribute("data");
 
                 if (!raw) continue;
 
                 try {
                     const url = new URL(raw, baseUrl);
-                    if (!this.isAllowed(url)) continue;
 
-                    resources.push(
-                        this.module.analyzer.analyze(
-                            url.href,
-                            "grabber-resource"
-                        )
+                    if (!this.isAllowed(url)) continue;
+                    if (seen.has(url.href)) continue;
+
+                    seen.add(url.href);
+
+                    const record = this.module.analyzer.analyze(
+                        url.href,
+                        "grabber-resource"
                     );
+
+                    if (!record) continue;
+
+                    record.status = "observed";
+                    resources.push(record);
                 } catch {
-                    // Ignore invalid resource URLs.
                 }
             }
 
-            return resources.filter(Boolean);
+            return resources;
         }
 
         async fetchPage(rawUrl) {
@@ -199,9 +224,13 @@
                 throw new Error("Grabber start URL is outside the configured scope.");
             }
 
+            start.hash = "";
+
             const queue = [{ url: start.href, depth: 0 }];
             const visited = new Set();
             const collected = [];
+            const collectedResources = new Set();
+            let pagesVisited = 0;
 
             while (
                 queue.length &&
@@ -212,8 +241,18 @@
                 if (visited.has(item.url)) continue;
                 visited.add(item.url);
 
-                const page = await this.fetchPage(item.url);
+                let page;
+
+                try {
+                    page = await this.fetchPage(item.url);
+                } catch {
+                    continue;
+                }
+
                 if (!page) continue;
+
+                visited.add(page.url);
+                pagesVisited++;
 
                 const pageRecord = this.module.analyzer.analyze(
                     page.url,
@@ -221,11 +260,16 @@
                 );
 
                 if (pageRecord) {
-                    pageRecord.status = "verified";
+                    pageRecord.status = "confirmed";
                     collected.push(pageRecord);
                 }
 
-                collected.push(...page.resources);
+                for (const resource of page.resources) {
+                    if (collectedResources.has(resource.path)) continue;
+
+                    collectedResources.add(resource.path);
+                    collected.push(resource);
+                }
 
                 if (item.depth >= this.maxDepth) continue;
 
@@ -242,8 +286,8 @@
             await this.module.store.upsertMany(collected);
 
             return {
-                pagesVisited: visited.size,
-                resourcesFound: collected.length,
+                pagesVisited,
+                resourcesFound: collectedResources.size,
                 completedAt: new Date().toISOString()
             };
         }

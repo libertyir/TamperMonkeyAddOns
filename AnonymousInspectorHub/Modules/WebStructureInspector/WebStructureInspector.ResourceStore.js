@@ -7,11 +7,17 @@
     class ResourceStore {
         constructor(Framework, origin) {
             this.Framework = Framework;
-            this.origin = origin;
-            this.storageKey = "web-structure-tree:" + origin;
+            this.origin = new URL(origin).origin;
+            this.storageKey = "web-structure-tree:" + this.origin;
             this.records = new Map();
             this.version = 1;
             this.maxRecords = 5000;
+            this.statusPriority = {
+                observed: 1,
+                guessed: 2,
+                verified: 3,
+                confirmed: 4
+            };
         }
 
         normalizeUrl(rawUrl) {
@@ -20,6 +26,7 @@
 
                 if (url.origin !== this.origin) return null;
                 if (!["http:", "https:"].includes(url.protocol)) return null;
+                if (url.username || url.password) return null;
 
                 url.search = "";
                 url.hash = "";
@@ -37,6 +44,53 @@
             return new URL(normalized).pathname;
         }
 
+        normalizeArray(value) {
+            if (!Array.isArray(value)) return [];
+
+            return [...new Set(
+                value.filter(item =>
+                    typeof item === "string" && item.length > 0
+                )
+            )];
+        }
+
+        loadRecord(record) {
+            if (!record || typeof record.url !== "string") return;
+
+            const url = this.normalizeUrl(record.url);
+            if (!url) return;
+
+            const key = this.getKey(url);
+            if (!key) return;
+
+            const previous = this.records.get(key) || {};
+            const sources = new Set([
+                ...this.normalizeArray(previous.sources),
+                ...this.normalizeArray(record.sources)
+            ]);
+
+            const tags = new Set([
+                ...this.normalizeArray(previous.tags),
+                ...this.normalizeArray(record.tags)
+            ]);
+
+            const now = new Date().toISOString();
+
+            const normalized = {
+                ...previous,
+                ...record,
+                url,
+                path: key,
+                sources: [...sources],
+                tags: [...tags],
+                firstSeen: previous.firstSeen || record.firstSeen || now,
+                lastSeen: record.lastSeen || previous.lastSeen || now
+            };
+
+            this.records.delete(key);
+            this.records.set(key, normalized);
+        }
+
         async load() {
             const saved = await this.Framework.Storage.getMetadata(
                 this.storageKey
@@ -50,31 +104,15 @@
                 return;
             }
 
-            for (const record of saved.records) {
-                if (!record || typeof record.url !== "string") continue;
+            this.records.clear();
 
-                const url = this.normalizeUrl(record.url);
-                if (!url) continue;
-
-                const key = this.getKey(url);
-
-                this.records.set(key, {
-                    ...record,
-                    url,
-                    path: new URL(url).pathname,
-                    sources: Array.isArray(record.sources)
-                        ? [...new Set(record.sources)]
-                        : [],
-                    tags: Array.isArray(record.tags)
-                        ? [...new Set(record.tags)]
-                        : []
-                });
+            for (const record of saved.records.slice(-this.maxRecords)) {
+                this.loadRecord(record);
             }
         }
 
         async save() {
-            const records = [...this.records.values()]
-                .slice(-this.maxRecords);
+            const records = [...this.records.values()];
 
             await this.Framework.Storage.saveMetadata(
                 this.storageKey,
@@ -104,17 +142,28 @@
             if (!url) return null;
 
             const key = this.getKey(url);
-            const previous = this.records.get(key) || {};
+            if (!key) return null;
 
+            const previous = this.records.get(key) || {};
             const sources = new Set([
-                ...(previous.sources || []),
-                ...(item.sources || [])
+                ...this.normalizeArray(previous.sources),
+                ...this.normalizeArray(item.sources)
             ]);
 
             const tags = new Set([
-                ...(previous.tags || []),
-                ...(item.tags || [])
+                ...this.normalizeArray(previous.tags),
+                ...this.normalizeArray(item.tags)
             ]);
+
+            const previousPriority =
+                this.statusPriority[previous.status] || 0;
+
+            const incomingPriority =
+                this.statusPriority[item.status] || 0;
+
+            const status = incomingPriority >= previousPriority
+                ? item.status || previous.status || "observed"
+                : previous.status;
 
             const now = new Date().toISOString();
 
@@ -122,14 +171,21 @@
                 ...previous,
                 ...item,
                 url,
-                path: new URL(url).pathname,
+                path: key,
+                status,
                 sources: [...sources],
                 tags: [...tags],
                 firstSeen: previous.firstSeen || now,
                 lastSeen: now
             };
 
+            this.records.delete(key);
             this.records.set(key, record);
+
+            while (this.records.size > this.maxRecords) {
+                const oldestKey = this.records.keys().next().value;
+                this.records.delete(oldestKey);
+            }
 
             if (persist) {
                 this.save().catch(error =>

@@ -19,6 +19,10 @@
                 throw new Error("Directory must belong to the current origin.");
             }
 
+            if (url.username || url.password) {
+                throw new Error("URLs containing credentials are not allowed.");
+            }
+
             if (!url.pathname.endsWith("/")) {
                 url.pathname += "/";
             }
@@ -37,6 +41,7 @@
 
             let output = "";
             let total = 0;
+            let truncated = false;
 
             try {
                 while (total < this.maxResponseSize) {
@@ -51,10 +56,21 @@
                     output += decoder.decode(chunk, { stream: true });
                     total += chunk.length;
 
-                    if (chunk.length < value.length) break;
+                    if (chunk.length < value.length) {
+                        truncated = true;
+                        break;
+                    }
+                }
+
+                if (!truncated && total >= this.maxResponseSize) {
+                    truncated = true;
                 }
 
                 output += decoder.decode();
+
+                if (truncated) {
+                    throw new Error("Directory response exceeds the maximum allowed size.");
+                }
             } finally {
                 reader.cancel().catch(() => {});
             }
@@ -90,13 +106,13 @@
             ).map(item => item.textContent.trim().toLowerCase());
 
             const hasListingHeaders =
-                tableHeaders.some(value => value.includes("name")) &&
+                tableHeaders.some(value => value === "name") &&
                 tableHeaders.some(value =>
                     value.includes("last modified") ||
-                    value.includes("size")
+                    value === "size"
                 );
 
-            return parentLink || hasListingHeaders;
+            return parentLink && hasListingHeaders;
         }
 
         extractEntries(doc, directoryUrl) {
@@ -110,7 +126,7 @@
                 const href = anchor.getAttribute("href");
 
                 if (!href || !label) continue;
-                if (/^(?:\?|#|javascript:|mailto:)/i.test(href)) continue;
+                if (/^(?:\?|#|javascript:|mailto:|data:|blob:)/i.test(href)) continue;
                 if (/parent directory|^\.\.\/?$/i.test(label)) continue;
 
                 let url;
@@ -122,6 +138,7 @@
                 }
 
                 if (url.origin !== directoryUrl.origin) continue;
+                if (url.username || url.password) continue;
                 if (!url.pathname.startsWith(directoryUrl.pathname)) continue;
 
                 url.search = "";
@@ -137,14 +154,15 @@
                     url.href,
                     "directory-listing",
                     {
-                        status: "verified"
+                        status: "observed"
                     }
                 );
 
                 if (!record) continue;
 
-                record.status = "verified";
+                record.status = "observed";
                 record.directoryListing = true;
+                record.type = isDirectory ? "directory" : record.type;
                 record.tags.push("directory-listing");
 
                 entries.push(record);
@@ -188,6 +206,10 @@
                     throw new Error("Cross-origin response rejected.");
                 }
 
+                if (finalUrl.username || finalUrl.password) {
+                    throw new Error("Response URL contains credentials.");
+                }
+
                 const contentType =
                     response.headers.get("content-type") || "";
 
@@ -216,12 +238,16 @@
                     finalUrl.href,
                     "directory-scan",
                     {
-                        status: "verified",
+                        status: "confirmed",
                         contentType
                     }
                 );
 
-                directoryRecord.status = "verified";
+                if (!directoryRecord) {
+                    throw new Error("Directory record could not be created.");
+                }
+
+                directoryRecord.status = "confirmed";
                 directoryRecord.directoryListing = true;
                 directoryRecord.tags.push("directory-listing");
 
