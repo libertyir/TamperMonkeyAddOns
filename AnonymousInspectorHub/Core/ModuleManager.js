@@ -460,6 +460,7 @@
                 }
 
                 instance = new ModuleClass();
+                instance.scanScope = scopeInfo.scope;
 
                 const restored = await instance.restoreResult(
                     result.data,
@@ -915,6 +916,7 @@
 
             try {
                 instance = new ModuleClass();
+                instance.scanScope = scopeInfo.scope;
 
                 if (
                     !instance ||
