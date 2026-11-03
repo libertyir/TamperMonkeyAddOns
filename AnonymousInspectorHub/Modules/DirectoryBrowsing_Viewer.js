@@ -1,3 +1,4 @@
+
 (function (Framework) {
     "use strict";
 
@@ -199,48 +200,63 @@
             );
         }
 
-        getScanScopes() {
-            this.collectDirectories();
+        static getScanScopes(context) {
+            const collector = new this();
 
-            return this.candidates.map(candidate => candidate.url);
+            collector.collectDirectories();
+
+            return collector.candidates.map(candidate => ({
+                scope: candidate.url,
+                directoryUrl: candidate.url,
+                directorySource: candidate.source
+            }));
         }
 
-        async init() {
+        async init(context = {}) {
             this.available = false;
             this.results = [];
+            this.candidates = [];
             this.scannedAt = new Date().toISOString();
 
-            this.collectDirectories();
+            const rawDirectory =
+                context.directoryUrl ||
+                context.scope;
 
-            const candidates = this.candidates;
-            let index = 0;
+            if (!rawDirectory) {
+                throw new Error("Directory scan scope is missing.");
+            }
 
-            const worker = async () => {
-                while (index < candidates.length) {
-                    const current = candidates[index++];
+            let directoryUrl;
 
-                    try {
-                        const result = await this.checkDirectory(current);
+            try {
+                directoryUrl = new URL(rawDirectory);
+            } catch (error) {
+                throw new Error("Invalid directory scan scope.");
+            }
 
-                        if (result) {
-                            this.results.push(result);
-                        }
-                    } catch (error) {
-                        // Ignore inaccessible directories.
-                    }
-                }
+            if (!this.isAllowedUrl(directoryUrl)) {
+                throw new Error("Directory scan scope is not allowed.");
+            }
+
+            directoryUrl.search = "";
+            directoryUrl.hash = "";
+
+            if (!directoryUrl.pathname.endsWith("/")) {
+                directoryUrl.pathname += "/";
+            }
+
+            const candidate = {
+                url: directoryUrl.href,
+                source: context.directorySource || "Page Resource"
             };
 
-            const workers = Array.from(
-                { length: Math.min(5, candidates.length) },
-                () => worker()
-            );
+            this.candidates = [candidate];
 
-            await Promise.all(workers);
+            const result = await this.checkDirectory(candidate);
 
-            this.results.sort((a, b) =>
-                a.url.localeCompare(b.url)
-            );
+            if (result) {
+                this.results.push(result);
+            }
 
             this.available = this.results.length > 0;
         }
@@ -277,10 +293,45 @@
             };
         }
 
-        restoreResult(data) {
+        restoreResult(data, context = {}) {
+            const expectedDirectory =
+                context.directoryUrl ||
+                context.scope;
+
             if (
+                !expectedDirectory ||
                 !data ||
                 !Array.isArray(data.candidates) ||
+                data.candidates.length !== 1
+            ) {
+                return false;
+            }
+
+            try {
+                const expectedUrl = new URL(expectedDirectory);
+                const cachedUrl = new URL(data.candidates[0].url);
+
+                expectedUrl.search = "";
+                expectedUrl.hash = "";
+                cachedUrl.search = "";
+                cachedUrl.hash = "";
+
+                if (!expectedUrl.pathname.endsWith("/")) {
+                    expectedUrl.pathname += "/";
+                }
+
+                if (!cachedUrl.pathname.endsWith("/")) {
+                    cachedUrl.pathname += "/";
+                }
+
+                if (expectedUrl.href !== cachedUrl.href) {
+                    return false;
+                }
+            } catch (error) {
+                return false;
+            }
+
+            if (
                 !Array.isArray(data.results) ||
                 !data.candidates.every(candidate =>
                     candidate &&
