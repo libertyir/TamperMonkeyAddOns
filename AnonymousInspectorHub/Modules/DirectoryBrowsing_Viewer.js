@@ -1,4 +1,3 @@
-
 (function (Framework) {
     "use strict";
 
@@ -65,10 +64,10 @@
         }
 
         isAllowedHost(hostname) {
-            const base = this.getBaseDomain(location.hostname);
-            const host = hostname.toLowerCase();
+            const host = hostname.toLowerCase().replace(/\.$/, "");
+            const currentHost = location.hostname.toLowerCase().replace(/\.$/, "");
 
-            return host === base || host.endsWith("." + base);
+            return host === currentHost;
         }
 
         isAllowedUrl(url) {
@@ -488,7 +487,7 @@
                             ? "same-origin"
                             : "omit",
                     mode: "cors",
-                    redirect: "follow",
+                    redirect: "manual",
                     cache: "no-store",
                     signal: controller.signal,
                     headers: {
@@ -500,6 +499,7 @@
                     performance.now() - startedAt
                 );
 
+                if (response.type === "opaqueredirect") return null;
                 if (!response.ok) return null;
 
                 const finalUrl = new URL(response.url);
