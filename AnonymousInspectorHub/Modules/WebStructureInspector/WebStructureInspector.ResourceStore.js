@@ -219,6 +219,42 @@
                 )
             );
         }
+
+        remove(url, persist = true) {
+            const key = this.getKey(url);
+            if (!key || !this.records.has(key)) return false;
+
+            this.records.delete(key);
+
+            if (persist) {
+                this.save().catch(error =>
+                    console.error(
+                        "[WebStructureInspector] Storage error:",
+                        error
+                    )
+                );
+            }
+
+            return true;
+        }
+
+        async removeMany(urls) {
+            if (!Array.isArray(urls) || !urls.length) return 0;
+
+            let removed = 0;
+
+            for (const url of urls) {
+                if (this.remove(url, false)) {
+                    removed++;
+                }
+            }
+
+            if (removed > 0) {
+                await this.save();
+            }
+
+            return removed;
+        }
     }
 
     ns.ResourceStore = ResourceStore;
