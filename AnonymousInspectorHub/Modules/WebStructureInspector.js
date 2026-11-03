@@ -157,80 +157,127 @@
 
         async init() {
             this.available = false;
+            this.error = null;
 
-            await this.loadDependencies();
-            await this.loadSettings();
-            await this.store.load();
+            try {
+                await this.loadDependencies();
+                await this.loadSettings();
+                await this.store.load();
 
-            // Passive collection only. No directory requests are made here.
-            await this.collector.collectCurrentPage();
-            this.collector.start();
+                // Passive collection only. No directory requests are made here.
+                await this.collector.collectCurrentPage();
+                this.collector.start();
 
-            this.available = true;
+                this.available = true;
+
+            } catch (error) {
+                this.available = false;
+                this.error = error.message || String(error);
+
+                if (this.collector) {
+                    this.collector.stop();
+                }
+
+                console.error(
+                    "[WebStructureInspector] Initialization failed:",
+                    error
+                );
+
+                throw error;
+            }
         }
 
         getMetadata() {
+            let icon = WebStructureInspector.icon;
+
+            if (this.store) {
+                const sensitive = this.store.getSensitive();
+
+                const hasConfirmed = sensitive.some(record =>
+                    (record.tags || []).includes("sensitive-confirmed")
+                );
+
+                if (hasConfirmed) {
+                    icon = "🚨";
+                } else if (sensitive.length > 0) {
+                    icon = "⚠️";
+                }
+            }
+
             return {
                 id: WebStructureInspector.id,
                 title: WebStructureInspector.title,
                 description: WebStructureInspector.description,
-                icon: WebStructureInspector.icon
+                icon
             };
         }
 
         getRecords() {
-            return this.store.getAll();
+            return this.store
+                ? this.store.getAll()
+                : [];
+        }
+
+        getSensitiveRecords() {
+            return this.store
+                ? this.store.getSensitive()
+                : [];
+        }
+
+        async executeOperation(name, callback) {
+            if (this.operation) return false;
+
+            this.operation = name;
+            this.lastError = null;
+
+            this.uiManager?.refresh();
+
+            try {
+                await callback();
+                return true;
+
+            } catch (error) {
+                this.lastError = error.message || String(error);
+
+                console.error(
+                    "[WebStructureInspector] Operation failed:",
+                    name,
+                    error
+                );
+
+                return false;
+
+            } finally {
+                this.operation = null;
+                this.uiManager?.refresh();
+            }
         }
 
         async scanDirectory(rawUrl) {
-            if (this.operation) return;
-
-            this.operation = "directory";
-            this.lastError = null;
-            this.uiManager.refresh();
-
-            try {
-                await this.directoryScanner.scan(rawUrl);
-            } catch (error) {
-                this.lastError = error.message;
-            } finally {
-                this.operation = null;
-                this.uiManager.refresh();
-            }
+            return this.executeOperation(
+                "directory",
+                async () => {
+                    await this.directoryScanner.scan(rawUrl);
+                }
+            );
         }
 
         async scanSensitive(rawUrl) {
-            if (this.operation) return;
-
-            this.operation = "sensitive";
-            this.lastError = null;
-            this.uiManager.refresh();
-
-            try {
-                await this.sensitiveScanner.scan(rawUrl);
-            } catch (error) {
-                this.lastError = error.message;
-            } finally {
-                this.operation = null;
-                this.uiManager.refresh();
-            }
+            return this.executeOperation(
+                "sensitive",
+                async () => {
+                    await this.sensitiveScanner.scan(rawUrl);
+                }
+            );
         }
 
         async runGrabber(startUrl = location.href) {
-            if (this.operation) return;
-
-            this.operation = "grabber";
-            this.lastError = null;
-            this.uiManager.refresh();
-
-            try {
-                await this.grabber.run(startUrl);
-            } catch (error) {
-                this.lastError = error.message;
-            } finally {
-                this.operation = null;
-                this.uiManager.refresh();
-            }
+            return this.executeOperation(
+                "grabber",
+                async () => {
+                    await this.grabber.run(startUrl);
+                }
+            );
         }
 
         async saveSettings(settings) {
@@ -244,23 +291,29 @@
                 this.settings
             );
 
-            this.uiManager.refresh();
+            this.uiManager?.refresh();
         }
 
         render() {
+            if (!this.uiManager) {
+                const element = Framework.createElement("div", {});
+                element.textContent =
+                    this.error || "Web Structure Inspector is not initialized.";
+
+                return element;
+            }
+
             return this.uiManager.render();
         }
 
         getResult() {
+            const records = this.getRecords();
+
             return {
                 origin: location.origin,
                 capturedAt: new Date().toISOString(),
-                totalResources: this.store
-                    ? this.store.getAll().length
-                    : 0,
-                resources: this.store
-                    ? this.store.getAll()
-                    : []
+                totalResources: records.length,
+                resources: records
             };
         }
 

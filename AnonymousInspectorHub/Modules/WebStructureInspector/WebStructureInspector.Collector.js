@@ -12,11 +12,14 @@
             this.started = false;
             this.pending = new Map();
             this.flushTimer = null;
+            this.flushPromise = null;
         }
 
         isAllowed(url) {
             try {
-                return new URL(url, location.href).origin === location.origin;
+                const parsed = new URL(url, document.baseURI);
+                return parsed.origin === location.origin &&
+                    ["http:", "https:"].includes(parsed.protocol);
             } catch {
                 return false;
             }
@@ -28,7 +31,7 @@
             let url;
 
             try {
-                url = new URL(rawUrl, location.href);
+                url = new URL(rawUrl, document.baseURI);
             } catch {
                 return;
             }
@@ -49,15 +52,15 @@
             if (existing) {
                 existing.sources = [
                     ...new Set([
-                        ...existing.sources,
-                        ...record.sources
+                        ...(existing.sources || []),
+                        ...(record.sources || [])
                     ])
                 ];
 
                 existing.tags = [
                     ...new Set([
-                        ...existing.tags,
-                        ...record.tags
+                        ...(existing.tags || []),
+                        ...(record.tags || [])
                     ])
                 ];
             } else {
@@ -68,23 +71,70 @@
         }
 
         scheduleFlush() {
-            if (this.flushTimer) return;
+            if (this.flushTimer || !this.pending.size) return;
 
-            this.flushTimer = setTimeout(async () => {
+            this.flushTimer = setTimeout(() => {
                 this.flushTimer = null;
 
-                const items = [...this.pending.values()];
-                this.pending.clear();
-
-                if (items.length) {
-                    await this.module.store.upsertMany(items);
-                    this.module.uiManager.refresh();
-                }
+                this.flushPending().catch(error => {
+                    console.error(
+                        "[WebStructureInspector] Resource storage failed:",
+                        error
+                    );
+                });
             }, 500);
         }
 
-        collectDocument() {
-            this.add(location.href, "current-page");
+        async flushPending() {
+            if (this.flushPromise) return this.flushPromise;
+            if (!this.pending.size) return;
+
+            this.flushPromise = (async () => {
+                const items = [...this.pending.entries()];
+                this.pending.clear();
+
+                try {
+                    await this.module.store.upsertMany(
+                        items.map(([, record]) => record)
+                    );
+
+                    this.module.uiManager?.refresh();
+
+                } catch (error) {
+                    for (const [key, record] of items) {
+                        const current = this.pending.get(key);
+
+                        if (current) {
+                            current.sources = [
+                                ...new Set([
+                                    ...(record.sources || []),
+                                    ...(current.sources || [])
+                                ])
+                            ];
+
+                            current.tags = [
+                                ...new Set([
+                                    ...(record.tags || []),
+                                    ...(current.tags || [])
+                                ])
+                            ];
+                        } else {
+                            this.pending.set(key, record);
+                        }
+                    }
+
+                    throw error;
+
+                } finally {
+                    this.flushPromise = null;
+                }
+            })();
+
+            return this.flushPromise;
+        }
+
+        collectElement(element) {
+            if (!element || element.nodeType !== 1) return;
 
             const selectors = [
                 "a[href]",
@@ -98,22 +148,49 @@
                 "audio[src]",
                 "object[data]",
                 "embed[src]",
-                "form[action]"
+                "form[action]",
+                "input[src]",
+                "track[src]"
             ];
 
-            for (const element of document.querySelectorAll(
+            const collect = node => {
+                const attributes = [
+                    "href",
+                    "src",
+                    "data",
+                    "action",
+                    "poster"
+                ];
+
+                for (const attribute of attributes) {
+                    const value = node.getAttribute(attribute);
+
+                    if (value) {
+                        this.add(value, "html-reference");
+                    }
+                }
+
+                if (
+                    (node.tagName === "IMG" || node.tagName === "SOURCE") &&
+                    node.currentSrc
+                ) {
+                    this.add(node.currentSrc, "browser-resource");
+                }
+            };
+
+            collect(element);
+
+            for (const node of element.querySelectorAll(
                 selectors.join(",")
             )) {
-                const value =
-                    element.getAttribute("href") ||
-                    element.getAttribute("src") ||
-                    element.getAttribute("data") ||
-                    element.getAttribute("action");
-
-                if (value) {
-                    this.add(value, "html-reference");
-                }
+                collect(node);
             }
+        }
+
+        collectDocument() {
+            this.add(location.href, "current-page");
+
+            this.collectElement(document.documentElement);
 
             for (const entry of performance.getEntriesByType("resource")) {
                 this.add(entry.name, "browser-network", {
@@ -125,11 +202,26 @@
         async collectCurrentPage() {
             this.collectDocument();
 
-            const items = [...this.pending.values()];
-            this.pending.clear();
+            if (this.flushTimer) {
+                clearTimeout(this.flushTimer);
+                this.flushTimer = null;
+            }
 
-            if (items.length) {
-                await this.module.store.upsertMany(items);
+            await this.flushPending();
+        }
+
+        handleMutations(mutations) {
+            for (const mutation of mutations) {
+                if (mutation.type === "attributes") {
+                    this.collectElement(mutation.target);
+                    continue;
+                }
+
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === 1) {
+                        this.collectElement(node);
+                    }
+                }
             }
         }
 
@@ -138,8 +230,8 @@
 
             this.started = true;
 
-            this.observer = new MutationObserver(() => {
-                this.collectDocument();
+            this.observer = new MutationObserver(mutations => {
+                this.handleMutations(mutations);
             });
 
             this.observer.observe(document.documentElement, {
@@ -147,7 +239,7 @@
                 subtree: true,
                 attributes: true,
                 attributeFilter: [
-                    "href", "src", "action", "data"
+                    "href", "src", "action", "data", "poster"
                 ]
             });
 
@@ -179,9 +271,14 @@
         };
 
         stop() {
-            if (this.observer) this.observer.disconnect();
+            if (this.observer) {
+                this.observer.disconnect();
+                this.observer = null;
+            }
+
             if (this.performanceObserver) {
                 this.performanceObserver.disconnect();
+                this.performanceObserver = null;
             }
 
             window.removeEventListener("popstate", this.onNavigation);
@@ -193,6 +290,8 @@
             }
 
             this.started = false;
+
+            return this.flushPending();
         }
     }
 
