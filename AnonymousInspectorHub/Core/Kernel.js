@@ -813,12 +813,23 @@
             app.registerService("crypto", this.cryptoManager);
             app.registerService("storage", this.storageManager);
 
+            // Initialize UI before loading settings.
+            app.registerService("ui", {
+                initialize: async context => {
+                    await this.uiManager.initialize(context);
+
+                    if (typeof this.onUIReady === "function") {
+                        this.onUIReady();
+                    }
+                },
+
+                destroy: () => this.uiManager.destroy()
+            });
+
             app.registerService("settings", {
                 initialize: () => this.settingsManager.loadAll(),
                 destroy: () => this.settingsManager.destroyAll()
             });
-
-            app.registerService("ui", this.uiManager);
         }
 
         // --------------------------------------------------
@@ -880,24 +891,6 @@
             this.uiManager.hideProgress();
 
             return result;
-        }
-
-        // --------------------------------------------------
-        // TAMPERMONKEY MENU
-        // --------------------------------------------------
-
-        registerTampermonkeyMenu() {
-            const registerMenuCommand =
-                this.gm.registerMenuCommand;
-
-            if (typeof registerMenuCommand !== "function") {
-                return;
-            }
-
-            registerMenuCommand(
-                "Anonymous Inspector Hub - Settings",
-                () => this.uiManager.openSettings()
-            );
         }
 
         // --------------------------------------------------

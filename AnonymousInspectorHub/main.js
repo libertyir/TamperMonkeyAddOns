@@ -6,6 +6,7 @@
 
     let kernel = null;
     let loading = null;
+    let settingsRequested = false;
 
     // Capture Tampermonkey APIs from the userscript scope.
     const gmAPI = {
@@ -44,6 +45,34 @@
                 ? GM_registerMenuCommand
                 : null
     };
+
+    function openSettingsWhenReady() {
+        if (!settingsRequested || !kernel) return;
+
+        if (
+            kernel.uiManager &&
+            kernel.uiManager.initialized
+        ) {
+            settingsRequested = false;
+            kernel.uiManager.openSettings();
+        }
+    }
+
+    function requestSettings() {
+        settingsRequested = true;
+        openSettingsWhenReady();
+    }
+
+    // Register the Settings command immediately.
+    if (gmAPI.registerMenuCommand) {
+        gmAPI.registerMenuCommand(
+            "Anonymous Inspector Hub - Settings",
+            requestSettings
+        );
+
+        // Prevent Kernel from registering the same command again.
+        gmAPI.registerMenuCommand = null;
+    }
 
     async function loadKernel() {
         if (kernel) return kernel;
@@ -99,6 +128,9 @@
                             version: "2.0.0",
                             gm: gmAPI
                         });
+
+                        // Kernel calls this after the UI becomes available.
+                        kernel.onUIReady = openSettingsWhenReady;
 
                         root.AIHKernel = kernel;
 

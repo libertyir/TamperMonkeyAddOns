@@ -18,6 +18,12 @@
             this.getSettings =
                 options.getSettings || (() => []);
 
+            this.getSettingsStatus =
+                options.getSettingsStatus || (() => ({
+                    loaded: true,
+                    loading: false
+                }));
+
             this.root = null;
             this.menu = null;
             this.panel = null;
@@ -586,6 +592,22 @@
                 })
             );
 
+            this.panel.style.display = "block";
+            this.closeMenu();
+
+            const status = this.getSettingsStatus() || {};
+
+            if (status.loading || !status.loaded) {
+                this.panelContent.appendChild(
+                    this.createElement("div", {
+                        className: "aih-settings-empty",
+                        textContent: "Loading settings modules..."
+                    })
+                );
+
+                return;
+            }
+
             const settings = this.getSettings() || [];
 
             if (!settings.length) {
@@ -596,8 +618,6 @@
                     })
                 );
 
-                this.panel.style.display = "block";
-                this.closeMenu();
                 return;
             }
 
@@ -646,9 +666,6 @@
                     );
                 }
             });
-
-            this.panel.style.display = "block";
-            this.closeMenu();
         }
 
         showSettingsInstance(instance, button, nav, view) {

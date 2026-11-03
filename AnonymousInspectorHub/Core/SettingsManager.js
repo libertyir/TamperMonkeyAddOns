@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -20,6 +19,7 @@
             this.loadPromise = null;
 
             this.loaded = false;
+            this.loading = false;
             this.destroyed = false;
 
             this.onRefresh = options.onRefresh || (() => { });
@@ -323,26 +323,47 @@
         }
 
         async initializeAll() {
+            this.loading = true;
+
             try {
+                this.onRefresh();
+
                 const ids = await this.readManifest();
 
-                for (const id of ids) {
-                    try {
-                        await this.initialize(id);
-                    } catch (error) {
-                        this.onError(id, error);
+                // Load all settings source files concurrently.
+                const results = await Promise.all(
+                    ids.map(async id => {
+                        try {
+                            await this.load(id);
+
+                            return {
+                                id,
+                                success: true
+                            };
+
+                        } catch (error) {
+                            this.onError(id, error);
+
+                            return {
+                                id,
+                                success: false
+                            };
+                        }
+                    })
+                );
+
+                // Initialize settings in manifest order.
+                for (const result of results) {
+                    if (!result.success) {
+                        continue;
                     }
-                }
 
-                this.loaded = true;
+                    try {
+                        await this.initialize(result.id);
 
-                try {
-                    this.onRefresh();
-                } catch (error) {
-                    console.error(
-                        "[Anonymous Inspector] Settings refresh failed:",
-                        error
-                    );
+                    } catch (error) {
+                        this.onError(result.id, error);
+                    }
                 }
 
                 return this.getActiveInstances();
@@ -350,9 +371,21 @@
             } catch (error) {
                 this.onError("manifest", error);
 
-                this.loaded = true;
-
                 return this.getActiveInstances();
+
+            } finally {
+                this.loaded = true;
+                this.loading = false;
+
+                try {
+                    this.onRefresh();
+
+                } catch (error) {
+                    console.error(
+                        "[Anonymous Inspector] Settings refresh failed:",
+                        error
+                    );
+                }
             }
         }
 
@@ -398,6 +431,7 @@
 
             try {
                 await instance.destroy();
+
             } catch (error) {
                 console.error(
                     "[Anonymous Inspector] Settings destroy failed:",
@@ -446,6 +480,7 @@
         getStatus() {
             return {
                 loaded: this.loaded,
+                loading: this.loading,
                 destroyed: this.destroyed,
                 registered: this.settings.size,
                 active: this.activeSettings.length,
