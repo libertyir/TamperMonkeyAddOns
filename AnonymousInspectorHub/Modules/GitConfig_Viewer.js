@@ -7,6 +7,10 @@
         static title = "Git Config Viewer";
         static description = "Inspect exposed Git configuration";
         static icon = "⑂";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -33,8 +37,8 @@
             this.scannedAt = new Date().toISOString();
 
             this.fileUrl = new URL(
-                ".git/config",
-                Framework.getCurrentDirectory()
+                "/.git/config",
+                window.location.origin
             ).href;
 
             try {
@@ -73,6 +77,49 @@
                 contentLength: this.content.length,
                 content: this.content
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                typeof data.content !== "string" ||
+                typeof data.fileUrl !== "string" ||
+                data.fileName !== ".git/config"
+            ) {
+                return false;
+            }
+
+            try {
+                const fileUrl = new URL(data.fileUrl);
+
+                if (
+                    fileUrl.origin !== window.location.origin ||
+                    fileUrl.pathname !== "/.git/config"
+                ) {
+                    return false;
+                }
+
+                if (
+                    !/^\s*\[[^\]]+\]/m.test(data.content) ||
+                    !/^\s*[\w.-]+\s*=/m.test(data.content)
+                ) {
+                    return false;
+                }
+
+                if (data.content.length > 262144) {
+                    return false;
+                }
+
+                this.content = data.content;
+                this.fileUrl = fileUrl.href;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         render() {

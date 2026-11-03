@@ -7,6 +7,10 @@
         static title = "Common Test Files";
         static description = "Find common test pages and files";
         static icon = "🧪";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -28,10 +32,7 @@
             this.foundFiles = [];
             this.scannedAt = new Date().toISOString();
 
-            const base = new URL(
-                ".",
-                window.location.href
-            );
+            const base = new URL("/", window.location.origin);
 
             const candidates = [
                 "test.php",
@@ -44,14 +45,13 @@
                 "index2.php",
                 "index3.php",
                 "index2.aspx",
-                "index3.aspx",
+                "index3.aspx"
             ];
 
             // Sequential HEAD requests to avoid unnecessary server load.
             for (const path of candidates) {
                 const url = new URL(path, base);
 
-                // Only inspect paths on the current origin.
                 if (url.origin !== window.location.origin) {
                     continue;
                 }
@@ -93,6 +93,30 @@
                     url: file.url
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.foundFiles) ||
+                !data.foundFiles.every(file =>
+                    file &&
+                    typeof file.path === "string" &&
+                    typeof file.url === "string"
+                )
+            ) {
+                return false;
+            }
+
+            this.foundFiles = data.foundFiles.map(file => ({
+                path: file.path,
+                url: file.url
+            }));
+
+            this.scannedAt = data.scannedAt || null;
+            this.available = true;
+
+            return true;
         }
 
         render() {

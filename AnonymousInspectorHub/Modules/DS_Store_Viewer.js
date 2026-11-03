@@ -7,6 +7,10 @@
         static title = "DS_Store Viewer";
         static description = "Inspect exposed macOS directory metadata";
         static icon = "📁";
+        static scanPolicy = {
+            scope: "directory",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -14,6 +18,7 @@
             this.buffer = null;
             this.records = [];
             this.fileUrl = null;
+            this.directoryUrl = null;
             this.KaitaiStream = null;
             this.DsStore = null;
             this.error = null;
@@ -33,9 +38,14 @@
             this.available = false;
             this.scannedAt = new Date().toISOString();
 
+            this.directoryUrl = new URL(
+                ".",
+                window.location.href
+            ).href;
+
             this.fileUrl = new URL(
                 ".DS_Store",
-                Framework.getCurrentDirectory()
+                this.directoryUrl
             ).href;
 
             try {
@@ -62,6 +72,7 @@
         getResult() {
             return {
                 page: window.location.href,
+                directoryUrl: this.directoryUrl,
                 fileUrl: this.fileUrl,
                 scannedAt: this.scannedAt,
                 fileSize: this.buffer
@@ -76,6 +87,52 @@
                     ? this.error.message || String(this.error)
                     : null
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                typeof data.fileUrl !== "string" ||
+                typeof data.directoryUrl !== "string" ||
+                !Array.isArray(data.records) ||
+                !data.records.every(record =>
+                    record &&
+                    typeof record.name === "string" &&
+                    typeof record.property === "string"
+                )
+            ) {
+                return false;
+            }
+
+            try {
+                const directoryUrl = new URL(data.directoryUrl);
+                const fileUrl = new URL(data.fileUrl);
+
+                if (
+                    directoryUrl.origin !== location.origin ||
+                    fileUrl.origin !== location.origin ||
+                    fileUrl.href !== new URL(".DS_Store", directoryUrl).href
+                ) {
+                    return false;
+                }
+
+                this.directoryUrl = directoryUrl.href;
+                this.fileUrl = fileUrl.href;
+                this.scannedAt = data.scannedAt || null;
+                this.records = data.records.map(record => ({
+                    name: record.name,
+                    property: record.property
+                }));
+
+                this.buffer = null;
+                this.error = null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         async loadParser() {
@@ -126,7 +183,6 @@
             // Load DS_Store parser.
             let Parser = globalThis.DsStore;
 
-            // The generated parser may expose a namespace.
             if (
                 Parser &&
                 typeof Parser.DsStore === "function"
@@ -166,13 +222,6 @@
                     undefined,
                     undefined
                 );
-
-                // IMPORTANT:
-                // Kaitai's generated UMD file exports:
-                // DsStore_.DsStore = DsStore
-                //
-                // Therefore parserRoot.DsStore is a namespace,
-                // and the actual constructor is parserRoot.DsStore.DsStore.
 
                 const namespace = parserRoot.DsStore;
 
@@ -377,11 +426,13 @@
                         "padding:9px;border-bottom:1px solid #333;"
                 });
 
+                const nameUrl = new URL(
+                    encodeURIComponent(record.name),
+                    this.directoryUrl
+                ).href;
+
                 const nameLink = Framework.createElement("a", {
-                    href: new URL(
-                        encodeURIComponent(record.name),
-                        Framework.getCurrentDirectory()
-                    ).href,
+                    href: nameUrl,
                     target: "_blank",
                     rel: "noopener noreferrer",
                     textContent: record.name

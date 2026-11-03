@@ -7,9 +7,14 @@
         static title = "Environment File";
         static description = "View and download exposed environment files";
         static icon = "🔐";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
+            this.available = false;
             this.fileUrl = null;
             this.fileContent = null;
             this.scannedAt = null;
@@ -30,7 +35,7 @@
             this.fileContent = null;
             this.scannedAt = new Date().toISOString();
 
-            const url = new URL(".env", window.location.href);
+            const url = new URL("/.env", window.location.origin);
 
             try {
                 const response = await fetch(url.href, {
@@ -42,11 +47,15 @@
 
                 if (!response.ok) return;
 
+                const finalUrl = new URL(response.url);
+
+                if (finalUrl.origin !== location.origin) return;
+
                 const content = await response.text();
 
                 if (!content.trim()) return;
 
-                this.fileUrl = response.url || url.href;
+                this.fileUrl = finalUrl.href;
                 this.fileContent = content;
                 this.available = true;
 
@@ -68,6 +77,38 @@
                 contentLength: this.fileContent.length,
                 content: this.fileContent
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                typeof data.fileUrl !== "string" ||
+                typeof data.content !== "string" ||
+                data.fileName !== ".env"
+            ) {
+                return false;
+            }
+
+            try {
+                const fileUrl = new URL(data.fileUrl);
+
+                if (
+                    fileUrl.origin !== location.origin ||
+                    fileUrl.pathname !== "/.env"
+                ) {
+                    return false;
+                }
+
+                this.fileUrl = fileUrl.href;
+                this.fileContent = data.content;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         render() {

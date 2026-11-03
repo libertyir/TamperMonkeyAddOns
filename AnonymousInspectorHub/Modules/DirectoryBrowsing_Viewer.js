@@ -6,6 +6,10 @@
         static title = "Directory Browsing Viewer";
         static description = "Discover publicly accessible directory listings from page resources";
         static icon = "📂";
+        static scanPolicy = {
+            scope: "directory",
+            defaultTTL: "7d"
+        };
 
         constructor(...args) {
             super(...args);
@@ -195,6 +199,12 @@
             );
         }
 
+        getScanScopes() {
+            this.collectDirectories();
+
+            return this.candidates.map(candidate => candidate.url);
+        }
+
         async init() {
             this.available = false;
             this.results = [];
@@ -246,6 +256,10 @@
                     (sum, result) => sum + result.entries.length,
                     0
                 ),
+                candidates: this.candidates.map(candidate => ({
+                    url: candidate.url,
+                    source: candidate.source
+                })),
                 results: this.results.map(result => ({
                     url: result.url,
                     requestedUrl: result.requestedUrl,
@@ -261,6 +275,101 @@
                     }))
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.candidates) ||
+                !Array.isArray(data.results) ||
+                !data.candidates.every(candidate =>
+                    candidate &&
+                    typeof candidate.url === "string" &&
+                    typeof candidate.source === "string"
+                ) ||
+                !data.results.every(result =>
+                    result &&
+                    typeof result.url === "string" &&
+                    typeof result.requestedUrl === "string" &&
+                    typeof result.source === "string" &&
+                    typeof result.status === "number" &&
+                    typeof result.responseTime === "number" &&
+                    typeof result.title === "string" &&
+                    typeof result.format === "string" &&
+                    Array.isArray(result.entries) &&
+                    result.entries.every(entry =>
+                        entry &&
+                        typeof entry.name === "string" &&
+                        typeof entry.url === "string" &&
+                        typeof entry.type === "string"
+                    )
+                )
+            ) {
+                return false;
+            }
+
+            try {
+                const candidates = data.candidates.map(candidate => {
+                    const url = new URL(candidate.url);
+
+                    if (!this.isAllowedUrl(url)) {
+                        throw new Error("Invalid candidate URL");
+                    }
+
+                    return {
+                        url: url.href,
+                        source: candidate.source
+                    };
+                });
+
+                const results = data.results.map(result => {
+                    const url = new URL(result.url);
+                    const requestedUrl = new URL(result.requestedUrl);
+
+                    if (
+                        !this.isAllowedUrl(url) ||
+                        !this.isAllowedUrl(requestedUrl)
+                    ) {
+                        throw new Error("Invalid result URL");
+                    }
+
+                    return {
+                        url: url.href,
+                        requestedUrl: requestedUrl.href,
+                        source: result.source,
+                        status: result.status,
+                        responseTime: result.responseTime,
+                        title: result.title,
+                        format: result.format,
+                        entries: result.entries.map(entry => {
+                            const entryUrl = new URL(entry.url);
+
+                            if (
+                                !this.isAllowedUrl(entryUrl) ||
+                                entryUrl.origin !== url.origin
+                            ) {
+                                throw new Error("Invalid entry URL");
+                            }
+
+                            return {
+                                name: entry.name,
+                                url: entryUrl.href,
+                                type: entry.type
+                            };
+                        })
+                    };
+                });
+
+                this.candidates = candidates;
+                this.results = results;
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         async readLimited(response) {

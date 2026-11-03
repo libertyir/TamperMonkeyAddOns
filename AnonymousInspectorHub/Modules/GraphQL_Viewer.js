@@ -7,6 +7,10 @@
         static title = "GraphQL Viewer";
         static description = "Inspect GraphQL endpoints and schemas";
         static icon = "◈";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -29,12 +33,13 @@
 
         async init() {
             this.available = false;
+            this.endpoint = null;
+            this.schema = null;
+            this.types = [];
+            this.errors = [];
             this.scannedAt = new Date().toISOString();
 
-            const base = new URL(
-                ".",
-                window.location.href
-            );
+            const base = new URL("/", window.location.origin);
 
             const candidates = [
                 "graphql",
@@ -120,6 +125,56 @@
                 schema: this.schema,
                 errors: this.errors
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                typeof data.endpoint !== "string" ||
+                !data.schema ||
+                typeof data.schema !== "object" ||
+                !Array.isArray(data.schema.types)
+            ) {
+                return false;
+            }
+
+            try {
+                const endpoint = new URL(data.endpoint);
+
+                if (endpoint.origin !== window.location.origin) {
+                    return false;
+                }
+
+                const rootTypeNames = [
+                    data.schema.queryType,
+                    data.schema.mutationType,
+                    data.schema.subscriptionType
+                ];
+
+                if (
+                    rootTypeNames.some(type =>
+                        type !== null &&
+                        type !== undefined &&
+                        typeof type.name !== "string"
+                    )
+                ) {
+                    return false;
+                }
+
+                this.endpoint = endpoint.href;
+                this.schema = data.schema;
+                this.types = data.schema.types;
+                this.errors = Array.isArray(data.errors)
+                    ? data.errors
+                    : [];
+                this.scannedAt = data.scannedAt || null;
+                this.available = true;
+
+                return true;
+
+            } catch (error) {
+                return false;
+            }
         }
 
         getIntrospectionQuery() {
