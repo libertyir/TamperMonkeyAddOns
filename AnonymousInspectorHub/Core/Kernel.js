@@ -777,7 +777,11 @@
                         moduleManager.getActiveInstances(),
 
                     getSettings: () =>
-                        settingsManager.getActiveInstances()
+                        settingsManager.getActiveInstances(),
+
+                    // SETTINGS STATUS
+                    getSettingsStatus: () =>
+                        settingsManager.getStatus()
                 });
 
             this.moduleManager = moduleManager;
@@ -960,7 +964,6 @@
                 await this.runModules(allowed);
 
                 this.uiManager.refreshMenu();
-                this.registerTampermonkeyMenu();
 
                 this.started = true;
                 this.state = "running";

@@ -32,6 +32,8 @@
             this.progressLabel = null;
             this.progressBar = null;
 
+            this.panelMode = null;
+
             this.initialized = false;
             this.destroyed = false;
 
@@ -530,6 +532,15 @@
 
                 this.menu.appendChild(item);
             }
+
+            // Refresh an open Settings panel after settings loading changes.
+            if (
+                this.panelMode === "settings" &&
+                this.panel &&
+                this.panel.style.display === "block"
+            ) {
+                this.refreshSettingsPanel();
+            }
         }
 
         // --------------------------------------------------
@@ -560,6 +571,8 @@
         showModule(module) {
             if (!this.panelContent || !this.panel) return;
 
+            this.panelMode = "module";
+
             this.renderInstance(module, this.panelContent);
 
             this.panel.style.display = "block";
@@ -574,6 +587,8 @@
             if (this.panelContent) {
                 this.panelContent.replaceChildren();
             }
+
+            this.panelMode = null;
         }
 
         // --------------------------------------------------
@@ -583,6 +598,22 @@
         openSettings() {
             if (!this.panel || !this.panelContent) return;
 
+            this.panelMode = "settings";
+            this.panel.style.display = "block";
+            this.closeMenu();
+
+            this.refreshSettingsPanel();
+        }
+
+        refreshSettingsPanel() {
+            if (
+                this.panelMode !== "settings" ||
+                !this.panelContent ||
+                !this.panel
+            ) {
+                return;
+            }
+
             this.panelContent.replaceChildren();
 
             this.panelContent.appendChild(
@@ -591,9 +622,6 @@
                     textContent: "Anonymous Inspector Settings"
                 })
             );
-
-            this.panel.style.display = "block";
-            this.closeMenu();
 
             const status = this.getSettingsStatus() || {};
 
@@ -782,6 +810,7 @@
                 visiblePanel:
                     !!this.panel &&
                     this.panel.style.display === "block",
+                panelMode: this.panelMode,
                 menuVisible:
                     !!this.menu &&
                     this.menu.style.display === "block"
@@ -826,6 +855,7 @@
             this.progress = null;
             this.progressLabel = null;
             this.progressBar = null;
+            this.panelMode = null;
 
             this.initialized = false;
             this.destroyed = true;

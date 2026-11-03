@@ -1,3 +1,4 @@
+
 (function (root) {
     "use strict";
 
@@ -46,6 +47,10 @@
                 : null
     };
 
+    // --------------------------------------------------
+    // SETTINGS COMMAND
+    // --------------------------------------------------
+
     function openSettingsWhenReady() {
         if (!settingsRequested || !kernel) return;
 
@@ -60,7 +65,19 @@
 
     function requestSettings() {
         settingsRequested = true;
-        openSettingsWhenReady();
+
+        if (kernel && kernel.uiManager) {
+            openSettingsWhenReady();
+            return;
+        }
+
+        // Start Kernel loading if it has not started yet.
+        loadKernel().catch(error => {
+            console.error(
+                "[Anonymous Inspector] Settings initialization failed:",
+                error
+            );
+        });
     }
 
     // Register the Settings command immediately.
@@ -73,6 +90,10 @@
         // Prevent Kernel from registering the same command again.
         gmAPI.registerMenuCommand = null;
     }
+
+    // --------------------------------------------------
+    // KERNEL LOADER
+    // --------------------------------------------------
 
     async function loadKernel() {
         if (kernel) return kernel;
@@ -164,10 +185,19 @@
         }
     }
 
+    // --------------------------------------------------
+    // PUBLIC ENTRY POINT
+    // --------------------------------------------------
+
     async function AnonymousInspector(...moduleIds) {
         try {
             const instance = await loadKernel();
-            return await instance.start(...moduleIds);
+
+            const result = await instance.start(...moduleIds);
+
+            openSettingsWhenReady();
+
+            return result;
 
         } catch (error) {
             console.error(
