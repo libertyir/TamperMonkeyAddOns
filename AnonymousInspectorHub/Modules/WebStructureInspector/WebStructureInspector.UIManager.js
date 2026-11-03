@@ -26,12 +26,16 @@
         }
 
         button(label, callback, className = "") {
-            const button = this.el("button", {
+            const attributes = {
                 type: "button",
-                className: "wsi-button " + className,
-                disabled: this.busy
-            }, label);
+                className: "wsi-button " + className
+            };
 
+            if (this.busy || this.module.operation) {
+                attributes.disabled = true;
+            }
+
+            const button = this.el("button", attributes, label);
             button.addEventListener("click", callback);
             return button;
         }

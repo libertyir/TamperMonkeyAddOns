@@ -23,6 +23,15 @@
 // @connect *
 // ==/UserScript==
 
+
+// const keys = await GM.listValues();
+
+// for (const key of keys) {
+//     await GM.deleteValue(key);
+// }
+
+// console.log("All userscript storage cleared.");
+
 (function () {
     "use strict";
 
