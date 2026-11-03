@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -382,6 +381,72 @@
         }
 
         // --------------------------------------------------
+        // MODULE SCAN POLICY
+        // --------------------------------------------------
+
+        async getModuleScanPolicy(id, ModuleClass) {
+            const validTTLs = [
+                "always",
+                "1h",
+                "6h",
+                "12h",
+                "1d",
+                "3d",
+                "7d",
+                "30d",
+                "90d",
+                "permanent"
+            ];
+
+            const declared =
+                ModuleClass &&
+                ModuleClass.scanPolicy &&
+                typeof ModuleClass.scanPolicy === "object"
+                    ? ModuleClass.scanPolicy
+                    : {};
+
+            const scope = [
+                "origin-root",
+                "directory"
+            ].includes(declared.scope)
+                ? declared.scope
+                : "origin-root";
+
+            const defaultTTL = validTTLs.includes(
+                declared.defaultTTL
+            )
+                ? declared.defaultTTL
+                : "7d";
+
+            let settings = {};
+
+            try {
+                settings = await this.framework.Storage.getMetadata(
+                    "module-settings:" + id
+                ) || {};
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Module settings read failed:",
+                    id,
+                    error
+                );
+            }
+
+            const ttl = Object.prototype.hasOwnProperty.call(
+                settings,
+                "ttl"
+            ) && validTTLs.includes(settings.ttl)
+                ? settings.ttl
+                : defaultTTL;
+
+            return {
+                scope,
+                defaultTTL,
+                ttl
+            };
+        }
+
+        // --------------------------------------------------
         // FRAMEWORK CREATION
         // --------------------------------------------------
 
@@ -514,6 +579,13 @@
                     return factory.invoke(
                         "setModuleTTL",
                         [id, ttl]
+                    );
+                },
+
+                getModuleScanPolicy(id, ModuleClass) {
+                    return factory.getModuleScanPolicy(
+                        id,
+                        ModuleClass
                     );
                 },
 
