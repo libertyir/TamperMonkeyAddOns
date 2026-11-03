@@ -353,12 +353,23 @@
                 id: "aih-root"
             });
 
-            const button = this.createElement("button", {
-                id: "aih-button",
-                type: "button",
-                title: "Anonymous Inspector",
-                textContent: "◉"
-            });
+            // Adopt the button created by the bootstrap.
+            let button = document.getElementById("aih-button");
+            const bootstrapButtonExists = !!button;
+
+            if (!button) {
+                button = this.createElement("button", {
+                    id: "aih-button",
+                    type: "button",
+                    title: "Anonymous Inspector",
+                    textContent: "◉"
+                });
+
+                // Standalone fallback when no bootstrap button exists.
+                button.addEventListener("click", () => {
+                    this.toggleMenu();
+                });
+            }
 
             this.menu = this.createElement("div", {
                 id: "aih-menu"
@@ -407,10 +418,6 @@
                 () => this.closePanel()
             );
 
-            button.addEventListener("click", () => {
-                this.toggleMenu();
-            });
-
             this.panel.append(
                 closeButton,
                 this.panelContent
@@ -426,6 +433,16 @@
                 this.root,
                 this.panel
             );
+
+            // Bootstrap styles are no longer needed.
+            if (bootstrapButtonExists) {
+                const bootstrapStyles =
+                    document.getElementById("aih-bootstrap-styles");
+
+                if (bootstrapStyles) {
+                    bootstrapStyles.remove();
+                }
+            }
         }
 
         // --------------------------------------------------

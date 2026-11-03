@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -8,8 +7,13 @@
     let kernel = null;
     let loading = null;
     let settingsRequested = false;
+    let pendingButtonClick = false;
+    let bootstrapButton = null;
 
-    // Capture Tampermonkey APIs from the userscript scope.
+    // --------------------------------------------------
+    // TAMPERMONKEY API
+    // --------------------------------------------------
+
     const gmAPI = {
         getValue:
             typeof GM_getValue === "function"
@@ -48,31 +52,108 @@
     };
 
     // --------------------------------------------------
+    // IMMEDIATE FLOATING BUTTON
+    // --------------------------------------------------
+
+    function createBootstrapButton() {
+        if (bootstrapButton || !document.body) return;
+
+        const style = document.createElement("style");
+
+        style.id = "aih-bootstrap-styles";
+        style.textContent = `
+            #aih-button {
+                position: fixed;
+                right: 20px;
+                bottom: 20px;
+                z-index: 2147483646;
+                width: 44px;
+                height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid #555;
+                border-radius: 50%;
+                background: #222;
+                color: #fff;
+                font-size: 22px;
+                cursor: pointer;
+                box-shadow: 0 2px 10px rgba(0,0,0,.4);
+            }
+        `;
+
+        document.head.appendChild(style);
+
+        bootstrapButton = document.createElement("button");
+
+        bootstrapButton.id = "aih-button";
+        bootstrapButton.type = "button";
+        bootstrapButton.title = "Anonymous Inspector";
+        bootstrapButton.textContent = "◉";
+
+        bootstrapButton.addEventListener("click", () => {
+            if (
+                kernel &&
+                kernel.uiManager &&
+                kernel.uiManager.initialized
+            ) {
+                kernel.uiManager.toggleMenu();
+                return;
+            }
+
+            pendingButtonClick = true;
+        });
+
+        document.body.appendChild(bootstrapButton);
+    }
+
+    if (document.body) {
+        createBootstrapButton();
+    } else {
+        document.addEventListener(
+            "DOMContentLoaded",
+            createBootstrapButton,
+            { once: true }
+        );
+    }
+
+    // --------------------------------------------------
     // SETTINGS COMMAND
     // --------------------------------------------------
 
     function openSettingsWhenReady() {
-        if (!settingsRequested || !kernel) return;
+        if (!kernel) return;
 
         if (
             kernel.uiManager &&
             kernel.uiManager.initialized
         ) {
-            settingsRequested = false;
-            kernel.uiManager.openSettings();
+            if (settingsRequested) {
+                settingsRequested = false;
+                kernel.uiManager.openSettings();
+                return;
+            }
+
+            if (pendingButtonClick) {
+                pendingButtonClick = false;
+                kernel.uiManager.toggleMenu();
+            }
         }
     }
 
     function requestSettings() {
         settingsRequested = true;
 
-        if (kernel && kernel.uiManager) {
+        if (
+            kernel &&
+            kernel.uiManager &&
+            kernel.uiManager.initialized
+        ) {
             openSettingsWhenReady();
             return;
         }
 
-        // Start Kernel loading if it has not started yet.
-        loadKernel().catch(error => {
+        startApplication().catch(error => {
             console.error(
                 "[Anonymous Inspector] Settings initialization failed:",
                 error
@@ -80,14 +161,13 @@
         });
     }
 
-    // Register the Settings command immediately.
+    // Register Settings immediately.
     if (gmAPI.registerMenuCommand) {
         gmAPI.registerMenuCommand(
             "Anonymous Inspector Hub - Settings",
             requestSettings
         );
 
-        // Prevent Kernel from registering the same command again.
         gmAPI.registerMenuCommand = null;
     }
 
@@ -141,7 +221,7 @@
 
                         if (typeof KernelClass !== "function") {
                             throw new Error(
-                                "Kernel class could not be loaded from Kernel.js."
+                                "Kernel class could not be loaded."
                             );
                         }
 
@@ -150,7 +230,6 @@
                             gm: gmAPI
                         });
 
-                        // Kernel calls this after the UI becomes available.
                         kernel.onUIReady = openSettingsWhenReady;
 
                         root.AIHKernel = kernel;
@@ -178,9 +257,32 @@
 
         try {
             return await loading;
-
         } catch (error) {
             loading = null;
+            throw error;
+        }
+    }
+
+    // --------------------------------------------------
+    // APPLICATION STARTUP
+    // --------------------------------------------------
+
+    let startupPromise = null;
+    let configuredModuleIds = [];
+
+    async function startApplication() {
+        if (startupPromise) return startupPromise;
+
+        startupPromise = (async () => {
+            const instance = await loadKernel();
+
+            return instance.start(...configuredModuleIds);
+        })();
+
+        try {
+            return await startupPromise;
+        } catch (error) {
+            startupPromise = null;
             throw error;
         }
     }
@@ -190,10 +292,14 @@
     // --------------------------------------------------
 
     async function AnonymousInspector(...moduleIds) {
-        try {
-            const instance = await loadKernel();
+        configuredModuleIds =
+            moduleIds.length === 1 &&
+            Array.isArray(moduleIds[0])
+                ? moduleIds[0]
+                : moduleIds;
 
-            const result = await instance.start(...moduleIds);
+        try {
+            const result = await startApplication();
 
             openSettingsWhenReady();
 
