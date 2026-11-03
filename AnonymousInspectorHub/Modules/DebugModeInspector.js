@@ -12,7 +12,7 @@
         static title = "Debug Mode Inspector";
 
         static description =
-            "Detect exposed debugging interfaces and development error pages.";
+            "Detect exposed debugging interfaces, development error pages and known platform vulnerabilities.";
 
         static icon = "🔍";
 
@@ -53,7 +53,13 @@
             "DebugModeInspector.PlatformDetector.js",
             "DebugModeInspector.RequestManager.js",
             "DebugModeInspector.EvidenceAnalyzer.js",
-            "DebugModeInspector.ReportBuilder.js"
+            "DebugModeInspector.ReportBuilder.js",
+
+            // Vulnerability dependencies
+            "DebugModeInspector.CVE.NVD.js",
+            "DebugModeInspector.CVE.OSV.js",
+            "DebugModeInspector.CVE.GitHub.js",
+            "DebugModeInspector.VulnerabilityLookup.js"
         ];
 
         // ==================================================
@@ -69,9 +75,14 @@
             this.namespace = null;
 
             this.requestManager = null;
+            this.requestManagerInstance = null;
+
             this.platformDetector = null;
             this.evidenceAnalyzer = null;
             this.reportBuilder = null;
+
+            this.vulnerabilityLookup = null;
+            this.vulnerabilityReport = null;
 
             this.loadedPlatforms = new Map();
 
@@ -238,11 +249,35 @@
             this.reportBuilder =
                 namespace.ReportBuilder || null;
 
+            // ----------------------------------------------
+            // Vulnerability lookup
+            // ----------------------------------------------
+
+            this.vulnerabilityLookup = null;
+
+            if (
+                typeof namespace.VulnerabilityLookup === "function"
+            ) {
+                this.vulnerabilityLookup =
+                    new namespace.VulnerabilityLookup({
+                        Framework,
+
+                        maxProducts: 5,
+
+                        maxResultsPerProduct: 20,
+
+                        maxOSVLookups: 5,
+
+                        maxGitHubLookups: 5
+                    });
+            }
+
             const required = [
                 ["RequestManager", this.requestManager],
                 ["PlatformDetector", this.platformDetector],
                 ["EvidenceAnalyzer", this.evidenceAnalyzer],
-                ["ReportBuilder", this.reportBuilder]
+                ["ReportBuilder", this.reportBuilder],
+                ["VulnerabilityLookup", this.vulnerabilityLookup]
             ];
 
             const missing = required
@@ -354,7 +389,10 @@
                 origin: location.origin,
                 hostname: location.hostname,
                 pathname: location.pathname,
-                requestManager: this.requestManagerInstance,
+
+                requestManager:
+                    this.requestManagerInstance,
+
                 context
             });
 
@@ -443,10 +481,13 @@
                 return {
                     platform: platformId,
                     status: "Completed",
+
                     findings: Array.isArray(output?.findings)
                         ? output.findings
                         : [],
+
                     metadata: output?.metadata || {},
+
                     error: null
                 };
 
@@ -467,6 +508,56 @@
         }
 
         // ==================================================
+        // VULNERABILITY INSPECTION
+        // ==================================================
+
+        async inspectVulnerabilities(context) {
+            if (
+                !this.vulnerabilityLookup ||
+                typeof this.vulnerabilityLookup.run !== "function"
+            ) {
+                return {
+                    status: "Unavailable",
+                    targets: [],
+                    vulnerabilities: [],
+                    skipped: [],
+                    errors: [
+                        "VulnerabilityLookup is unavailable."
+                    ],
+                    metadata: {}
+                };
+            }
+
+            try {
+                return await this.vulnerabilityLookup.run({
+                    results: this.results,
+
+                    detectedPlatforms:
+                        this.detectedPlatforms,
+
+                    context
+                });
+
+            } catch (error) {
+                console.error(
+                    "[DebugModeInspector] Vulnerability inspection failed:",
+                    error
+                );
+
+                return {
+                    status: "Error",
+                    targets: [],
+                    vulnerabilities: [],
+                    skipped: [],
+                    errors: [
+                        error.message || "Unknown vulnerability lookup error."
+                    ],
+                    metadata: {}
+                };
+            }
+        }
+
+        // ==================================================
         // EXECUTION PIPELINE
         // ==================================================
 
@@ -480,6 +571,10 @@
             this.detectedPlatforms = [];
 
             this.dependencyErrors = [];
+
+            this.vulnerabilityReport = null;
+
+            this.report = null;
 
             this.loadedPlatforms.clear();
 
@@ -509,7 +604,7 @@
             }
 
             // ----------------------------------------------
-            // 4. Detect platform
+            // 4. Inspection context
             // ----------------------------------------------
 
             const context = {
@@ -519,11 +614,15 @@
                 url: location.href
             };
 
+            // ----------------------------------------------
+            // 5. Detect platforms
+            // ----------------------------------------------
+
             this.detectedPlatforms =
                 await this.detectPlatforms(context);
 
             // ----------------------------------------------
-            // 5. Select platforms
+            // 6. Select platforms
             // ----------------------------------------------
 
             const selection =
@@ -532,7 +631,7 @@
                 );
 
             // ----------------------------------------------
-            // 6. Execute selected platforms
+            // 7. Execute selected platforms
             // ----------------------------------------------
 
             for (
@@ -549,19 +648,28 @@
             }
 
             // ----------------------------------------------
-            // 7. Analyze evidence
+            // 8. Vulnerability lookup
+            // ----------------------------------------------
+
+            this.vulnerabilityReport =
+                await this.inspectVulnerabilities(context);
+
+            // ----------------------------------------------
+            // 9. Analyze evidence
             // ----------------------------------------------
 
             const analysis =
                 await this.evidenceAnalyzer.analyze({
                     results: this.results,
+
                     detectedPlatforms:
                         this.detectedPlatforms,
+
                     context
                 });
 
             // ----------------------------------------------
-            // 8. Build final report
+            // 10. Build final report
             // ----------------------------------------------
 
             this.report =
@@ -586,8 +694,21 @@
                     analysis,
 
                     dependencyErrors:
-                        this.dependencyErrors
+                        this.dependencyErrors,
+
+                    vulnerabilityReport:
+                        this.vulnerabilityReport
                 });
+
+            // Keep vulnerability report accessible
+            // independently of ReportBuilder structure.
+
+            if (this.report &&
+                typeof this.report === "object") {
+
+                this.report.vulnerabilityReport =
+                    this.vulnerabilityReport;
+            }
 
             this.scanDuration =
                 Date.now() - this.scanStartedAt;
@@ -647,6 +768,9 @@
 
                 report: this.report,
 
+                vulnerabilityReport:
+                    this.vulnerabilityReport,
+
                 dependencyErrors:
                     this.dependencyErrors
             };
@@ -685,6 +809,11 @@
 
             this.report =
                 data.report || null;
+
+            this.vulnerabilityReport =
+                data.vulnerabilityReport ||
+                this.report?.vulnerabilityReport ||
+                null;
 
             this.dependencyErrors =
                 Array.isArray(data.dependencyErrors)
@@ -812,6 +941,32 @@
                     margin-top: 8px;
                     overflow-wrap: anywhere;
                 }
+
+                .aih-debug-cve {
+                    border-top: 1px solid rgba(128,128,128,.2);
+                    padding-top: 10px;
+                    margin-top: 10px;
+                    overflow-wrap: anywhere;
+                }
+
+                .aih-debug-cve-title {
+                    font-weight: 600;
+                    margin-bottom: 6px;
+                }
+
+                .aih-debug-cve a {
+                    color: inherit;
+                    text-decoration: underline;
+                }
+
+                .aih-debug-severity {
+                    display: inline-block;
+                    border: 1px solid rgba(128,128,128,.4);
+                    border-radius: 4px;
+                    padding: 2px 6px;
+                    margin-left: 5px;
+                    font-size: 11px;
+                }
             `;
 
             root.appendChild(style);
@@ -828,9 +983,12 @@
             const findingCount =
                 this.results.reduce(
                     (total, item) =>
-                        total + item.findings.length,
+                        total + (item.findings || []).length,
                     0
                 );
+
+            const vulnerabilityCount =
+                this.vulnerabilityReport?.vulnerabilities?.length || 0;
 
             const stats = [
                 [
@@ -844,6 +1002,10 @@
                 [
                     "Findings",
                     findingCount
+                ],
+                [
+                    "Known CVEs",
+                    vulnerabilityCount
                 ],
                 [
                     "Scan Duration",
@@ -943,6 +1105,18 @@
             for (const result of this.results) {
                 root.appendChild(
                     this.renderPlatformResult(result)
+                );
+            }
+
+            // ----------------------------------------------
+            // Vulnerability report
+            // ----------------------------------------------
+
+            if (this.vulnerabilityReport) {
+                root.appendChild(
+                    this.renderVulnerabilityReport(
+                        this.vulnerabilityReport
+                    )
                 );
             }
 
@@ -1081,6 +1255,268 @@
                 }
 
                 card.appendChild(item);
+            }
+
+            return card;
+        }
+
+        // ==================================================
+        // VULNERABILITY REPORT RENDERING
+        // ==================================================
+
+        renderVulnerabilityReport(report) {
+            const card = this.createElement(
+                "div",
+                "aih-debug-card"
+            );
+
+            card.appendChild(
+                this.createElement(
+                    "div",
+                    "aih-debug-header",
+                    "Known Vulnerabilities (CVE)"
+                )
+            );
+
+            card.appendChild(
+                this.createElement(
+                    "div",
+                    "aih-debug-meta",
+                    "Lookup Status: " +
+                    (report.status || "Unknown")
+                )
+            );
+
+            const vulnerabilities =
+                Array.isArray(report.vulnerabilities)
+                    ? report.vulnerabilities
+                    : [];
+
+            card.appendChild(
+                this.createElement(
+                    "div",
+                    "",
+                    "Found: " + vulnerabilities.length
+                )
+            );
+
+            // ----------------------------------------------
+            // Vulnerability entries
+            // ----------------------------------------------
+
+            for (const item of vulnerabilities) {
+                const entry = this.createElement(
+                    "div",
+                    "aih-debug-cve"
+                );
+
+                const title = this.createElement(
+                    "div",
+                    "aih-debug-cve-title"
+                );
+
+                title.appendChild(
+                    this.createElement(
+                        "strong",
+                        "",
+                        item.id || "Unknown CVE"
+                    )
+                );
+
+                title.appendChild(
+                    this.createElement(
+                        "span",
+                        "aih-debug-severity",
+                        item.severity || "UNKNOWN"
+                    )
+                );
+
+                entry.appendChild(title);
+
+                entry.appendChild(
+                    this.createElement(
+                        "div",
+                        "",
+                        item.title || "No title available."
+                    )
+                );
+
+                entry.appendChild(
+                    this.createElement(
+                        "div",
+                        "aih-debug-meta",
+                        "Platform: " +
+                        (item.platform || "Unknown")
+                    )
+                );
+
+                entry.appendChild(
+                    this.createElement(
+                        "div",
+                        "aih-debug-meta",
+                        "Detected Version: " +
+                        (item.detectedVersion || "Unknown")
+                    )
+                );
+
+                entry.appendChild(
+                    this.createElement(
+                        "div",
+                        "aih-debug-meta",
+                        "Match Status: " +
+                        (item.matchStatus || "Potential")
+                    )
+                );
+
+                if (Array.isArray(item.platforms) &&
+                    item.platforms.length > 1) {
+
+                    entry.appendChild(
+                        this.createElement(
+                            "div",
+                            "aih-debug-meta",
+                            "Additional platform matches: " +
+                            item.platforms.length
+                        )
+                    );
+                }
+
+                // ------------------------------------------
+                // External references
+                // ------------------------------------------
+
+                if (
+                    typeof item.url === "string" &&
+                    /^https:\/\/nvd\.nist\.gov\//i.test(item.url)
+                ) {
+                    const link = this.createElement("a");
+
+                    link.href = item.url;
+                    link.target = "_blank";
+                    link.rel = "noopener noreferrer";
+                    link.textContent = "View NVD Record";
+
+                    entry.appendChild(link);
+                }
+
+                // ------------------------------------------
+                // OSV enrichment
+                // ------------------------------------------
+
+                if (item.osv) {
+                    entry.appendChild(
+                        this.createElement(
+                            "div",
+                            "aih-debug-meta",
+                            "OSV: Additional advisory information available."
+                        )
+                    );
+                }
+
+                // ------------------------------------------
+                // GitHub enrichment
+                // ------------------------------------------
+
+                if (item.github) {
+                    entry.appendChild(
+                        this.createElement(
+                            "div",
+                            "aih-debug-meta",
+                            "GitHub Advisory: " +
+                            (
+                                item.github.ghsa_id ||
+                                "Additional advisory information available."
+                            )
+                        )
+                    );
+
+                    const githubUrl = item.github.url;
+
+                    if (
+                        typeof githubUrl === "string" &&
+                        /^https:\/\/github\.com\//i.test(githubUrl)
+                    ) {
+                        const link = this.createElement("a");
+
+                        link.href = githubUrl;
+                        link.target = "_blank";
+                        link.rel = "noopener noreferrer";
+                        link.textContent = "View GitHub Advisory";
+
+                        entry.appendChild(link);
+                    }
+                }
+
+                card.appendChild(entry);
+            }
+
+            // ----------------------------------------------
+            // Lookup errors
+            // ----------------------------------------------
+
+            if (Array.isArray(report.errors) &&
+                report.errors.length > 0) {
+
+                const errors = this.createElement(
+                    "div",
+                    "aih-debug-finding"
+                );
+
+                errors.appendChild(
+                    this.createElement(
+                        "strong",
+                        "",
+                        "Lookup Errors"
+                    )
+                );
+
+                for (const error of report.errors) {
+                    const message =
+                        typeof error === "string"
+                            ? error
+                            : [
+                                error.source || "Source",
+                                error.id || error.platform || "",
+                                error.message || "Unknown error"
+                            ].filter(Boolean).join(": ");
+
+                    errors.appendChild(
+                        this.createElement(
+                            "div",
+                            "aih-debug-error",
+                            message
+                        )
+                    );
+                }
+
+                card.appendChild(errors);
+            }
+
+            // ----------------------------------------------
+            // Metadata
+            // ----------------------------------------------
+
+            if (report.metadata) {
+                const metadata = report.metadata;
+
+                const sourceSummary = [
+                    "NVD: " +
+                    (metadata.queriedProducts ?? 0),
+
+                    "OSV: " +
+                    (metadata.osvEnriched ?? 0),
+
+                    "GitHub: " +
+                    (metadata.githubEnriched ?? 0)
+                ].join(" | ");
+
+                card.appendChild(
+                    this.createElement(
+                        "div",
+                        "aih-debug-meta",
+                        sourceSummary
+                    )
+                );
             }
 
             return card;
