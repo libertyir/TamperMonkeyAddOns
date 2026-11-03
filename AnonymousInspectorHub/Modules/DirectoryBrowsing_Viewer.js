@@ -271,17 +271,26 @@
 
             let output = "";
             let total = 0;
+            let readCount = 0;
+
+            const maxReads = 256;
 
             try {
-                while (total < this.maxResponseSize) {
+                while (
+                    total < this.maxResponseSize &&
+                    readCount < maxReads
+                ) {
+                    readCount++;
+
                     const { done, value } = await reader.read();
 
                     if (done) break;
+                    if (!value || value.length === 0) continue;
 
                     const remaining =
                         this.maxResponseSize - total;
 
-                    const chunk = value.slice(0, remaining);
+                    const chunk = value.subarray(0, remaining);
 
                     output += decoder.decode(chunk, {
                         stream: true
@@ -293,12 +302,9 @@
                 }
 
                 output += decoder.decode();
+
             } finally {
-                try {
-                    await reader.cancel();
-                } catch (error) {
-                    // Ignore cancellation errors.
-                }
+                reader.cancel().catch(() => {});
             }
 
             return output;
