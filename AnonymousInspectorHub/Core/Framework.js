@@ -1,3 +1,4 @@
+
 (function (root) {
     "use strict";
 
@@ -20,6 +21,13 @@
                 constructor() {
                     this.available = false;
                     this.error = null;
+                }
+
+                static get scanPolicy() {
+                    return {
+                        scope: "origin-root",
+                        defaultTTL: "7d"
+                    };
                 }
 
                 static getMetadata() {
@@ -494,7 +502,7 @@
                         [id, enabled]
                     );
                 },
-                
+
                 getModuleTTL(id) {
                     return factory.invoke(
                         "getModuleTTL",
