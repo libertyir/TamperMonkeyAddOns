@@ -30,12 +30,19 @@
             this.error = null;
             this.scannedAt = new Date().toISOString();
 
+            const controller = new AbortController();
+
+            const timeoutId = setTimeout(() => {
+                controller.abort();
+            }, 8000);
+
             try {
                 const response = await fetch(location.href, {
                     method: "HEAD",
                     credentials: "same-origin",
                     cache: "no-store",
-                    redirect: "follow"
+                    redirect: "follow",
+                    signal: controller.signal
                 });
 
                 const finalUrl = new URL(response.url);
@@ -68,7 +75,12 @@
                 this.available = true;
 
             } catch (error) {
-                this.error = error.message || "Unable to inspect server response.";
+                this.error = controller.signal.aborted
+                    ? "Server information request timed out."
+                    : error.message || "Unable to inspect server response.";
+
+            } finally {
+                clearTimeout(timeoutId);
             }
         }
 
