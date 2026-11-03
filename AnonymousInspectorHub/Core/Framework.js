@@ -494,6 +494,20 @@
                         [id, enabled]
                     );
                 },
+                
+                getModuleTTL(id) {
+                    return factory.invoke(
+                        "getModuleTTL",
+                        [id]
+                    );
+                },
+
+                setModuleTTL(id, ttl) {
+                    return factory.invoke(
+                        "setModuleTTL",
+                        [id, ttl]
+                    );
+                },
 
                 // Settings UI
                 openSettings() {

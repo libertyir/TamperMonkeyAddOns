@@ -776,6 +776,22 @@
                     getModules: () =>
                         moduleManager.getActiveInstances(),
 
+                    getModuleTTL: async id => {
+                        const ModuleClass = moduleManager.get(id);
+
+                        if (!ModuleClass) {
+                            return moduleManager.defaultTTL;
+                        }
+
+                        return moduleManager.getEffectiveTTL(
+                            id,
+                            ModuleClass
+                        );
+                    },
+
+                    setModuleTTL: (id, ttl) =>
+                        moduleManager.setModuleTTL(id, ttl),
+
                     getSettings: () =>
                         settingsManager.getActiveInstances(),
 
