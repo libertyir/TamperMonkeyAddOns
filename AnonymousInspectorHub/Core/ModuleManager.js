@@ -536,6 +536,25 @@
                     ? options.onProgress
                     : null;
 
+            const notifyProgress = (details = {}) => {
+                if (!onProgress) return;
+
+                try {
+                    onProgress({
+                        total: uniqueIds.length,
+                        completed,
+                        failed,
+                        loaded: completed - failed,
+                        ...details
+                    });
+                } catch (error) {
+                    console.error(
+                        "[Anonymous Inspector] Progress callback failed:",
+                        error
+                    );
+                }
+            };
+
             const worker = async () => {
                 while (true) {
                     const index = nextIndex++;
@@ -546,33 +565,38 @@
 
                     const id = uniqueIds[index];
 
-                    const instance = await this.initialize(id);
+                    notifyProgress({
+                        id,
+                        phase: "started"
+                    });
 
-                    results[index] = instance;
+                    let instance = null;
+
+                    try {
+                        instance = await this.initialize(id);
+                        results[index] = instance;
+
+                    } catch (error) {
+                        failed++;
+
+                        console.error(
+                            "[Anonymous Inspector] Module initialization failed:",
+                            id,
+                            error
+                        );
+                    }
 
                     completed++;
 
-                    if (!instance) {
+                    if (!instance && results[index] === null) {
                         failed++;
                     }
 
-                    if (onProgress) {
-                        try {
-                            onProgress({
-                                id,
-                                instance,
-                                total: uniqueIds.length,
-                                completed,
-                                failed,
-                                loaded: completed - failed
-                            });
-                        } catch (error) {
-                            console.error(
-                                "[Anonymous Inspector] Progress callback failed:",
-                                error
-                            );
-                        }
-                    }
+                    notifyProgress({
+                        id,
+                        phase: "completed",
+                        instance
+                    });
                 }
             };
 
