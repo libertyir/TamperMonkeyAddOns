@@ -1,3 +1,4 @@
+
 (function (root) {
     "use strict";
 
@@ -17,6 +18,8 @@
             this.initializingPromises = new Map();
 
             this.websiteGuid = null;
+
+            this.defaultTTL = "7d";
 
             this.onError = options.onError || (
                 (id, error) => {
@@ -83,6 +86,394 @@
         }
 
         // --------------------------------------------------
+        // SCAN POLICY
+        // --------------------------------------------------
+
+        normalizeTTL(value, fallback = this.defaultTTL) {
+            const valid = new Set([
+                "always",
+                "1h",
+                "6h",
+                "12h",
+                "1d",
+                "3d",
+                "7d",
+                "30d",
+                "90d",
+                "permanent"
+            ]);
+
+            return valid.has(value)
+                ? value
+                : fallback;
+        }
+
+        getTTLMilliseconds(ttl) {
+            const durations = {
+                "1h": 60 * 60 * 1000,
+                "6h": 6 * 60 * 60 * 1000,
+                "12h": 12 * 60 * 60 * 1000,
+                "1d": 24 * 60 * 60 * 1000,
+                "3d": 3 * 24 * 60 * 60 * 1000,
+                "7d": 7 * 24 * 60 * 60 * 1000,
+                "30d": 30 * 24 * 60 * 60 * 1000,
+                "90d": 90 * 24 * 60 * 60 * 1000
+            };
+
+            if (ttl === "permanent") {
+                return Infinity;
+            }
+
+            if (ttl === "always") {
+                return 0;
+            }
+
+            return durations[ttl] ?? durations[this.defaultTTL];
+        }
+
+        getScanPolicy(ModuleClass) {
+            const declared = ModuleClass.scanPolicy || {};
+
+            const scope = [
+                "origin-root",
+                "directory"
+            ].includes(declared.scope)
+                ? declared.scope
+                : "origin-root";
+
+            return {
+                scope,
+                defaultTTL: this.normalizeTTL(
+                    declared.defaultTTL,
+                    this.defaultTTL
+                )
+            };
+        }
+
+        async getModuleSettings(id) {
+            try {
+                return await this.Framework.Storage.getMetadata(
+                    "module-settings:" + id
+                ) || {};
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Module settings read failed:",
+                    id,
+                    error
+                );
+
+                return {};
+            }
+        }
+
+        async setModuleTTL(id, ttl) {
+            this.validateId(id);
+
+            if (
+                ttl !== null &&
+                ![
+                    "always",
+                    "1h",
+                    "6h",
+                    "12h",
+                    "1d",
+                    "3d",
+                    "7d",
+                    "30d",
+                    "90d",
+                    "permanent"
+                ].includes(ttl)
+            ) {
+                throw new Error("Invalid module TTL.");
+            }
+
+            const key = "module-settings:" + id;
+            const current =
+                await this.getModuleSettings(id);
+
+            const updated = {
+                ...current,
+                ttl,
+                moduleId: id,
+                updatedAt: new Date().toISOString()
+            };
+
+            await this.Framework.Storage.saveMetadata(
+                key,
+                updated
+            );
+
+            return updated;
+        }
+
+        async getEffectiveTTL(id, ModuleClass) {
+            const settings = await this.getModuleSettings(id);
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    settings,
+                    "ttl"
+                )
+            ) {
+                return this.normalizeTTL(
+                    settings.ttl,
+                    this.getScanPolicy(ModuleClass).defaultTTL
+                );
+            }
+
+            return this.getScanPolicy(ModuleClass).defaultTTL;
+        }
+
+        // --------------------------------------------------
+        // SCOPE RESOLUTION
+        // --------------------------------------------------
+
+        normalizeScope(scope) {
+            const url = new URL(
+                scope,
+                root.location.href
+            );
+
+            url.search = "";
+            url.hash = "";
+
+            if (!url.pathname.endsWith("/")) {
+                url.pathname += "/";
+            }
+
+            return url.href;
+        }
+
+        createDefaultScope(policy) {
+            const origin = root.location.origin;
+
+            if (policy.scope === "directory") {
+                return this.normalizeScope(
+                    new URL(".", root.location.href).href
+                );
+            }
+
+            return this.normalizeScope(
+                new URL("/", origin).href
+            );
+        }
+
+        async getModuleScopes(id, ModuleClass) {
+            const policy = this.getScanPolicy(ModuleClass);
+
+            const context = {
+                moduleId: id,
+                websiteGuid: this.websiteGuid,
+                origin: root.location.origin,
+                currentUrl: root.location.href,
+                currentDirectory: new URL(
+                    ".",
+                    root.location.href
+                ).href,
+                defaultScope: this.createDefaultScope(policy)
+            };
+
+            if (
+                typeof ModuleClass.getScanScopes !== "function"
+            ) {
+                return [{
+                    scope: context.defaultScope,
+                    context
+                }];
+            }
+
+            const declaredScopes =
+                await ModuleClass.getScanScopes(context);
+
+            if (!Array.isArray(declaredScopes)) {
+                throw new Error(
+                    "getScanScopes() must return an array."
+                );
+            }
+
+            const unique = new Map();
+
+            for (const item of declaredScopes) {
+                const rawScope =
+                    typeof item === "string"
+                        ? item
+                        : item && item.scope;
+
+                if (typeof rawScope !== "string") {
+                    continue;
+                }
+
+                const scope = this.normalizeScope(rawScope);
+
+                unique.set(scope, {
+                    scope,
+                    context: {
+                        ...context,
+                        ...(typeof item === "object" ? item : {}),
+                        scope
+                    }
+                });
+            }
+
+            return [...unique.values()];
+        }
+
+        createInstanceKey(id, scope) {
+            return id + "::" + scope;
+        }
+
+        createScanMetadataKey(id, scope) {
+            return [
+                "scan",
+                this.websiteGuid,
+                id,
+                encodeURIComponent(scope)
+            ].join(":");
+        }
+
+        // --------------------------------------------------
+        // SCAN CACHE
+        // --------------------------------------------------
+
+        async getScanRecord(id, scope) {
+            try {
+                const key = this.createScanMetadataKey(
+                    id,
+                    scope
+                );
+
+                return await this.Framework.Storage.getMetadata(
+                    key
+                );
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Scan cache read failed:",
+                    id,
+                    error
+                );
+
+                return null;
+            }
+        }
+
+        isScanRecordValid(record, ttl) {
+            if (
+                !record ||
+                !["success", "unavailable"].includes(record.status)
+            ) {
+                return false;
+            }
+
+            if (ttl === "always") {
+                return false;
+            }
+
+            if (ttl === "permanent") {
+                return true;
+            }
+
+            const duration = this.getTTLMilliseconds(ttl);
+            const timestamp = Date.parse(record.completedAt);
+
+            if (!Number.isFinite(timestamp)) {
+                return false;
+            }
+
+            return Date.now() < timestamp + duration;
+        }
+
+        async saveScanRecord(id, scope, status, details = {}) {
+            try {
+                const key = this.createScanMetadataKey(
+                    id,
+                    scope
+                );
+
+                const record = {
+                    moduleId: id,
+                    websiteGuid: this.websiteGuid,
+                    scope,
+                    status,
+                    completedAt: new Date().toISOString(),
+                    resultGuid: details.resultGuid || null,
+                    executionGuid: details.executionGuid || null
+                };
+
+                await this.Framework.Storage.saveMetadata(
+                    key,
+                    record
+                );
+
+                return record;
+
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Scan cache save failed:",
+                    id,
+                    error
+                );
+
+                return null;
+            }
+        }
+
+        async restoreCachedInstance(
+            id,
+            ModuleClass,
+            scopeInfo,
+            record
+        ) {
+            if (!record.resultGuid) {
+                return null;
+            }
+
+            if (
+                typeof ModuleClass.prototype.restoreResult !==
+                "function"
+            ) {
+                return null;
+            }
+
+            try {
+                const result =
+                    await this.Framework.Storage.getResult(
+                        record.resultGuid
+                    );
+
+                if (!result || result.data === undefined) {
+                    return null;
+                }
+
+                const instance = new ModuleClass();
+
+                await instance.restoreResult(
+                    result.data,
+                    scopeInfo.context
+                );
+
+                if (!instance.available) {
+                    instance.available = true;
+                }
+
+                this.activeInstances.set(
+                    this.createInstanceKey(id, scopeInfo.scope),
+                    instance
+                );
+
+                return instance;
+
+            } catch (error) {
+                console.error(
+                    "[Anonymous Inspector] Cached result restore failed:",
+                    id,
+                    error
+                );
+
+                return null;
+            }
+        }
+
+        // --------------------------------------------------
         // EXECUTION HISTORY
         // --------------------------------------------------
 
@@ -141,6 +532,7 @@
                 guid: this.createExecutionGuid(),
                 websiteGuid: this.websiteGuid,
                 moduleId: id,
+                scope: details.scope || null,
                 status,
                 startedAt: details.startedAt || completedAt,
                 completedAt,
@@ -170,7 +562,7 @@
             return this.createExecutionGuid();
         }
 
-        async saveModuleResult(id, instance, execution) {
+        async saveModuleResult(id, instance, execution, scope) {
             try {
                 if (
                     !this.Framework ||
@@ -209,6 +601,7 @@
                     resultGuid,
                     websiteGuid: this.websiteGuid,
                     moduleId: id,
+                    scope,
                     executionGuid: execution.guid,
                     createdAt: new Date().toISOString(),
                     data
@@ -377,26 +770,99 @@
         async initialize(id) {
             this.validateId(id);
 
-            if (this.activeInstances.has(id)) {
-                return this.activeInstances.get(id);
+            const ModuleClass = await this.load(id);
+            const scopes = await this.getModuleScopes(
+                id,
+                ModuleClass
+            );
+
+            const instances = [];
+
+            for (const scopeInfo of scopes) {
+                const instance = await this.initializeScope(
+                    id,
+                    ModuleClass,
+                    scopeInfo
+                );
+
+                if (instance) {
+                    instances.push(instance);
+                }
             }
 
-            if (this.initializingPromises.has(id)) {
-                return this.initializingPromises.get(id);
+            return instances[0] || null;
+        }
+
+        async initializeScope(id, ModuleClass, scopeInfo) {
+            const scope = scopeInfo.scope;
+            const instanceKey = this.createInstanceKey(
+                id,
+                scope
+            );
+
+            if (this.activeInstances.has(instanceKey)) {
+                return this.activeInstances.get(instanceKey);
             }
 
-            const promise = this.initializeInstance(id);
+            if (this.initializingPromises.has(instanceKey)) {
+                return this.initializingPromises.get(instanceKey);
+            }
 
-            this.initializingPromises.set(id, promise);
+            const promise = this.initializeInstance(
+                id,
+                ModuleClass,
+                scopeInfo
+            );
+
+            this.initializingPromises.set(
+                instanceKey,
+                promise
+            );
 
             try {
                 return await promise;
             } finally {
-                this.initializingPromises.delete(id);
+                this.initializingPromises.delete(instanceKey);
             }
         }
 
-        async initializeInstance(id) {
+        async initializeInstance(id, ModuleClass, scopeInfo) {
+            const scope = scopeInfo.scope;
+            const instanceKey = this.createInstanceKey(
+                id,
+                scope
+            );
+
+            const ttl = await this.getEffectiveTTL(
+                id,
+                ModuleClass
+            );
+
+            const cachedRecord = await this.getScanRecord(
+                id,
+                scope
+            );
+
+            if (this.isScanRecordValid(cachedRecord, ttl)) {
+                const restored = await this.restoreCachedInstance(
+                    id,
+                    ModuleClass,
+                    scopeInfo,
+                    cachedRecord
+                );
+
+                if (restored) {
+                    return restored;
+                }
+
+                if (
+                    cachedRecord.status === "unavailable" &&
+                    !cachedRecord.resultGuid
+                ) {
+                    return null;
+                }
+            }
+
             let instance = null;
 
             const startedTimestamp = Date.now();
@@ -405,8 +871,6 @@
             ).toISOString();
 
             try {
-                const ModuleClass = await this.load(id);
-
                 instance = new ModuleClass();
 
                 if (
@@ -418,25 +882,32 @@
                     );
                 }
 
-                await instance.init();
+                await instance.init(scopeInfo.context);
 
                 if (instance.available) {
-                    this.activeInstances.set(id, instance);
+                    this.activeInstances.set(
+                        instanceKey,
+                        instance
+                    );
 
                     const execution = await this.recordExecution(
                         id,
                         "success",
                         {
                             startedAt,
-                            startedTimestamp
+                            startedTimestamp,
+                            scope
                         }
                     );
 
+                    let resultGuid = null;
+
                     if (execution) {
-                        const resultGuid = await this.saveModuleResult(
+                        resultGuid = await this.saveModuleResult(
                             id,
                             instance,
-                            execution
+                            execution,
+                            scope
                         );
 
                         execution.resultGuid = resultGuid;
@@ -451,6 +922,16 @@
                             lastExecutionStatus: "success",
                             lastExecutedAt: execution.completedAt
                         });
+
+                        await this.saveScanRecord(
+                            id,
+                            scope,
+                            "success",
+                            {
+                                resultGuid,
+                                executionGuid: execution.guid
+                            }
+                        );
                     }
 
                     return instance;
@@ -463,7 +944,8 @@
                     "unavailable",
                     {
                         startedAt,
-                        startedTimestamp
+                        startedTimestamp,
+                        scope
                     }
                 );
 
@@ -473,6 +955,15 @@
                         lastExecutionStatus: "unavailable",
                         lastExecutedAt: execution.completedAt
                     });
+
+                    await this.saveScanRecord(
+                        id,
+                        scope,
+                        "unavailable",
+                        {
+                            executionGuid: execution.guid
+                        }
+                    );
                 }
 
                 return null;
@@ -488,6 +979,7 @@
                     {
                         startedAt,
                         startedTimestamp,
+                        scope,
                         error
                     }
                 );
@@ -576,6 +1068,10 @@
                         instance = await this.initialize(id);
                         results[index] = instance;
 
+                        if (!instance) {
+                            failed++;
+                        }
+
                     } catch (error) {
                         failed++;
 
@@ -587,10 +1083,6 @@
                     }
 
                     completed++;
-
-                    if (!instance && results[index] === null) {
-                        failed++;
-                    }
 
                     notifyProgress({
                         id,
@@ -625,20 +1117,44 @@
         // INSTANCE MANAGEMENT
         // --------------------------------------------------
 
-        getActive(id) {
-            return this.activeInstances.get(id) || null;
+        getActive(id, scope = null) {
+            if (scope !== null) {
+                return this.activeInstances.get(
+                    this.createInstanceKey(id, scope)
+                ) || null;
+            }
+
+            for (const [key, instance] of this.activeInstances) {
+                if (key.startsWith(id + "::")) {
+                    return instance;
+                }
+            }
+
+            return null;
         }
 
         getActiveIds() {
-            return [...this.activeInstances.keys()];
+            return [
+                ...new Set(
+                    [...this.activeInstances.keys()].map(
+                        key => key.slice(0, key.indexOf("::"))
+                    )
+                )
+            ];
         }
 
         getActiveInstances() {
             return [...this.activeInstances.values()];
         }
 
-        isActive(id) {
-            return this.activeInstances.has(id);
+        isActive(id, scope = null) {
+            if (scope !== null) {
+                return this.activeInstances.has(
+                    this.createInstanceKey(id, scope)
+                );
+            }
+
+            return this.getActive(id) !== null;
         }
 
         // --------------------------------------------------
@@ -663,16 +1179,34 @@
             }
         }
 
-        async destroy(id) {
-            const instance = this.activeInstances.get(id);
+        async destroy(id, scope = null) {
+            if (scope !== null) {
+                const key = this.createInstanceKey(id, scope);
+                const instance = this.activeInstances.get(key);
 
-            if (!instance) {
+                if (!instance) {
+                    return false;
+                }
+
+                this.activeInstances.delete(key);
+
+                await this.destroyInstance(instance);
+
+                return true;
+            }
+
+            const entries = [
+                ...this.activeInstances.entries()
+            ].filter(([key]) => key.startsWith(id + "::"));
+
+            if (!entries.length) {
                 return false;
             }
 
-            this.activeInstances.delete(id);
-
-            await this.destroyInstance(instance);
+            for (const [key, instance] of entries) {
+                this.activeInstances.delete(key);
+                await this.destroyInstance(instance);
+            }
 
             return true;
         }
