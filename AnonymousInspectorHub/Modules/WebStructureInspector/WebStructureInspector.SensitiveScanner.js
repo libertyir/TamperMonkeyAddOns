@@ -52,7 +52,12 @@
         }
 
         async readLimited(response) {
-            if (!response.body) return "";
+            if (!response.body) {
+                return {
+                    text: "",
+                    truncated: false
+                };
+            }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -140,7 +145,7 @@
             return false;
         }
 
-        async inspectFile(url) {
+        async inspectFile(url, mode) {
             const controller = new AbortController();
             const timeoutId = setTimeout(
                 () => controller.abort(),
@@ -159,32 +164,97 @@
                     }
                 });
 
+                if (response.type === "opaqueredirect") {
+                    return {
+                        url: url.href,
+                        status: null,
+                        record: null
+                    };
+                }
+
+                if (response.status === 404) {
+                    return {
+                        url: url.href,
+                        status: 404,
+                        record: null
+                    };
+                }
+
                 if (
-                    response.type === "opaqueredirect" ||
+                    response.status === 403 ||
+                    response.status >= 500 ||
                     !response.ok
                 ) {
-                    return null;
+                    return {
+                        url: url.href,
+                        status: response.status,
+                        record: null
+                    };
+                }
+
+                if (response.status !== 200) {
+                    return {
+                        url: url.href,
+                        status: response.status,
+                        record: null
+                    };
                 }
 
                 const finalUrl = new URL(response.url || url.href);
 
-                if (finalUrl.origin !== location.origin) return null;
-                if (finalUrl.username || finalUrl.password) return null;
+                if (finalUrl.origin !== location.origin) {
+                    return {
+                        url: url.href,
+                        status: response.status,
+                        record: null
+                    };
+                }
+
+                if (finalUrl.username || finalUrl.password) {
+                    return {
+                        url: url.href,
+                        status: response.status,
+                        record: null
+                    };
+                }
 
                 const contentType =
                     response.headers.get("content-type") || "";
 
-                const result = await this.readLimited(response);
-
-                if (result.truncated || !result.text) return null;
-                if (this.isHtml(contentType, result.text)) return null;
-
                 const name = finalUrl.pathname.split("/").pop() || "";
-                const confirmed = this.hasSensitiveContent(
-                    name,
-                    contentType,
-                    result.text
-                );
+
+                let confirmed = false;
+                let contentAnalyzed = false;
+
+                if (mode === "content" || mode === "both") {
+                    const result = await this.readLimited(response);
+
+                    if (result.truncated || !result.text) {
+                        return {
+                            url: url.href,
+                            status: response.status,
+                            record: null
+                        };
+                    }
+
+                    if (this.isHtml(contentType, result.text)) {
+                        return {
+                            url: url.href,
+                            status: response.status,
+                            record: null
+                        };
+                    }
+
+                    confirmed = this.hasSensitiveContent(
+                        name,
+                        contentType,
+                        result.text
+                    );
+
+                    contentAnalyzed = true;
+                } else {
+                    response.body?.cancel().catch(() => {});
+                }
 
                 const record = this.module.analyzer.analyze(
                     finalUrl.href,
@@ -195,9 +265,16 @@
                     }
                 );
 
-                if (!record) return null;
+                if (!record) {
+                    return {
+                        url: url.href,
+                        status: response.status,
+                        record: null
+                    };
+                }
 
                 record.status = confirmed ? "confirmed" : "verified";
+
                 record.tags = [
                     ...new Set([
                         ...record.tags.filter(tag =>
@@ -211,18 +288,23 @@
 
                 record.sensitive = {
                     confirmed,
-                    contentAnalyzed: true,
+                    contentAnalyzed,
                     valuesStored: false
                 };
 
-                return record;
+                return {
+                    url: finalUrl.href,
+                    status: response.status,
+                    record
+                };
             } finally {
                 clearTimeout(timeoutId);
             }
         }
 
-        async inspectCandidates(candidates) {
+        async inspectCandidates(candidates, mode) {
             const results = [];
+            const missing = [];
 
             for (
                 let i = 0;
@@ -236,14 +318,25 @@
 
                 const batchResults = await Promise.all(
                     batch.map(url =>
-                        this.inspectFile(url).catch(() => null)
+                        this.inspectFile(url, mode).catch(() => null)
                     )
                 );
 
-                results.push(...batchResults.filter(Boolean));
+                for (const result of batchResults) {
+                    if (!result) continue;
+
+                    if (result.status === 404) {
+                        missing.push(result.url);
+                    } else if (result.record) {
+                        results.push(result.record);
+                    }
+                }
             }
 
-            return results;
+            return {
+                results,
+                missing
+            };
         }
 
         async scan(rawDirectory) {
@@ -270,14 +363,43 @@
                 throw new Error("Invalid sensitive detection mode.");
             }
 
-            const records = this.module.store.getAll();
+            const candidates = new Map();
 
-            if (
-                mode === "extension-name" ||
-                mode === "both"
-            ) {
-                for (const record of records) {
-                    if (!record.path.startsWith(directory.pathname)) continue;
+            const existingRecords = this.module.store.getAll().filter(record =>
+                typeof record.path === "string" &&
+                record.path.startsWith(directory.pathname) &&
+                record.type !== "directory"
+            );
+
+            for (const record of existingRecords) {
+                const url = new URL(record.url);
+
+                candidates.set(url.pathname, url);
+            }
+
+            for (const name of this.knownFiles) {
+                const url = new URL(name, directory.href);
+
+                candidates.set(url.pathname, url);
+            }
+
+            const candidateList = [...candidates.values()]
+                .slice(0, this.maxCandidates);
+
+            const inspected = await this.inspectCandidates(
+                candidateList,
+                mode
+            );
+
+            const removed = await this.module.store.removeMany(
+                inspected.missing
+            );
+
+            if (mode === "extension-name" || mode === "both") {
+                for (const record of this.module.store.getAll()) {
+                    if (!record.path.startsWith(directory.pathname)) {
+                        continue;
+                    }
 
                     const analyzed = this.module.analyzer.analyze(
                         record.url,
@@ -300,28 +422,18 @@
                 }
             }
 
-            if (mode === "extension-name") {
+            await this.module.store.upsertMany(inspected.results);
+
+            if (inspected.results.length === 0 && removed === 0) {
                 await this.module.store.save();
-                return {
-                    candidatesChecked: 0,
-                    sensitiveFound: this.module.store.getSensitive().length,
-                    scannedAt: new Date().toISOString()
-                };
             }
 
-            const candidates = this.knownFiles
-                .slice(0, this.maxCandidates)
-                .map(name => new URL(name, directory.href));
-
-            const results = await this.inspectCandidates(candidates);
-
-            await this.module.store.upsertMany(results);
-
             return {
-                candidatesChecked: candidates.length,
-                sensitiveFound: results.filter(record =>
-                    record.tags.includes("sensitive-confirmed")
+                candidatesChecked: candidateList.length,
+                sensitiveFound: this.module.store.getSensitive().filter(
+                    record => record.path.startsWith(directory.pathname)
                 ).length,
+                removed,
                 scannedAt: new Date().toISOString()
             };
         }
