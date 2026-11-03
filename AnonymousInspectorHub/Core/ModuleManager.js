@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -448,6 +447,8 @@
                 return null;
             }
 
+            let instance = null;
+
             try {
                 const result =
                     await this.Framework.Storage.getResult(
@@ -458,12 +459,17 @@
                     return null;
                 }
 
-                const instance = new ModuleClass();
+                instance = new ModuleClass();
 
-                await instance.restoreResult(
+                const restored = await instance.restoreResult(
                     result.data,
                     scopeInfo.context
                 );
+
+                if (restored === false) {
+                    await this.destroyInstance(instance);
+                    return null;
+                }
 
                 if (!instance.available) {
                     instance.available = true;
@@ -477,6 +483,10 @@
                 return instance;
 
             } catch (error) {
+                if (instance) {
+                    await this.destroyInstance(instance);
+                }
+
                 console.error(
                     "[Anonymous Inspector] Cached result restore failed:",
                     id,
@@ -814,8 +824,27 @@
                 scope
             );
 
-            if (this.activeInstances.has(instanceKey)) {
-                return this.activeInstances.get(instanceKey);
+            const activeInstance =
+                this.activeInstances.get(instanceKey);
+
+            if (activeInstance) {
+                const ttl = await this.getEffectiveTTL(
+                    id,
+                    ModuleClass
+                );
+
+                const cachedRecord = await this.getScanRecord(
+                    id,
+                    scope
+                );
+
+                if (this.isScanRecordValid(cachedRecord, ttl)) {
+                    return activeInstance;
+                }
+
+                this.activeInstances.delete(instanceKey);
+
+                await this.destroyInstance(activeInstance);
             }
 
             if (this.initializingPromises.has(instanceKey)) {

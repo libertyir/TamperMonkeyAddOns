@@ -39,7 +39,6 @@
                 "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/"
             ).replace(/\/?$/, "/");
 
-            // Tampermonkey APIs injected by main.js
             this.gm = options.gm || {};
 
             this.configKey = "aih_general_config";
@@ -875,7 +874,26 @@
         // --------------------------------------------------
 
         async runModules(moduleIds) {
-            const ids = [...new Set(moduleIds)];
+            const requestedIds = [...new Set(moduleIds)];
+
+            const disabled = new Set(
+                this.getDisabledModules()
+            );
+
+            const ids = requestedIds.filter(
+                id => !disabled.has(id)
+            );
+
+            // Remove instances of modules that are now disabled.
+            const activeIds = this.moduleManager.getActiveIds();
+
+            const disabledActiveIds = activeIds.filter(
+                id => disabled.has(id)
+            );
+
+            for (const id of disabledActiveIds) {
+                await this.moduleManager.destroy(id);
+            }
 
             this.uiManager.showProgress(
                 ids.length
@@ -884,6 +902,7 @@
             );
 
             if (!ids.length) {
+                this.uiManager.refreshMenu();
                 this.uiManager.hideProgress();
 
                 return {
