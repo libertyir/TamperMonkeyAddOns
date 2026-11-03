@@ -258,7 +258,7 @@
             }));
         }
 
-        setModuleEnabled(id, enabled) {
+        async setModuleEnabled(id, enabled) {
             if (!this.configuredModuleIds.includes(id)) {
                 throw new Error("Unknown module: " + id);
             }
@@ -281,6 +281,14 @@
                 this.modulesConfigKey,
                 [...disabled]
             );
+
+            if (!enabled && this.moduleManager) {
+                await this.moduleManager.destroy(id);
+            }
+
+            if (this.uiManager) {
+                this.uiManager.refreshMenu();
+            }
 
             return enabled;
         }
