@@ -38,7 +38,9 @@
         "GitConfig_Viewer",
         "PhpInfo_Viewer",
         "EnvFile_Viewer",
+        "WebStructureInspector",
 
+        "DebugModeInspector",
         "SwaggerUI_Viewer",
         "OpenAPI_Viewer",
         "ApiDocs_Viewer",

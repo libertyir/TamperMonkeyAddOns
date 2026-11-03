@@ -1,3 +1,3 @@
 {
-  "modules": [ "GeneralUI", "SitesUI", "ModulesUI", "DataManagerUI", "StorageUI", "CloudStorageUI" ]
+  "modules": [ "GeneralUI", "SitesUI", "ModulesUI", "DataManagerUI", "StorageUI", "CloudStorageUI", "WebStructureInspectorUI" ]
 }
