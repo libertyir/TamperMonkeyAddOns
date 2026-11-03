@@ -38,7 +38,7 @@
 
             try {
                 const response = await fetch(location.href, {
-                    method: "HEAD",
+                    method: "GET",
                     credentials: "same-origin",
                     cache: "no-store",
                     redirect: "follow",
