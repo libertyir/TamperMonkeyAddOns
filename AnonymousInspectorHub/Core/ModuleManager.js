@@ -206,21 +206,16 @@
         }
 
         async getEffectiveTTL(id, ModuleClass) {
-            const settings = await this.getModuleSettings(id);
-
-            if (
-                Object.prototype.hasOwnProperty.call(
-                    settings,
-                    "ttl"
-                )
-            ) {
-                return this.normalizeTTL(
-                    settings.ttl,
-                    this.getScanPolicy(ModuleClass).defaultTTL
+            const policy =
+                await this.Framework.getModuleScanPolicy(
+                    id,
+                    ModuleClass
                 );
-            }
 
-            return this.getScanPolicy(ModuleClass).defaultTTL;
+            return this.normalizeTTL(
+                policy.ttl,
+                this.getScanPolicy(ModuleClass).defaultTTL
+            );
         }
 
         // --------------------------------------------------
@@ -667,7 +662,6 @@
             } catch (error) {
                 console.error(
                     "[Anonymous Inspector] Module metadata save failed:",
-                    id,
                     error
                 );
             }
