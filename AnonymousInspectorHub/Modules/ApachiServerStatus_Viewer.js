@@ -1,3 +1,4 @@
+
 (function (Framework) {
     "use strict";
 
@@ -7,6 +8,11 @@
         static title = "Apache Server Status";
         static description = "Inspect exposed Apache server status";
         static icon = "🖥️";
+
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -85,8 +91,81 @@
                 reportText: this.content.body
                     ? this.content.body.innerText || ""
                     : "",
+                reportHtml: this.content.body
+                    ? this.content.body.innerHTML || ""
+                    : "",
                 links: [...new Set(this.links)]
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                typeof data.statusUrl !== "string" ||
+                typeof data.reportHtml !== "string" ||
+                typeof data.reportText !== "string" ||
+                !Array.isArray(data.links)
+            ) {
+                return false;
+            }
+
+            let statusUrl;
+
+            try {
+                statusUrl = new URL(data.statusUrl);
+
+                if (
+                    statusUrl.protocol !== "http:" &&
+                    statusUrl.protocol !== "https:"
+                ) {
+                    return false;
+                }
+            } catch (_) {
+                return false;
+            }
+
+            if (
+                data.links.some(link => {
+                    if (typeof link !== "string") {
+                        return true;
+                    }
+
+                    try {
+                        const url = new URL(link);
+
+                        return (
+                            url.protocol !== "http:" &&
+                            url.protocol !== "https:"
+                        );
+                    } catch (_) {
+                        return true;
+                    }
+                })
+            ) {
+                return false;
+            }
+
+            const parsed = new DOMParser().parseFromString(
+                "<!DOCTYPE html><html><body>" +
+                data.reportHtml +
+                "</body></html>",
+                "text/html"
+            );
+
+            if (!this.isApacheStatus(parsed)) {
+                return false;
+            }
+
+            this.content = parsed;
+            this.statusUrl = statusUrl.href;
+            this.scannedAt =
+                typeof data.scannedAt === "string"
+                    ? data.scannedAt
+                    : null;
+            this.links = [...new Set(data.links)];
+            this.available = true;
+
+            return true;
         }
 
         isApacheStatus(doc) {

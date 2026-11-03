@@ -1,3 +1,4 @@
+
 (function (Framework) {
     "use strict";
 
@@ -7,10 +8,16 @@
         static description = "Discover administrative interfaces on the current domain";
         static icon = "🔐";
 
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
+
         constructor(...args) {
             super(...args);
             this.available = false;
             this.results = [];
+            this.scannedAt = null;
             this.timeout = 7000;
             this.maxResponseSize = 128 * 1024;
         }
@@ -149,18 +156,50 @@
                 a.url.localeCompare(b.url)
             );
 
+            this.scannedAt = new Date().toISOString();
             this.available = this.results.length > 0;
         }
 
         getResult() {
             return {
                 page: location.href,
-                scannedAt: new Date().toISOString(),
+                scannedAt: this.scannedAt || new Date().toISOString(),
                 results: this.results.map(result => ({
                     ...result,
                     indicators: [...result.indicators]
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.results) ||
+                !data.results.every(result =>
+                    result &&
+                    typeof result.url === "string" &&
+                    Array.isArray(result.indicators) &&
+                    result.indicators.every(
+                        indicator => typeof indicator === "string"
+                    )
+                )
+            ) {
+                return false;
+            }
+
+            this.results = data.results.map(result => ({
+                ...result,
+                indicators: [...result.indicators]
+            }));
+
+            this.scannedAt =
+                typeof data.scannedAt === "string"
+                    ? data.scannedAt
+                    : null;
+
+            this.available = this.results.length > 0;
+
+            return true;
         }
 
         async checkTarget(target) {
@@ -639,7 +678,7 @@
                     () => Framework.copy(
                         JSON.stringify({
                             page: location.href,
-                            scannedAt: new Date().toISOString(),
+                            scannedAt: this.scannedAt || new Date().toISOString(),
                             results: this.results
                         }, null, 2)
                     )

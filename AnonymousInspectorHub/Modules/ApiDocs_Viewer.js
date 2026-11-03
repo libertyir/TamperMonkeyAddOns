@@ -6,6 +6,10 @@
         static title = "API Docs Viewer";
         static description = "Discover API documentation platforms and interfaces";
         static icon = "📚";
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
@@ -58,7 +62,7 @@
                 "docs"
             ];
 
-            const base = new URL(".", location.href);
+            const base = new URL("/", location.origin);
             const checked = new Set();
 
             for (const path of paths) {
@@ -130,6 +134,35 @@
                     indicators: [...page.indicators]
                 }))
             };
+        }
+
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.foundPages) ||
+                !data.foundPages.every(page =>
+                    page &&
+                    typeof page.url === "string" &&
+                    typeof page.title === "string" &&
+                    typeof page.platform === "string" &&
+                    Array.isArray(page.indicators)
+                )
+            ) {
+                return false;
+            }
+
+            this.foundPages = data.foundPages.map(page => ({
+                url: page.url,
+                path: page.path || "",
+                title: page.title,
+                platform: page.platform,
+                indicators: [...page.indicators]
+            }));
+
+            this.scannedAt = data.scannedAt || null;
+            this.available = true;
+
+            return true;
         }
 
         detectPlatform(html) {

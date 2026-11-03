@@ -1,3 +1,4 @@
+
 (function (Framework) {
     "use strict";
 
@@ -6,6 +7,11 @@
         static title = "Server Info Viewer";
         static description = "Inspect web server headers and technology fingerprints";
         static icon = "🖥";
+
+        static scanPolicy = {
+            scope: "origin-root",
+            defaultTTL: "permanent"
+        };
 
         constructor() {
             super();
@@ -103,6 +109,39 @@
                     }))
                 }
             };
+        }
+
+        async restoreResult(data) {
+            if (
+                !data ||
+                !data.info ||
+                typeof data.info !== "object" ||
+                !data.info.headers ||
+                !Array.isArray(data.info.technologies) ||
+                !Array.isArray(data.info.security) ||
+                !Array.isArray(data.info.infrastructure)
+            ) {
+                throw new Error(
+                    "Invalid cached ServerInfo result."
+                );
+            }
+
+            this.info = {
+                ...data.info,
+                headers: { ...data.info.headers },
+                technologies: [...data.info.technologies],
+                security: data.info.security.map(item => ({ ...item })),
+                infrastructure: data.info.infrastructure.map(item => ({
+                    ...item,
+                    indicators: Array.isArray(item.indicators)
+                        ? [...item.indicators]
+                        : []
+                }))
+            };
+
+            this.scannedAt = data.scannedAt || null;
+            this.error = null;
+            this.available = true;
         }
 
         detectTechnologies(headers) {
