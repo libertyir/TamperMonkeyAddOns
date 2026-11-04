@@ -241,7 +241,9 @@
                 namespace.RequestManager || null;
 
             this.platformDetector =
-                namespace.PlatformDetector || null;
+                typeof namespace.PlatformDetector === "function"
+                    ? new namespace.PlatformDetector()
+                    : null;
 
             this.evidenceAnalyzer =
                 namespace.EvidenceAnalyzer || null;
