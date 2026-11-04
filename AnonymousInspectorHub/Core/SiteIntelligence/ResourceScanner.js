@@ -27,7 +27,6 @@
 
             this.queue = [];
             this.activeCount = 0;
-
             this.inFlight = new Map();
 
             this.initialized = false;
@@ -96,6 +95,7 @@
                 needContent: options.needContent === true,
                 ttl,
                 source: options.source || null,
+
                 maxContentSize:
                     Number.isInteger(options.maxContentSize)
                         ? Math.max(
@@ -126,8 +126,12 @@
 
                 if (
                     settings.needContent &&
-                    !result.contentAvailable
+                    !result.contentAvailable &&
+                    result.status >= 200 &&
+                    result.status < 300
                 ) {
+                    this.ensureInitialized();
+
                     return this.scan(normalizedUrl, {
                         ...options,
                         force: true
@@ -187,7 +191,15 @@
                 this.activeCount++;
 
                 Promise.resolve()
-                    .then(() => task.operation())
+                    .then(() => {
+                        if (this.destroyed) {
+                            throw new Error(
+                                "ResourceScanner has been destroyed."
+                            );
+                        }
+
+                        return task.operation();
+                    })
                     .then(task.resolve, task.reject)
                     .finally(() => {
                         this.activeCount--;
@@ -239,11 +251,12 @@
 
             const head = await this.request(url, "HEAD");
 
-            // HEAD is not supported by some servers.
             if (
                 head.status === 405 ||
                 head.status === 501
             ) {
+                this.releaseResponse(head);
+
                 return this.processGetFallback(
                     url,
                     options
@@ -262,40 +275,46 @@
         // --------------------------------------------------
 
         async processHeadResult(url, response, options) {
-            this.validateFinalUrl(response.url || url);
+            try {
+                this.validateFinalUrl(response.url || url);
 
-            const status = response.status;
-            const headers = response.headers;
+                const status = response.status;
+                const headers = response.headers;
 
-            if (status >= 200 && status < 300) {
-                if (options.needContent) {
-                    return this.processGet(
+                if (status >= 200 && status < 300) {
+                    if (options.needContent) {
+                        return this.processGet(
+                            url,
+                            options
+                        );
+                    }
+
+                    return this.saveResult(
                         url,
-                        options
+                        {
+                            status: "accessible",
+                            httpStatus: status,
+                            headers,
+                            contentType:
+                                headers["content-type"] || null,
+                            contentLength: this.parseLength(
+                                headers["content-length"]
+                            ),
+                            source: options.source
+                        },
+                        null
                     );
                 }
 
-                return this.saveResult(
+                return this.saveHttpFailure(
                     url,
-                    {
-                        status: "accessible",
-                        httpStatus: status,
-                        headers,
-                        contentType: headers["content-type"] || null,
-                        contentLength: this.parseLength(
-                            headers["content-length"]
-                        ),
-                        source: options.source
-                    },
-                    null
+                    response,
+                    options
                 );
-            }
 
-            return this.saveHttpFailure(
-                url,
-                response,
-                options
-            );
+            } finally {
+                this.releaseResponse(response);
+            }
         }
 
         // --------------------------------------------------
@@ -313,62 +332,70 @@
         async processGet(url, options) {
             const response = await this.request(url, "GET");
 
-            this.validateFinalUrl(response.url || url);
+            try {
+                this.validateFinalUrl(response.url || url);
 
-            const status = response.status;
+                const status = response.status;
 
-            if (status < 200 || status >= 300) {
-                return this.saveHttpFailure(
+                if (status < 200 || status >= 300) {
+                    return this.saveHttpFailure(
+                        url,
+                        response,
+                        options
+                    );
+                }
+
+                let content = null;
+                let contentComplete = false;
+
+                if (options.needContent) {
+                    const result = await this.readLimited(
+                        response,
+                        options.maxContentSize
+                    );
+
+                    content = result.content;
+                    contentComplete = !result.truncated;
+
+                } else {
+                    await this.cancelResponse(response);
+                }
+
+                const headers = response.headers;
+
+                const result = await this.saveResult(
                     url,
-                    response,
-                    options
+                    {
+                        status: "accessible",
+                        httpStatus: status,
+                        headers,
+                        contentType:
+                            headers["content-type"] || null,
+                        contentLength: this.parseLength(
+                            headers["content-length"]
+                        ),
+                        source: options.source
+                    },
+                    options.needContent
+                        ? {
+                            content,
+                            contentComplete,
+                            contentTruncated: !contentComplete,
+                            contentFetchedAt:
+                                new Date().toISOString()
+                        }
+                        : null
                 );
+
+                return {
+                    ...result,
+                    content,
+                    contentAvailable: contentComplete
+                };
+
+            } finally {
+                this.releaseResponse(response);
             }
-
-            let content = null;
-            let contentComplete = false;
-
-            if (options.needContent) {
-                const result = await this.readLimited(
-                    response,
-                    options.maxContentSize
-                );
-
-                content = result.content;
-                contentComplete = !result.truncated;
-            } else {
-                response.body?.cancel().catch(() => {});
-            }
-
-            const headers = response.headers;
-
-            const result = await this.saveResult(
-                url,
-                {
-                    status: "accessible",
-                    httpStatus: status,
-                    headers,
-                    contentType: headers["content-type"] || null,
-                    contentLength: this.parseLength(
-                        headers["content-length"]
-                    ),
-                    source: options.source
-                },
-                options.needContent
-                    ? {
-                        content,
-                        contentComplete,
-                        contentTruncated: !contentComplete,
-                        contentFetchedAt: new Date().toISOString()
-                    }
-                    : null
-            );
-
-            return {
-                ...result,
-                content,
-                contentAvailable: contentComplete
-            };
         }
 
         // --------------------------------------------------
@@ -378,14 +405,27 @@
         async saveHttpFailure(url, response, options) {
             const status = response.status;
 
-            response.body?.cancel().catch(() => {});
+            await this.cancelResponse(response);
+
+            if (status === 404) {
+                await this.repository.remove(url);
+
+                return {
+                    url,
+                    source: "network",
+                    status,
+                    record: null,
+                    content: null,
+                    contentAvailable: false,
+                    resourceStatus: "not-found"
+                };
+            }
 
             let resourceStatus = "http-error";
 
             if (status === 403) {
                 resourceStatus = "access-denied";
-            } else if (status === 404) {
-                resourceStatus = "not-found";
+
             } else if (status >= 300 && status < 400) {
                 resourceStatus = "redirect";
             }
@@ -444,6 +484,17 @@
                 this.timeout
             );
 
+            let released = false;
+
+            const release = () => {
+                if (released) {
+                    return;
+                }
+
+                released = true;
+                clearTimeout(timeoutId);
+            };
+
             try {
                 const response = await fetch(url, {
                     method,
@@ -463,11 +514,41 @@
                     headers: this.extractHeaders(
                         response.headers
                     ),
-                    body: response.body
+                    body: response.body,
+                    release
                 };
 
-            } finally {
-                clearTimeout(timeoutId);
+            } catch (error) {
+                release();
+
+                if (error.name === "AbortError") {
+                    throw new Error(
+                        "Request timed out: " + url
+                    );
+                }
+
+                throw error;
+            }
+        }
+
+        releaseResponse(response) {
+            if (
+                response &&
+                typeof response.release === "function"
+            ) {
+                response.release();
+            }
+        }
+
+        async cancelResponse(response) {
+            if (!response?.body) {
+                return;
+            }
+
+            try {
+                await response.body.cancel();
+            } catch {
+                // Ignore cancellation errors.
             }
         }
 
@@ -654,12 +735,13 @@
 
             for (const task of pending) {
                 task.reject(
-                    new Error("ResourceScanner has been destroyed.")
+                    new Error(
+                        "ResourceScanner has been destroyed."
+                    )
                 );
             }
 
             // Active fetch operations finish or timeout naturally.
-            // Their results are not forcibly interrupted here.
         }
     }
 
