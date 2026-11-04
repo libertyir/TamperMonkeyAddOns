@@ -164,6 +164,32 @@
                 await this.loadSettings();
                 await this.store.load();
 
+                const siteIntelligence = Framework.SiteIntelligence;
+
+                if (!siteIntelligence || typeof siteIntelligence.getAllResources !== "function") {
+                    throw new Error("Site Intelligence service is unavailable.");
+                }
+
+                const centralResources = await siteIntelligence.getAllResources();
+
+                if (centralResources.length) {
+                    await this.store.upsertMany(
+                        centralResources.map(record => ({
+                            url: record.url,
+                            path: new URL(record.url).pathname,
+                            name: new URL(record.url).pathname.split("/").filter(Boolean).pop() || "/",
+                            type: new URL(record.url).pathname.endsWith("/") ? "directory" : "file",
+                            status: record.status === "accessible" ? "verified" : record.status,
+                            sources: record.sources || [],
+                            tags: record.tags || [],
+                            contentType: record.contentType || null,
+                            size: record.contentLength || null,
+                            httpStatus: record.httpStatus ?? null,
+                            directoryListing: Boolean(record.metadata?.directoryListing)
+                        }))
+                    );
+                }
+
                 // Passive collection only. No directory requests are made here.
                 await this.collector.collectCurrentPage();
                 this.collector.start();
