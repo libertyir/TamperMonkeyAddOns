@@ -3,7 +3,6 @@
     "use strict";
 
     class SiteIntelligenceDialog {
-        static preferredMode = "open";
 
         constructor() {
             this.service = null;
@@ -15,6 +14,7 @@
             this.minimizedButton = null;
 
             this.currentStatus = null;
+            this.preferredMode = "open";
             this.destroyed = false;
         }
 
@@ -342,12 +342,7 @@
                 active.length > 0 ||
                 queued.length > 0;
 
-            if (!processing) {
-                this.hide();
-                return;
-            }
-
-            if (SiteIntelligenceDialog.preferredMode === "minimized") {
+            if (this.preferredMode === "minimized") {
                 this.showMinimized();
             } else {
                 this.showDialog();
@@ -371,12 +366,12 @@
         }
 
         minimize() {
-            SiteIntelligenceDialog.preferredMode = "minimized";
+            this.preferredMode = "minimized";
             this.showMinimized();
         }
 
         restore() {
-            SiteIntelligenceDialog.preferredMode = "open";
+            this.preferredMode = "open";
             this.showDialog();
 
             if (this.currentStatus) {
@@ -401,7 +396,7 @@
             const activeCount = active.length;
             const queuedCount = queued.length;
 
-            const total = activeCount + queuedCount;
+            const total = activeCount + queuedCount + recent.length;
 
             this.dialog.querySelector(
                 '[data-count="active"]'
@@ -423,13 +418,13 @@
                 task => task.status === "failed"
             ).length;
 
-            const processed = completed + failed + total;
+            const processed = completed + failed + activeCount + queuedCount;
 
             const percentage = processed > 0
                 ? Math.round(
                     ((completed + failed) / processed) * 100
                 )
-                : 0;
+                : 100;
 
             this.dialog.querySelector(
                 ".aih-progress-bar"
@@ -440,13 +435,14 @@
 
             const visibleTasks = [
                 ...active,
-                ...queued
+                ...queued,
+                ...recent.slice().reverse()
             ];
 
             if (!visibleTasks.length) {
                 const empty = document.createElement("div");
                 empty.className = "aih-empty";
-                empty.textContent = "No pending tasks.";
+                empty.textContent = "No scan tasks have been submitted.";
                 list.appendChild(empty);
                 return;
             }
