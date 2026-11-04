@@ -20,6 +20,7 @@
             this.initialized = false;
             this.initializePromise = null;
             this.writeQueue = Promise.resolve();
+            this.pendingWrites = 0;
         }
 
         // --------------------------------------------------
@@ -153,18 +154,45 @@
         // --------------------------------------------------
 
         cloneRecord(record) {
+            const cloneValue = value => {
+                if (
+                    value === null ||
+                    typeof value !== "object"
+                ) {
+                    return value;
+                }
+
+                if (typeof structuredClone === "function") {
+                    try {
+                        return structuredClone(value);
+                    } catch {
+                        // Fall through to JSON cloning.
+                    }
+                }
+
+                try {
+                    return JSON.parse(JSON.stringify(value));
+                } catch {
+                    return Array.isArray(value)
+                        ? [...value]
+                        : { ...value };
+                }
+            };
+
             return {
                 ...record,
+
                 tags: Array.isArray(record.tags)
                     ? [...record.tags]
                     : [],
+
                 sources: Array.isArray(record.sources)
                     ? [...record.sources]
                     : [],
-                headers: record.headers &&
-                    typeof record.headers === "object"
-                        ? { ...record.headers }
-                        : {}
+
+                headers: cloneValue(record.headers || {}),
+                metadata: cloneValue(record.metadata || {}),
+                analysis: cloneValue(record.analysis ?? null)
             };
         }
 
@@ -172,6 +200,8 @@
             const now = new Date().toISOString();
 
             return {
+                ...data,
+
                 url,
                 origin: this.origin,
 
@@ -212,7 +242,7 @@
                         : [],
 
                 analysis:
-                    data.analysis || null,
+                    data.analysis ?? null,
 
                 metadata:
                     data.metadata || {}
@@ -239,8 +269,20 @@
                 );
             };
 
-            this.writeQueue =
-                this.writeQueue.then(operation, operation);
+            this.pendingWrites++;
+
+            const queuedOperation =
+                this.writeQueue.then(
+                    operation,
+                    operation
+                );
+
+            this.writeQueue = queuedOperation.finally(() => {
+                this.pendingWrites = Math.max(
+                    0,
+                    this.pendingWrites - 1
+                );
+            });
 
             return this.writeQueue;
         }
@@ -303,9 +345,23 @@
                 ? {
                     ...existing,
                     ...updates,
+
                     url: normalizedUrl,
                     origin: this.origin,
-                    lastSeenAt: now
+                    lastSeenAt: now,
+
+                    metadata: {
+                        ...(existing.metadata || {}),
+                        ...(updates.metadata || {})
+                    },
+
+                    analysis:
+                        Object.prototype.hasOwnProperty.call(
+                            updates,
+                            "analysis"
+                        )
+                            ? updates.analysis
+                            : existing.analysis
                 }
                 : this.createRecord(
                     normalizedUrl,
@@ -373,9 +429,11 @@
         async registerDiscovery(url, options = {}) {
             return this.upsert(url, {
                 status: "discovered",
+
                 sources: options.source
                     ? [options.source]
                     : [],
+
                 tags: options.tags || [],
                 metadata: options.metadata || {}
             });
@@ -406,7 +464,11 @@
 
                 tags: result.tags || [],
 
-                metadata: result.metadata || {}
+                metadata: result.metadata || {},
+
+                sources: result.source
+                    ? [result.source]
+                    : []
             });
         }
 
@@ -529,7 +591,7 @@
                 initialized: this.initialized,
                 origin: this.origin,
                 totalResources: this.records.size,
-                pendingWrites: Boolean(this.writeQueue)
+                pendingWrites: this.pendingWrites
             };
         }
 
