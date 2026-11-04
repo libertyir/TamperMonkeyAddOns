@@ -1,3 +1,4 @@
+
 (function (root) {
     "use strict";
 
@@ -381,6 +382,171 @@
         }
 
         // --------------------------------------------------
+        // SITE INTELLIGENCE API
+        // --------------------------------------------------
+
+        createSiteIntelligenceAPI() {
+            const factory = this;
+
+            return Object.freeze({
+
+                // Resource discovery
+
+                discover(url, options = {}) {
+                    return factory.invoke(
+                        "siteIntelligenceDiscover",
+                        [url, options]
+                    );
+                },
+
+                discoverMany(urls, options = {}) {
+                    return factory.invoke(
+                        "siteIntelligenceDiscoverMany",
+                        [urls, options]
+                    );
+                },
+
+                // Resource scanning
+
+                scan(url, options = {}) {
+                    return factory.invoke(
+                        "siteIntelligenceScan",
+                        [url, options]
+                    );
+                },
+
+                scanMany(urls, options = {}) {
+                    return factory.invoke(
+                        "siteIntelligenceScanMany",
+                        [urls, options]
+                    );
+                },
+
+                scanForModule(moduleId, ModuleClass, url, options = {}) {
+                    return factory.invoke(
+                        "siteIntelligenceScanForModule",
+                        [moduleId, ModuleClass, url, options]
+                    );
+                },
+
+                // Resource access
+
+                getResource(url) {
+                    return factory.invoke(
+                        "siteIntelligenceGetResource",
+                        [url]
+                    );
+                },
+
+                getAllResources() {
+                    return factory.invoke(
+                        "siteIntelligenceGetAllResources",
+                        []
+                    );
+                },
+
+                hasResource(url) {
+                    return factory.invoke(
+                        "siteIntelligenceHasResource",
+                        [url]
+                    );
+                },
+
+                isResourceFresh(url, ttl) {
+                    return factory.invoke(
+                        "siteIntelligenceIsResourceFresh",
+                        [url, ttl]
+                    );
+                },
+
+                // Site structure
+
+                getStructure(options = {}) {
+                    return factory.invoke(
+                        "siteIntelligenceGetStructure",
+                        [options]
+                    );
+                },
+
+                getNode(path) {
+                    return factory.invoke(
+                        "siteIntelligenceGetNode",
+                        [path]
+                    );
+                },
+
+                getChildren(path) {
+                    return factory.invoke(
+                        "siteIntelligenceGetChildren",
+                        [path]
+                    );
+                },
+
+                getParent(path) {
+                    return factory.invoke(
+                        "siteIntelligenceGetParent",
+                        [path]
+                    );
+                },
+
+                getAncestors(path) {
+                    return factory.invoke(
+                        "siteIntelligenceGetAncestors",
+                        [path]
+                    );
+                },
+
+                // Resource filtering
+
+                getResourcesByStatus(status) {
+                    return factory.invoke(
+                        "siteIntelligenceGetResourcesByStatus",
+                        [status]
+                    );
+                },
+
+                getResourcesBySource(source) {
+                    return factory.invoke(
+                        "siteIntelligenceGetResourcesBySource",
+                        [source]
+                    );
+                },
+
+                // Statistics and status
+
+                getStatistics() {
+                    return factory.invoke(
+                        "siteIntelligenceGetStatistics",
+                        []
+                    );
+                },
+
+                getStatus() {
+                    return factory.invoke(
+                        "siteIntelligenceGetStatus",
+                        []
+                    );
+                },
+
+                // Events
+
+                on(event, callback) {
+                    return factory.invoke(
+                        "siteIntelligenceOn",
+                        [event, callback]
+                    );
+                },
+
+                off(event, callback) {
+                    return factory.invoke(
+                        "siteIntelligenceOff",
+                        [event, callback]
+                    );
+                }
+            });
+        }
+
+        // --------------------------------------------------
         // MODULE SCAN POLICY
         // --------------------------------------------------
 
@@ -608,7 +774,11 @@
                 Crypto: factory.createCryptoAPI(),
 
                 // Storage services
-                Storage: factory.createStorageAPI()
+                Storage: factory.createStorageAPI(),
+
+                // Site Intelligence service
+                SiteIntelligence:
+                    factory.createSiteIntelligenceAPI()
             };
 
             this.framework = Object.freeze(api);
