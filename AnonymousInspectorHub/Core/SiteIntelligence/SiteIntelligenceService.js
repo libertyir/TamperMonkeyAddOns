@@ -37,6 +37,7 @@
             this.initialized = false;
             this.destroyed = false;
             this.initializePromise = null;
+            this.destroyPromise = null;
         }
 
         // --------------------------------------------------
@@ -69,75 +70,96 @@
         }
 
         async initializeService(options) {
-            const origin =
-                options.origin ||
-                this.origin;
+            try {
+                const origin =
+                    options.origin ||
+                    this.origin;
 
-            if (!origin) {
+                if (!origin) {
+                    throw new Error(
+                        "SiteIntelligenceService requires a valid origin."
+                    );
+                }
+
+                this.origin = new URL(origin).origin;
+
+                const RepositoryClass =
+                    root.AnonymousInspectorResourceRepository;
+
+                const ScannerClass =
+                    root.AnonymousInspectorResourceScanner;
+
+                const StructureClass =
+                    root.AnonymousInspectorSiteStructureManager;
+
+                if (typeof RepositoryClass !== "function") {
+                    throw new Error(
+                        "ResourceRepository is not loaded."
+                    );
+                }
+
+                if (typeof ScannerClass !== "function") {
+                    throw new Error(
+                        "ResourceScanner is not loaded."
+                    );
+                }
+
+                if (typeof StructureClass !== "function") {
+                    throw new Error(
+                        "SiteStructureManager is not loaded."
+                    );
+                }
+
+                this.repository = new RepositoryClass({
+                    storage: this.storage
+                });
+
+                await this.repository.initialize({
+                    origin: this.origin
+                });
+
+                this.ensureNotDestroyed();
+
+                this.scanner = new ScannerClass({
+                    repository: this.repository,
+                    ...this.scannerOptions
+                });
+
+                this.scanner.initialize();
+
+                this.structure = new StructureClass({
+                    repository: this.repository
+                });
+
+                await this.structure.initialize({
+                    origin: this.origin
+                });
+
+                this.ensureNotDestroyed();
+
+                this.initialized = true;
+
+                this.emit("service:initialized", {
+                    origin: this.origin
+                });
+
+                return this;
+
+            } catch (error) {
+                await this.cleanupComponents();
+
+                this.initialized = false;
+
+                throw error;
+            }
+        }
+
+        ensureNotDestroyed() {
+            if (this.destroyed) {
                 throw new Error(
-                    "SiteIntelligenceService requires a valid origin."
+                    "SiteIntelligenceService has been destroyed."
                 );
             }
-
-            this.origin = new URL(origin).origin;
-
-            const RepositoryClass =
-                root.AnonymousInspectorResourceRepository;
-
-            const ScannerClass =
-                root.AnonymousInspectorResourceScanner;
-
-            const StructureClass =
-                root.AnonymousInspectorSiteStructureManager;
-
-            if (typeof RepositoryClass !== "function") {
-                throw new Error(
-                    "ResourceRepository is not loaded."
-                );
-            }
-
-            if (typeof ScannerClass !== "function") {
-                throw new Error(
-                    "ResourceScanner is not loaded."
-                );
-            }
-
-            if (typeof StructureClass !== "function") {
-                throw new Error(
-                    "SiteStructureManager is not loaded."
-                );
-            }
-
-            this.repository = new RepositoryClass({
-                storage: this.storage
-            });
-
-            await this.repository.initialize({
-                origin: this.origin
-            });
-
-            this.scanner = new ScannerClass({
-                repository: this.repository,
-                ...this.scannerOptions
-            });
-
-            this.scanner.initialize();
-
-            this.structure = new StructureClass({
-                repository: this.repository
-            });
-
-            await this.structure.initialize({
-                origin: this.origin
-            });
-
-            this.initialized = true;
-
-            this.emit("service:initialized", {
-                origin: this.origin
-            });
-
-            return this;
         }
 
         ensureInitialized() {
@@ -279,25 +301,37 @@
                 );
             }
 
-            const records = [];
+            try {
+                const records =
+                    await this.structure.registerResources(
+                        resources,
+                        options
+                    );
 
-            for (const resource of resources) {
-                const record = await this.discover(
-                    typeof resource === "string"
-                        ? resource
-                        : resource.url,
-                    {
-                        ...options,
-                        ...(typeof resource === "object"
-                            ? resource
-                            : {})
-                    }
-                );
+                for (const record of records) {
+                    this.emit("resource:discovered", {
+                        url: record.url,
+                        record
+                    });
+                }
 
-                records.push(record);
+                if (records.length) {
+                    this.emit("structure:updated", {
+                        action: "resources-discovered",
+                        count: records.length
+                    });
+                }
+
+                return records;
+
+            } catch (error) {
+                this.emit("error", {
+                    operation: "discoverMany",
+                    error
+                });
+
+                throw error;
             }
-
-            return records;
         }
 
         // --------------------------------------------------
@@ -346,25 +380,75 @@
                 );
             }
 
-            const uniqueUrls = [
-                ...new Set(
-                    urls.map(item =>
-                        typeof item === "string"
-                            ? item
-                            : item.url
-                    ).filter(value =>
-                        typeof value === "string"
-                    )
-                )
-            ];
+            const uniqueItems = new Map();
 
-            const results = await Promise.all(
-                uniqueUrls.map(url =>
-                    this.scan(url, options)
-                )
-            );
+            for (const item of urls) {
+                const url =
+                    typeof item === "string"
+                        ? item
+                        : item?.url;
 
-            return results;
+                if (typeof url !== "string") {
+                    continue;
+                }
+
+                const itemOptions =
+                    typeof item === "object" && item !== null
+                        ? item
+                        : {};
+
+                uniqueItems.set(url, {
+                    ...itemOptions,
+                    ...options,
+                    url
+                });
+            }
+
+            const items = [...uniqueItems.values()];
+
+            if (!items.length) {
+                return [];
+            }
+
+            let results;
+
+            try {
+                results = await Promise.all(
+                    items.map(async item => {
+                        const result =
+                            await this.scanner.scan(
+                                item.url,
+                                item
+                            );
+
+                        this.emit("resource:scanned", {
+                            url: result.url,
+                            result,
+                            record: result.record
+                        });
+
+                        return result;
+                    })
+                );
+
+                return results;
+
+            } catch (error) {
+                this.emit("error", {
+                    operation: "scanMany",
+                    error
+                });
+
+                throw error;
+
+            } finally {
+                await this.structure.refresh();
+
+                this.emit("structure:updated", {
+                    action: "resources-scanned",
+                    count: items.length
+                });
+            }
         }
 
         // --------------------------------------------------
@@ -443,16 +527,12 @@
             return this.repository.has(url);
         }
 
-        async isResourceFresh(
-            url,
-            stage = "validation",
-            ttl = "7d"
-        ) {
+        async isResourceFresh(url, ttl = "7d") {
             this.ensureInitialized();
 
             return this.repository.isResourceFresh(
                 url,
-                stage,
+                "validation",
                 ttl
             );
         }
@@ -559,36 +639,65 @@
         }
 
         // --------------------------------------------------
-        // SHUTDOWN
+        // COMPONENT CLEANUP
         // --------------------------------------------------
 
-        async destroy() {
-            if (this.destroyed) {
-                return;
-            }
-
-            this.emit("service:destroying");
-
+        async cleanupComponents() {
             if (this.scanner) {
                 this.scanner.destroy();
+                this.scanner = null;
             }
 
             if (this.structure) {
                 this.structure.destroy();
+                this.structure = null;
             }
 
             if (this.repository) {
-                await this.repository.destroy();
+                try {
+                    await this.repository.destroy();
+                } finally {
+                    this.repository = null;
+                }
             }
+        }
+
+        // --------------------------------------------------
+        // SHUTDOWN
+        // --------------------------------------------------
+
+        async destroy() {
+            if (this.destroyPromise) {
+                return this.destroyPromise;
+            }
+
+            if (this.destroyed) {
+                return;
+            }
+
+            this.destroyed = true;
+
+            this.destroyPromise = this.destroyService();
+
+            return this.destroyPromise;
+        }
+
+        async destroyService() {
+            this.emit("service:destroying");
+
+            if (this.initializePromise) {
+                try {
+                    await this.initializePromise;
+                } catch {
+                    // Initialization failure already performs cleanup.
+                }
+            }
+
+            await this.cleanupComponents();
 
             this.listeners.clear();
 
-            this.repository = null;
-            this.scanner = null;
-            this.structure = null;
-
             this.initialized = false;
-            this.destroyed = true;
             this.origin = null;
         }
     }
