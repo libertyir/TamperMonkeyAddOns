@@ -251,10 +251,51 @@
                 directoryRecord.directoryListing = true;
                 directoryRecord.tags.push("directory-listing");
 
-                await this.module.store.upsertMany([
-                    directoryRecord,
-                    ...entries
-                ]);
+                const service = Framework.SiteIntelligence;
+
+                if (!service || typeof service.discoverMany !== "function") {
+                    throw new Error("Central Site Intelligence service is unavailable.");
+                }
+
+                const discovered = [directoryRecord, ...entries];
+
+                await service.discoverMany(
+                    discovered.map(record => ({
+                        url: record.url,
+                        source: "WebStructureInspector.DirectoryScanner",
+                        tags: [...(record.tags || []), "directory-listing"],
+                        metadata: {
+                            resourceType: record.type,
+                            directoryListing: true
+                        }
+                    }))
+                );
+
+                const validation = await service.scanMany(
+                    entries.map(record => ({
+                        url: record.url,
+                        source: "WebStructureInspector.DirectoryScanner",
+                        needContent: false
+                    })),
+                    { source: "WebStructureInspector.DirectoryScanner" }
+                );
+
+                const validatedByUrl = new Map(
+                    validation.map(result => [result.url, result])
+                );
+
+                for (const entry of entries) {
+                    const result = validatedByUrl.get(entry.url);
+                    if (result?.record) {
+                        entry.status = result.record.status === "accessible"
+                            ? "verified"
+                            : result.record.status;
+                        entry.httpStatus = result.record.httpStatus;
+                        entry.contentType = result.record.contentType || null;
+                    }
+                }
+
+                await this.module.store.upsertMany(discovered);
 
                 return {
                     directory: finalUrl.href,
