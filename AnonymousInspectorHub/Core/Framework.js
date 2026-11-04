@@ -648,6 +648,44 @@
         }
 
         // --------------------------------------------------
+        // VIEWER API
+        // --------------------------------------------------
+
+        createViewerAPI() {
+            const factory = this;
+
+            return Object.freeze({
+                getAll() {
+                    return factory.invoke("viewerGetAll", []);
+                },
+
+                find(resource) {
+                    return factory.invoke("viewerFind", [resource]);
+                },
+
+                get(id) {
+                    return factory.invoke("viewerGet", [id]);
+                },
+
+                isAvailable(id) {
+                    return factory.invoke("viewerIsAvailable", [id]);
+                },
+
+                open(id, context = {}) {
+                    return factory.invoke("viewerOpen", [id, context]);
+                },
+
+                close() {
+                    return factory.invoke("viewerClose", []);
+                },
+
+                getCurrent() {
+                    return factory.invoke("viewerGetCurrent", []);
+                }
+            });
+        }
+
+        // --------------------------------------------------
         // FRAMEWORK CREATION
         // --------------------------------------------------
 
@@ -813,7 +851,10 @@
 
                 // Site Intelligence service
                 SiteIntelligence:
-                    factory.createSiteIntelligenceAPI()
+                    factory.createSiteIntelligenceAPI(),
+
+                // Viewer infrastructure
+                Viewers: factory.createViewerAPI()
             };
 
             this.framework = Object.freeze(api);
