@@ -355,6 +355,16 @@
                     url.pathname
                 );
 
+                // Root-level resources have no path segments.
+                // They must be attached directly to the root node.
+                if (parts.length === 0) {
+                    rootNode.resources.push(
+                        this.cloneRecord(record)
+                    );
+
+                    continue;
+                }
+
                 let currentNode = rootNode;
                 let currentPath = "/";
 
