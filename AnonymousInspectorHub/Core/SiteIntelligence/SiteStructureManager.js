@@ -179,6 +179,16 @@
                 );
             }
 
+            if (
+                !options ||
+                typeof options !== "object" ||
+                Array.isArray(options)
+            ) {
+                throw new Error(
+                    "Invalid resource registration options."
+                );
+            }
+
             const unique = new Map();
 
             for (const item of resources) {
@@ -191,7 +201,8 @@
                     continue;
                 }
 
-                const normalized = this.normalizeUrl(value);
+                const normalized =
+                    this.normalizeUrl(value);
 
                 const itemOptions =
                     typeof item === "object" && item !== null
@@ -209,19 +220,63 @@
 
             const results = [];
 
-            for (const item of unique.values()) {
-                const record = await this.registerResource(
-                    item.url,
-                    {
+            try {
+                for (const item of unique.values()) {
+                    const itemOptions = {
                         ...options,
                         ...item
+                    };
+
+                    const source =
+                        typeof itemOptions.source === "string" &&
+                        itemOptions.source.trim()
+                            ? itemOptions.source.trim()
+                            : null;
+
+                    const tags = Array.isArray(itemOptions.tags)
+                        ? itemOptions.tags.filter(tag =>
+                            typeof tag === "string" && tag.trim()
+                        )
+                        : [];
+
+                    const existing =
+                        await this.repository.get(item.url);
+
+                    let record;
+
+                    if (existing) {
+                        record = await this.repository.upsert(
+                            item.url,
+                            {
+                                sources: source ? [source] : [],
+                                tags
+                            }
+                        );
+                    } else {
+                        record =
+                            await this.repository.registerDiscovery(
+                                item.url,
+                                {
+                                    source,
+                                    tags,
+                                    metadata:
+                                        itemOptions.metadata || {}
+                                }
+                            );
                     }
-                );
 
-                results.push(record);
+                    this.records.set(item.url, record);
+
+                    results.push(record);
+                }
+
+                return results;
+
+            } finally {
+                if (unique.size > 0) {
+                    this.rebuildTree();
+                }
             }
-
-            return results;
         }
 
         // --------------------------------------------------
