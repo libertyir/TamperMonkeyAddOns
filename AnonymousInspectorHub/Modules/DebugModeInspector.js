@@ -251,7 +251,9 @@
                     : namespace.EvidenceAnalyzer || null;
 
             this.reportBuilder =
-                namespace.ReportBuilder || null;
+                typeof namespace.ReportBuilder === "function"
+                    ? new namespace.ReportBuilder()
+                    : namespace.ReportBuilder || null;
 
             // ----------------------------------------------
             // Vulnerability lookup
@@ -678,6 +680,8 @@
 
             this.report =
                 await this.reportBuilder.build({
+                    ...analysis,
+
                     context,
 
                     scannedAt: this.scannedAt,
@@ -694,8 +698,6 @@
                         selection.platforms,
 
                     results: this.results,
-
-                    analysis,
 
                     dependencyErrors:
                         this.dependencyErrors,
