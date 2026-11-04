@@ -183,7 +183,7 @@
             );
 
             try {
-                const response = await fetch(url, {
+                const response = await Framework.SiteIntelligence.fetch(url, {
                     method,
                     credentials: "same-origin",
                     cache: "no-store",

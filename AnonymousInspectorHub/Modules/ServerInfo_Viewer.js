@@ -42,7 +42,7 @@
             }, 8000);
 
             try {
-                const response = await fetch(
+                const response = await Framework.SiteIntelligence.fetch(
                     new URL("/", location.origin).href,
                     {
                         method: "GET",

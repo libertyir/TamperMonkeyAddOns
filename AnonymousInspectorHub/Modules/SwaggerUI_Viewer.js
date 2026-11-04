@@ -113,7 +113,7 @@
             );
 
             try {
-                const response = await fetch(url, {
+                const response = await Framework.SiteIntelligence.fetch(url, {
                     method: "HEAD",
                     credentials: "same-origin",
                     redirect: "follow",

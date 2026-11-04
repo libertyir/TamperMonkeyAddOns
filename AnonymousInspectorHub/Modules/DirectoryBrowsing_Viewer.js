@@ -480,7 +480,7 @@
             try {
                 const startedAt = performance.now();
 
-                const response = await fetch(candidate.url, {
+                const response = await Framework.SiteIntelligence.fetch(candidate.url, {
                     method: "GET",
                     credentials:
                         new URL(candidate.url).origin === location.origin

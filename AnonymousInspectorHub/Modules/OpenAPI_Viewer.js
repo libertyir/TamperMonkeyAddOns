@@ -63,7 +63,7 @@
                 }
 
                 try {
-                    const response = await fetch(url.href, {
+                    const response = await Framework.SiteIntelligence.fetch(url.href, {
                         method: "GET",
                         credentials: "same-origin",
                         cache: "no-store",

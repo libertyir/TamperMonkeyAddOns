@@ -384,7 +384,7 @@
             );
 
             try {
-                const response = await fetch(url, {
+                const response = await Framework.SiteIntelligence.fetch(url, {
                     method: method,
                     credentials: "same-origin",
                     mode: "same-origin",

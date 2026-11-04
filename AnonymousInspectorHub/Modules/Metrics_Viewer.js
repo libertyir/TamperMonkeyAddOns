@@ -155,7 +155,7 @@
             const started = performance.now();
 
             try {
-                const response = await fetch(url, {
+                const response = await Framework.SiteIntelligence.fetch(url, {
                     method: "GET",
                     credentials: "same-origin",
                     cache: "no-store",

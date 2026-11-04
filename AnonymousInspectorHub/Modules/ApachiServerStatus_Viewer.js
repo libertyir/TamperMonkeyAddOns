@@ -41,7 +41,7 @@
             ).href;
 
             try {
-                const response = await fetch(this.statusUrl, {
+                const response = await Framework.SiteIntelligence.fetch(this.statusUrl, {
                     method: "GET",
                     credentials: "same-origin",
                     redirect: "follow",

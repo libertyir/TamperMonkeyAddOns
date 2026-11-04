@@ -415,6 +415,41 @@
                     );
                 },
 
+                async fetch(url, requestOptions = {}) {
+                    const method = String(requestOptions.method || "GET").toUpperCase();
+                    if (method !== "GET" && method !== "HEAD") {
+                        throw new Error("Site Intelligence fetch supports GET/HEAD only.");
+                    }
+                    const result = await factory.invoke("siteIntelligenceScan", [url, {
+                        needContent: method !== "HEAD",
+                        source: "Module",
+                        force: true
+                    }]);
+                    const headers = result.record?.headers || {};
+                    const body = method === "HEAD" ? "" : (result.content || "");
+                    const headerBag = {
+                        get(name) { return headers[String(name).toLowerCase()] ?? null; },
+                        entries() { return Object.entries(headers)[Symbol.iterator](); },
+                        forEach(callback) {
+                            Object.entries(headers).forEach(([key, value]) => callback(value, key));
+                        }
+                    };
+                    return {
+                        ok: result.status >= 200 && result.status < 300,
+                        status: result.status || 0,
+                        statusText: "",
+                        url: result.url || String(url),
+                        redirected: false,
+                        type: "basic",
+                        headers: headerBag,
+                        async text() { return body; },
+                        async json() { return JSON.parse(body); },
+                        async arrayBuffer() { return new TextEncoder().encode(body).buffer; },
+                        async blob() { return new Blob([body], { type: headers["content-type"] || "" }); },
+                        clone() { return this; }
+                    };
+                },
+
                 scanMany(urls, options = {}) {
                     return factory.invoke(
                         "siteIntelligenceScanMany",

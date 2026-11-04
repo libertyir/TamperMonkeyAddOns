@@ -41,7 +41,7 @@
                 window.location.origin
             ).href;
 
-            const response = await fetch(this.fileUrl, {
+            const response = await Framework.SiteIntelligence.fetch(this.fileUrl, {
                 method: "GET",
                 credentials: "same-origin",
                 redirect: "follow",
