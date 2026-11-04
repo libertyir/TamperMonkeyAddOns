@@ -89,8 +89,8 @@
                 }
 
                 if (id === "ds_store_viewer") return basename === ".ds_store";
-                if (id === "gitconfig_viewer") return /\\.git\\/config$/.test(normalized);
-                if (id === "text_viewer") return /\\.(txt|log|md|json|xml|ya?ml|ini|conf|cfg|html?|css|js|mjs|cjs|py|php|sh|sql|csv|env)$/i.test(basename);
+                if (id === "gitconfig_viewer") return /\.git\/config$/.test(normalized);
+                if (id === "text_viewer") return /\.(txt|log|md|json|xml|ya?ml|ini|conf|cfg|html?|css|js|mjs|cjs|py|php|sh|sql|csv|env)$/i.test(basename);
 
                 return false;
             }).map(({ ModuleClass, ...metadata }) => metadata);
