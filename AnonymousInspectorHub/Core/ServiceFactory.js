@@ -123,6 +123,14 @@
                 registerSettings: (id, SettingsClass) =>
                     settingsManager.register(id, SettingsClass),
 
+                viewerGetAll: () => kernel.viewerRegistry.getAll(),
+                viewerFind: resource => kernel.viewerRegistry.find(resource),
+                viewerGet: id => kernel.viewerRegistry.get(id),
+                viewerIsAvailable: id => kernel.viewerRegistry.isAvailable(id),
+                viewerOpen: (id, context) => kernel.viewerHost.open(id, context),
+                viewerClose: () => kernel.viewerHost.close(),
+                viewerGetCurrent: () => kernel.viewerHost.getCurrent(),
+
                 requestText: url =>
                     kernel.requestText(url),
 
@@ -424,6 +432,21 @@
                 });
 
             // --------------------------------------------------
+            // VIEWER INFRASTRUCTURE
+            // --------------------------------------------------
+
+            kernel.viewerRegistry =
+                new root.AnonymousInspectorViewerRegistry({
+                    moduleManager
+                });
+
+            kernel.viewerHost =
+                new root.AnonymousInspectorViewerHost({
+                    registry: kernel.viewerRegistry,
+                    moduleManager
+                });
+
+            // --------------------------------------------------
             // SETTINGS MANAGER
             // --------------------------------------------------
 
@@ -486,6 +509,8 @@
                 frameworkFactory: kernel.frameworkFactory,
                 Framework: kernel.Framework,
                 moduleManager,
+                viewerRegistry: kernel.viewerRegistry,
+                viewerHost: kernel.viewerHost,
                 settingsManager,
                 siteManager: kernel.siteManager,
                 cryptoManager: kernel.cryptoManager,
