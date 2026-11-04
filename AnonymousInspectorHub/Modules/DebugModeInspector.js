@@ -246,7 +246,9 @@
                     : null;
 
             this.evidenceAnalyzer =
-                namespace.EvidenceAnalyzer || null;
+                typeof namespace.EvidenceAnalyzer === "function"
+                    ? new namespace.EvidenceAnalyzer()
+                    : namespace.EvidenceAnalyzer || null;
 
             this.reportBuilder =
                 namespace.ReportBuilder || null;
