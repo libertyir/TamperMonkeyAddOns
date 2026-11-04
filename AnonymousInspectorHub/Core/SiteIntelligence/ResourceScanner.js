@@ -29,6 +29,17 @@
             this.activeCount = 0;
             this.inFlight = new Map();
 
+            // Read-only processing state for independent UI consumers.
+            this.activeTasks = new Map();
+            this.taskHistory = [];
+            this.taskSequence = 0;
+            this.maxTaskHistory = 100;
+
+            this.onStateChange =
+                typeof options.onStateChange === "function"
+                    ? options.onStateChange
+                    : null;
+
             this.initialized = false;
             this.destroyed = false;
         }
@@ -110,6 +121,90 @@
         }
 
         // --------------------------------------------------
+        // PROCESSING OBSERVABILITY
+        // --------------------------------------------------
+
+        getTaskSnapshot(task) {
+            return {
+                id: task.id,
+                url: task.url,
+                source: task.source,
+                status: task.status,
+                method: task.method,
+                phase: task.phase,
+                httpStatus: task.httpStatus,
+                error: task.error,
+                createdAt: task.createdAt,
+                startedAt: task.startedAt,
+                completedAt: task.completedAt
+            };
+        }
+
+        getStatus() {
+            return {
+                initialized: this.initialized,
+                destroyed: this.destroyed,
+                concurrency: this.concurrency,
+                active: this.activeCount,
+                queued: this.queue.length,
+                inFlight: this.inFlight.size,
+
+                processing:
+                    this.activeCount > 0 ||
+                    this.queue.length > 0,
+
+                activeTasks: [...this.activeTasks.values()]
+                    .map(task => this.getTaskSnapshot(task)),
+
+                queuedTasks: this.queue
+                    .map(task => this.getTaskSnapshot(task)),
+
+                recentTasks: this.taskHistory
+                    .map(task => this.getTaskSnapshot(task))
+            };
+        }
+
+        notifyStateChange(reason, task = null) {
+            if (typeof this.onStateChange !== "function") {
+                return;
+            }
+
+            try {
+                this.onStateChange({
+                    reason,
+                    task: task
+                        ? this.getTaskSnapshot(task)
+                        : null,
+                    snapshot: this.getStatus()
+                });
+            } catch (error) {
+                console.error(
+                    "[ResourceScanner] State listener failed:",
+                    error
+                );
+            }
+        }
+
+        setTaskPhase(url, method, phase, httpStatus = null) {
+            const task = [...this.activeTasks.values()].find(
+                item => item.url === url
+            );
+
+            if (!task) {
+                return;
+            }
+
+            task.method = method;
+            task.phase = phase;
+
+            if (httpStatus !== null) {
+                task.httpStatus = httpStatus;
+            }
+
+            this.notifyStateChange("request", task);
+        }
+
+        // --------------------------------------------------
         // PUBLIC SCAN API
         // --------------------------------------------------
 
@@ -141,11 +236,15 @@
                 return result;
             }
 
-            const promise = this.enqueue(() =>
-                this.processResource(
+            const promise = this.enqueue(
+                () => this.processResource(
                     normalizedUrl,
                     settings
-                )
+                ),
+                {
+                    url: normalizedUrl,
+                    source: settings.source
+                }
             );
 
             this.inFlight.set(normalizedUrl, {
@@ -168,13 +267,37 @@
         // QUEUE MANAGEMENT
         // --------------------------------------------------
 
-        enqueue(operation) {
+        enqueue(operation, metadata = {}) {
             return new Promise((resolve, reject) => {
-                this.queue.push({
+                const task = {
+                    id: ++this.taskSequence,
                     operation,
                     resolve,
-                    reject
-                });
+                    reject,
+
+                    url: metadata.url || null,
+                    source: metadata.source || null,
+
+                    status: "queued",
+                    method: null,
+                    phase: "Waiting in queue",
+
+                    httpStatus: null,
+                    error: null,
+
+                    createdAt: new Date().toISOString(),
+                    startedAt: null,
+                    completedAt: null
+                };
+
+                this.queue.push(task);
+                this.taskHistory.push(task);
+
+                if (this.taskHistory.length > this.maxTaskHistory) {
+                    this.taskHistory.shift();
+                }
+
+                this.notifyStateChange("queued", task);
 
                 this.processQueue();
             });
@@ -190,6 +313,14 @@
 
                 this.activeCount++;
 
+                task.status = "processing";
+                task.phase = "Preparing request";
+                task.startedAt = new Date().toISOString();
+
+                this.activeTasks.set(task.id, task);
+
+                this.notifyStateChange("started", task);
+
                 Promise.resolve()
                     .then(() => {
                         if (this.destroyed) {
@@ -200,10 +331,57 @@
 
                         return task.operation();
                     })
-                    .then(task.resolve, task.reject)
+                    .then(
+                        result => {
+                            task.status = "completed";
+                            task.phase = "Completed";
+
+                            task.httpStatus =
+                                result?.status ?? task.httpStatus;
+
+                            task.completedAt =
+                                new Date().toISOString();
+
+                            this.notifyStateChange(
+                                "completed",
+                                task
+                            );
+
+                            task.resolve(result);
+                        },
+                        error => {
+                            task.status = "failed";
+                            task.phase = "Failed";
+
+                            task.error =
+                                error?.message || String(error);
+
+                            task.completedAt =
+                                new Date().toISOString();
+
+                            this.notifyStateChange(
+                                "failed",
+                                task
+                            );
+
+                            task.reject(error);
+                        }
+                    )
                     .finally(() => {
+                        this.activeTasks.delete(task.id);
+
                         this.activeCount--;
+
+                        this.notifyStateChange("queue:updated");
+
                         this.processQueue();
+
+                        if (
+                            this.activeCount === 0 &&
+                            this.queue.length === 0
+                        ) {
+                            this.notifyStateChange("idle");
+                        }
                     });
             }
         }
@@ -477,6 +655,12 @@
         // --------------------------------------------------
 
         async request(url, method) {
+            this.setTaskPhase(
+                url,
+                method,
+                method + " request"
+            );
+
             const controller = new AbortController();
 
             const timeoutId = setTimeout(
@@ -507,6 +691,13 @@
                         "Pragma": "no-cache"
                     }
                 });
+
+                this.setTaskPhase(
+                    url,
+                    method,
+                    method + " response: HTTP " + response.status,
+                    response.status
+                );
 
                 return {
                     status: response.status,
@@ -709,21 +900,6 @@
         }
 
         // --------------------------------------------------
-        // STATUS
-        // --------------------------------------------------
-
-        getStatus() {
-            return {
-                initialized: this.initialized,
-                destroyed: this.destroyed,
-                concurrency: this.concurrency,
-                active: this.activeCount,
-                queued: this.queue.length,
-                inFlight: this.inFlight.size
-            };
-        }
-
-        // --------------------------------------------------
         // SHUTDOWN
         // --------------------------------------------------
 
@@ -734,12 +910,21 @@
             const pending = this.queue.splice(0);
 
             for (const task of pending) {
+                task.status = "failed";
+                task.phase = "Cancelled";
+                task.error = "ResourceScanner has been destroyed.";
+                task.completedAt = new Date().toISOString();
+
+                this.notifyStateChange("failed", task);
+
                 task.reject(
                     new Error(
                         "ResourceScanner has been destroyed."
                     )
                 );
             }
+
+            this.notifyStateChange("destroyed");
 
             // Active fetch operations finish or timeout naturally.
         }
