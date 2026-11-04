@@ -173,3 +173,22 @@ This inventory can become stale. The repository's current file contents always t
 7. Provide one complete revised file per response in chat; the user applies it and updates GitHub.
 8. Do not directly write to GitHub. The sole currently authorized exception is maintaining this `AI_PROJECT_CONTEXT.md` file.
 9. Keep implemented facts separate from proposals and unknown history. Never fill gaps by guessing.
+
+## 9. Current work update — independent scanner dialog
+
+The active work has advanced to the scanner dialog within WebStructureInspector.
+
+Confirmed user decision:
+- The scanner dialog must operate independently of the UI workflow and refresh lifecycle of the other project sections.
+- It must not depend on, trigger, or be disrupted by the UI of GeneralUI, SitesUI, ModulesUI, DataManagerUI, CloudStorageUI, or other unrelated hub sections.
+- The scanner dialog itself has been constructed. Do not assume the scanner's complete processing pipeline is already implemented merely because the dialog exists.
+
+Next task is analysis, not immediate implementation:
+1. Inspect the current GitHub source to establish exactly what the scanner dialog already does and how it is opened, updated, and closed.
+2. Trace the existing discovery outputs from Grabber, Directory Browsing/DirectoryScanner, and SensitiveScanner (and any other relevant discovery path).
+3. Determine how candidate paths/files can be collected into one shared queue/list without duplicating discovery or validation logic.
+4. Identify whether a central HEAD-first validation/scanning component already exists, and what is missing.
+5. Trace how results/statuses can be delivered incrementally to the independent dialog and existing ResourceStore/tree without coupling it to unrelated UI refreshes.
+6. Report the actual implemented state, missing pieces, dependencies, and the smallest safe implementation order before changing code.
+
+Keep the proposed central-scanner behavior in Section 6 as the target design, not as implemented functionality. Continue to fetch current GitHub files before analyzing or changing them. The no-direct-GitHub-code-edit rule remains in force; the existing exception permits writes only to this memory file.
