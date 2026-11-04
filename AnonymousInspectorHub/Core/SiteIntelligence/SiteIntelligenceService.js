@@ -410,26 +410,61 @@
                 return [];
             }
 
-            let results;
-
             try {
-                results = await Promise.all(
-                    items.map(async item => {
-                        const result =
-                            await this.scanner.scan(
-                                item.url,
-                                item
-                            );
+                const settledResults = await Promise.allSettled(
+                    items.map(item =>
+                        this.scanner.scan(
+                            item.url,
+                            item
+                        )
+                    )
+                );
+
+                const results = [];
+                const errors = [];
+
+                for (let i = 0; i < settledResults.length; i++) {
+                    const settled = settledResults[i];
+
+                    if (settled.status === "fulfilled") {
+                        const result = settled.value;
+
+                        results.push(result);
 
                         this.emit("resource:scanned", {
                             url: result.url,
                             result,
                             record: result.record
                         });
+                    } else {
+                        errors.push(settled.reason);
+                    }
+                }
 
-                        return result;
-                    })
-                );
+                let refreshError = null;
+
+                try {
+                    await this.structure.refresh();
+
+                    this.emit("structure:updated", {
+                        action: "resources-scanned",
+                        count: items.length
+                    });
+                } catch (error) {
+                    refreshError = error;
+                }
+
+                if (errors.length > 0) {
+                    if (refreshError) {
+                        errors[0].refreshError = refreshError;
+                    }
+
+                    throw errors[0];
+                }
+
+                if (refreshError) {
+                    throw refreshError;
+                }
 
                 return results;
 
@@ -440,14 +475,6 @@
                 });
 
                 throw error;
-
-            } finally {
-                await this.structure.refresh();
-
-                this.emit("structure:updated", {
-                    action: "resources-scanned",
-                    count: items.length
-                });
             }
         }
 
