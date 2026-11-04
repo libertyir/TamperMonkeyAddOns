@@ -14,6 +14,7 @@
             this.minimizedButton = null;
 
             this.currentStatus = null;
+            this.processing = false;
             this.preferredMode = "open";
             this.destroyed = false;
             this.hostObserver = null;
@@ -357,6 +358,7 @@
                     document.documentElement.appendChild(this.host);
 
                     if (
+                        this.processing &&
                         typeof this.host.showPopover === "function" &&
                         !this.host.matches(":popover-open")
                     ) {
@@ -390,25 +392,44 @@
                 active.length > 0 ||
                 queued.length > 0;
 
+            this.processing = processing;
+
+            this.render(snapshot);
+
+            if (!processing) {
+                this.hide();
+                return;
+            }
+
             if (this.preferredMode === "minimized") {
                 this.showMinimized();
             } else {
                 this.showDialog();
             }
-
-            this.render(snapshot);
         }
 
         // --------------------------------------------------
         // DISPLAY MODES
         // --------------------------------------------------
 
+        showHost() {
+            if (
+                this.host &&
+                typeof this.host.showPopover === "function" &&
+                !this.host.matches(":popover-open")
+            ) {
+                this.host.showPopover();
+            }
+        }
+
         showDialog() {
+            this.showHost();
             this.dialog.hidden = false;
             this.minimizedButton.hidden = true;
         }
 
         showMinimized() {
+            this.showHost();
             this.dialog.hidden = true;
             this.minimizedButton.hidden = false;
         }
@@ -430,6 +451,14 @@
         hide() {
             this.dialog.hidden = true;
             this.minimizedButton.hidden = true;
+
+            if (
+                this.host &&
+                typeof this.host.hidePopover === "function" &&
+                this.host.matches(":popover-open")
+            ) {
+                this.host.hidePopover();
+            }
         }
 
         // --------------------------------------------------
