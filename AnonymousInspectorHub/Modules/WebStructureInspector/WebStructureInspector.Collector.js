@@ -113,33 +113,48 @@
                         }))
                     );
 
-                    const results = await service.scanMany(
-                        records.map(record => ({
-                            url: record.url,
-                            source: "WebStructureInspector",
-                            needContent: false
-                        })),
-                        { needContent: false, source: "WebStructureInspector" }
+                    const settled = await Promise.allSettled(
+                        records.map(record =>
+                            service.scan(record.url, {
+                                source: "WebStructureInspector",
+                                needContent: false
+                            })
+                        )
                     );
 
-                    const validated = results
-                        .filter(result => result && result.record)
-                        .map(result => {
-                            const original = records.find(item => item.url === result.url) || {};
-                            const central = result.record;
+                    const validated = [];
 
-                            return {
-                                ...original,
-                                status: central.status === "accessible" ? "verified" : central.status,
-                                httpStatus: central.httpStatus,
-                                contentType: central.contentType || original.contentType || null,
-                                tags: [...new Set([...(original.tags || []), ...(central.tags || [])])]
-                            };
+                    for (let index = 0; index < settled.length; index++) {
+                        const outcome = settled[index];
+
+                        if (outcome.status !== "fulfilled") {
+                            continue;
+                        }
+
+                        const result = outcome.value;
+                        const central = result?.record;
+                        const original = records[index];
+
+                        if (
+                            !central ||
+                            central.status !== "accessible" ||
+                            !(central.httpStatus >= 200 && central.httpStatus < 300)
+                        ) {
+                            continue;
+                        }
+
+                        validated.push({
+                            ...original,
+                            status: "verified",
+                            httpStatus: central.httpStatus,
+                            contentType: central.contentType || original.contentType || null,
+                            tags: [...new Set([...(original.tags || []), ...(central.tags || [])])]
                         });
+                    }
 
-                    await this.module.store.upsertMany(
-                        validated.length ? validated : records
-                    );
+                    if (validated.length) {
+                        await this.module.store.upsertMany(validated);
+                    }
 
                     this.module.uiManager?.refresh();
 
