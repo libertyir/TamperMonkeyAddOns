@@ -283,6 +283,48 @@
                 }
             }
 
+            const service = Framework.SiteIntelligence;
+
+            if (!service || typeof service.discoverMany !== "function") {
+                throw new Error("Central Site Intelligence service is unavailable.");
+            }
+
+            await service.discoverMany(
+                collected.map(record => ({
+                    url: record.url,
+                    source: "WebStructureInspector.Grabber",
+                    tags: record.tags || [],
+                    metadata: {
+                        resourceType: record.type
+                    }
+                }))
+            );
+
+            const validation = await service.scanMany(
+                collected.map(record => ({
+                    url: record.url,
+                    source: "WebStructureInspector.Grabber",
+                    needContent: false
+                })),
+                { source: "WebStructureInspector.Grabber" }
+            );
+
+            const validatedByUrl = new Map(
+                validation.map(result => [result.url, result])
+            );
+
+            for (const record of collected) {
+                const result = validatedByUrl.get(record.url);
+
+                if (result?.record) {
+                    record.status = result.record.status === "accessible"
+                        ? "verified"
+                        : result.record.status;
+                    record.httpStatus = result.record.httpStatus;
+                    record.contentType = result.record.contentType || null;
+                }
+            }
+
             await this.module.store.upsertMany(collected);
 
             return {
