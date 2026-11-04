@@ -173,21 +173,40 @@
                 const centralResources = await siteIntelligence.getAllResources();
 
                 if (centralResources.length) {
-                    await this.store.upsertMany(
-                        centralResources.map(record => ({
-                            url: record.url,
-                            path: new URL(record.url).pathname,
-                            name: new URL(record.url).pathname.split("/").filter(Boolean).pop() || "/",
-                            type: new URL(record.url).pathname.endsWith("/") ? "directory" : "file",
-                            status: record.status === "accessible" ? "verified" : record.status,
-                            sources: record.sources || [],
-                            tags: record.tags || [],
-                            contentType: record.contentType || null,
-                            size: record.contentLength || null,
-                            httpStatus: record.httpStatus ?? null,
-                            directoryListing: Boolean(record.metadata?.directoryListing)
-                        }))
+                    const successfulResources = centralResources.filter(record =>
+                        record.status === "accessible" &&
+                        record.httpStatus >= 200 &&
+                        record.httpStatus < 300
                     );
+
+                    const failedUrls = centralResources
+                        .filter(record =>
+                            record.status !== "accessible" ||
+                            !(record.httpStatus >= 200 && record.httpStatus < 300)
+                        )
+                        .map(record => record.url);
+
+                    if (failedUrls.length) {
+                        await this.store.removeMany(failedUrls);
+                    }
+
+                    if (successfulResources.length) {
+                        await this.store.upsertMany(
+                            successfulResources.map(record => ({
+                                url: record.url,
+                                path: new URL(record.url).pathname,
+                                name: new URL(record.url).pathname.split("/").filter(Boolean).pop() || "/",
+                                type: new URL(record.url).pathname.endsWith("/") ? "directory" : "file",
+                                status: "verified",
+                                sources: record.sources || [],
+                                tags: record.tags || [],
+                                contentType: record.contentType || null,
+                                size: record.contentLength || null,
+                                httpStatus: record.httpStatus,
+                                directoryListing: Boolean(record.metadata?.directoryListing)
+                            }))
+                        );
+                    }
                 }
 
                 // Passive collection only. No directory requests are made here.
