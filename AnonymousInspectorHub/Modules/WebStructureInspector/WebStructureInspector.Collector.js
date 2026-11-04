@@ -94,8 +94,51 @@
                 this.pending.clear();
 
                 try {
+                    const records = items.map(([, record]) => record);
+                    const service = Framework.SiteIntelligence;
+
+                    if (!service || typeof service.discoverMany !== "function") {
+                        throw new Error("Central Site Intelligence service is unavailable.");
+                    }
+
+                    await service.discoverMany(
+                        records.map(record => ({
+                            url: record.url,
+                            source: "WebStructureInspector:" + (record.sources || []).join(","),
+                            tags: record.tags || [],
+                            metadata: {
+                                resourceType: record.type,
+                                extension: record.extension || null
+                            }
+                        }))
+                    );
+
+                    const results = await service.scanMany(
+                        records.map(record => ({
+                            url: record.url,
+                            source: "WebStructureInspector",
+                            needContent: false
+                        })),
+                        { needContent: false, source: "WebStructureInspector" }
+                    );
+
+                    const validated = results
+                        .filter(result => result && result.record)
+                        .map(result => {
+                            const original = records.find(item => item.url === result.url) || {};
+                            const central = result.record;
+
+                            return {
+                                ...original,
+                                status: central.status === "accessible" ? "verified" : central.status,
+                                httpStatus: central.httpStatus,
+                                contentType: central.contentType || original.contentType || null,
+                                tags: [...new Set([...(original.tags || []), ...(central.tags || [])])]
+                            };
+                        });
+
                     await this.module.store.upsertMany(
-                        items.map(([, record]) => record)
+                        validated.length ? validated : records
                     );
 
                     this.module.uiManager?.refresh();
