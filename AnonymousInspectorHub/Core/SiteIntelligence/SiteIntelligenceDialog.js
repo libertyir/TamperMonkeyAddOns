@@ -16,6 +16,7 @@
             this.currentStatus = null;
             this.preferredMode = "open";
             this.destroyed = false;
+            this.hostObserver = null;
         }
 
         // --------------------------------------------------
@@ -76,10 +77,23 @@
             this.host.id =
                 "aih-site-intelligence-dialog-host";
 
-            this.host.style.position = "fixed";
-            this.host.style.zIndex = "2147483646";
-            this.host.style.inset = "0";
-            this.host.style.pointerEvents = "none";
+            this.host.setAttribute("popover", "manual");
+            this.host.style.cssText = [
+                "all:initial",
+                "position:fixed",
+                "inset:0",
+                "margin:0",
+                "padding:0",
+                "border:0",
+                "width:100vw",
+                "height:100vh",
+                "max-width:none",
+                "max-height:none",
+                "overflow:visible",
+                "background:transparent",
+                "pointer-events:none",
+                "z-index:2147483647"
+            ].join(";");
 
             this.shadow = this.host.attachShadow({
                 mode: "open"
@@ -322,10 +336,39 @@
             this.shadow.appendChild(this.dialog);
             this.shadow.appendChild(this.minimizedButton);
 
-            // Keep the overlay outside the page body so body-level
-            // transforms, stacking contexts and overflow rules cannot
-            // constrain its viewport positioning.
+            // Popovers enter the browser top layer. This places the
+            // scanner UI above page viewers, dialogs and extreme z-indexes.
             document.documentElement.appendChild(this.host);
+
+            if (typeof this.host.showPopover === "function") {
+                this.host.showPopover();
+            } else {
+                this.host.style.zIndex = "2147483647";
+            }
+
+            // Some single-page applications replace document content.
+            // Reattach the overlay if page code removes it.
+            this.hostObserver = new MutationObserver(() => {
+                if (
+                    this.host &&
+                    !this.host.isConnected &&
+                    document.documentElement
+                ) {
+                    document.documentElement.appendChild(this.host);
+
+                    if (
+                        typeof this.host.showPopover === "function" &&
+                        !this.host.matches(":popover-open")
+                    ) {
+                        this.host.showPopover();
+                    }
+                }
+            });
+
+            this.hostObserver.observe(document.documentElement, {
+                childList: true,
+                subtree: true
+            });
         }
 
         // --------------------------------------------------
@@ -527,7 +570,19 @@
             this.service = null;
             this.currentStatus = null;
 
+            if (this.hostObserver) {
+                this.hostObserver.disconnect();
+                this.hostObserver = null;
+            }
+
             if (this.host) {
+                if (
+                    typeof this.host.hidePopover === "function" &&
+                    this.host.matches(":popover-open")
+                ) {
+                    this.host.hidePopover();
+                }
+
                 this.host.remove();
             }
 
