@@ -77,7 +77,7 @@
                 "aih-site-intelligence-dialog-host";
 
             this.host.style.position = "fixed";
-            this.host.style.zIndex = "2147483000";
+            this.host.style.zIndex = "2147483646";
             this.host.style.inset = "0";
             this.host.style.pointerEvents = "none";
 
@@ -100,8 +100,11 @@
 
                 .aih-dialog {
                     position: fixed;
-                    right: 24px;
-                    bottom: 24px;
+                    left: 50%;
+                    top: 50%;
+                    right: auto;
+                    bottom: auto;
+                    transform: translate(-50%, -50%);
                     width: min(560px, calc(100vw - 32px));
                     max-height: min(620px, calc(100vh - 48px));
                     display: flex;
@@ -221,8 +224,8 @@
 
                 .aih-minimized {
                     position: fixed;
-                    right: 24px;
-                    bottom: 24px;
+                    right: 78px;
+                    bottom: 25px;
                     width: 38px;
                     height: 38px;
                     display: flex;
@@ -319,8 +322,10 @@
             this.shadow.appendChild(this.dialog);
             this.shadow.appendChild(this.minimizedButton);
 
-            (document.body || document.documentElement)
-                .appendChild(this.host);
+            // Keep the overlay outside the page body so body-level
+            // transforms, stacking contexts and overflow rules cannot
+            // constrain its viewport positioning.
+            document.documentElement.appendChild(this.host);
         }
 
         // --------------------------------------------------
