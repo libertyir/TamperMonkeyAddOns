@@ -31,6 +31,7 @@
             this.repository = null;
             this.scanner = null;
             this.structure = null;
+            this.dialog = null;
 
             this.listeners = new Map();
 
@@ -140,6 +141,16 @@
                 });
 
                 this.ensureNotDestroyed();
+
+                const DialogClass =
+                    root.AnonymousInspectorSiteIntelligenceDialog;
+
+                if (typeof DialogClass !== "function") {
+                    throw new Error("SiteIntelligenceDialog is not loaded.");
+                }
+
+                this.dialog = new DialogClass();
+                this.dialog.initialize(this);
 
                 this.initialized = true;
 
@@ -674,6 +685,11 @@
         // --------------------------------------------------
 
         async cleanupComponents() {
+            if (this.dialog) {
+                this.dialog.destroy();
+                this.dialog = null;
+            }
+
             if (this.scanner) {
                 this.scanner.destroy();
                 this.scanner = null;
