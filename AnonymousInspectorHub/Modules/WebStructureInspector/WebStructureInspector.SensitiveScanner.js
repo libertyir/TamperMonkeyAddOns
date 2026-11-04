@@ -213,128 +213,73 @@
         }
 
         async inspectFile(url, mode) {
-            const controller = new AbortController();
+            const service = Framework.SiteIntelligence;
 
-            const timeoutId = setTimeout(
-                () => controller.abort(),
-                this.timeout
+            if (!service || typeof service.scan !== "function") {
+                throw new Error("Central Site Intelligence service is unavailable.");
+            }
+
+            const result = await service.scan(url.href, {
+                source: "WebStructureInspector.SensitiveScanner",
+                needContent: mode === "content" || mode === "both",
+                force: true
+            });
+
+            if (result.status === 404) {
+                return {
+                    url: url.href,
+                    status: 404,
+                    record: null
+                };
+            }
+
+            if (result.status === 403) {
+                return {
+                    url: url.href,
+                    status: 403,
+                    record: this.createDeniedRecord(url)
+                };
+            }
+
+            const central = result.record;
+            if (!central) {
+                return {
+                    url: url.href,
+                    status: result.status,
+                    record: null
+                };
+            }
+
+            const content = typeof result.content === "string"
+                ? result.content
+                : "";
+
+            const contentType = central.contentType || "";
+            const name = new URL(result.url || url.href).pathname.split("/").pop() || "";
+            const contentAnalyzed = Boolean(
+                (mode === "content" || mode === "both") &&
+                result.contentAvailable &&
+                content &&
+                !this.isHtml(contentType, content)
             );
 
-            try {
-                const response = await fetch(url.href, {
-                    method: "GET",
-                    credentials: "same-origin",
-                    redirect: "manual",
-                    cache: "no-store",
-                    signal: controller.signal,
-                    headers: {
-                        "Accept": "text/plain, application/json, application/xml, application/octet-stream, */*"
-                    }
-                });
+            const confirmed = contentAnalyzed &&
+                this.hasSensitiveContent(name, contentType, content);
 
-                if (response.type === "opaqueredirect") {
-                    return {
-                        url: url.href,
-                        status: null,
-                        record: null
-                    };
-                }
+            const record = this.createRecord(
+                new URL(result.url || url.href),
+                central.status === "accessible" ? "verified" : central.status,
+                contentType,
+                mode,
+                confirmed,
+                contentAnalyzed
+            );
 
-                if (response.status === 404) {
-                    return {
-                        url: url.href,
-                        status: 404,
-                        record: null
-                    };
-                }
-
-                if (response.status === 403) {
-                    return {
-                        url: url.href,
-                        status: 403,
-                        record: this.createDeniedRecord(url)
-                    };
-                }
-
-                if (response.status >= 500 || !response.ok) {
-                    response.body?.cancel().catch(() => {});
-
-                    return {
-                        url: url.href,
-                        status: response.status,
-                        record: null
-                    };
-                }
-
-                if (response.status !== 200) {
-                    response.body?.cancel().catch(() => {});
-
-                    return {
-                        url: url.href,
-                        status: response.status,
-                        record: null
-                    };
-                }
-
-                const finalUrl = new URL(response.url || url.href);
-
-                if (
-                    finalUrl.origin !== location.origin ||
-                    finalUrl.username ||
-                    finalUrl.password
-                ) {
-                    response.body?.cancel().catch(() => {});
-
-                    return {
-                        url: url.href,
-                        status: response.status,
-                        record: null
-                    };
-                }
-
-                const contentType =
-                    response.headers.get("content-type") || "";
-
-                const name = finalUrl.pathname.split("/").pop() || "";
-
-                let confirmed = false;
-                let contentAnalyzed = false;
-
-                if (mode === "content" || mode === "both") {
-                    const result = await this.readLimited(response);
-
-                    if (!result.truncated && result.text) {
-                        if (!this.isHtml(contentType, result.text)) {
-                            confirmed = this.hasSensitiveContent(
-                                name,
-                                contentType,
-                                result.text
-                            );
-
-                            contentAnalyzed = true;
-                        }
-                    }
-                } else {
-                    response.body?.cancel().catch(() => {});
-                }
-
-                const record = this.createRecord(
-                    finalUrl,
-                    "verified",
-                    contentType,
-                    mode,
-                    confirmed,
-                    contentAnalyzed
-                );
-
-                return {
-                    url: finalUrl.href,
-                    status: response.status,
-                    record
-                };
-            } finally {
-                clearTimeout(timeoutId);
-            }
+            return {
+                url: result.url || url.href,
+                status: result.status,
+                record
+            };
         }
 
         async inspectCandidates(candidates, mode) {
