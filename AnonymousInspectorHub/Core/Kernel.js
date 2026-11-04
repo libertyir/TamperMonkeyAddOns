@@ -1,3 +1,4 @@
+
 (function (root) {
     "use strict";
 
@@ -69,6 +70,7 @@
             this.cryptoManager = null;
             this.storageManager = null;
             this.storageAdapter = null;
+            this.siteIntelligenceService = null;
             this.uiManager = null;
 
             this.storageAdapterName = STORAGE_ADAPTER;
@@ -286,10 +288,6 @@
                 await this.moduleManager.destroy(id);
             }
 
-            //if (this.uiManager) {
-            //    this.uiManager.refreshMenu();
-            //}
-
             return enabled;
         }
 
@@ -490,6 +488,13 @@
                 "Core/SiteManager.js",
                 "Core/CryptoManager.js",
                 "Core/StorageManager.js",
+
+                // Site Intelligence
+                "Core/SiteIntelligence/ResourceRepository.js",
+                "Core/SiteIntelligence/ResourceScanner.js",
+                "Core/SiteIntelligence/SiteStructureManager.js",
+                "Core/SiteIntelligence/SiteIntelligenceService.js",
+
                 "Storage/StorageAdapter.js"
             ];
 
@@ -527,7 +532,13 @@
                 "AnonymousInspectorStorageManager",
                 "AnonymousInspectorStorageAdapter",
                 adapterDefinition.className,
-                "AnonymousInspectorUIManager"
+                "AnonymousInspectorUIManager",
+
+                // Site Intelligence
+                "AnonymousInspectorResourceRepository",
+                "AnonymousInspectorResourceScanner",
+                "AnonymousInspectorSiteStructureManager",
+                "AnonymousInspectorSiteIntelligenceService"
             ];
 
             for (const name of required) {
@@ -549,6 +560,7 @@
             let moduleManager;
             let settingsManager;
             let uiManager;
+            let siteIntelligenceService;
 
             const Application =
                 root.AnonymousInspectorApplication;
@@ -595,6 +607,23 @@
                 this.storageAdapterName,
                 this.storageAdapter
             );
+
+            // Site Intelligence service instance.
+            // It is initialized by Application after StorageManager.
+
+            siteIntelligenceService =
+                new root.AnonymousInspectorSiteIntelligenceService({
+                    storage: this.storageManager,
+
+                    getModuleScanPolicy: (id, ModuleClass) =>
+                        this.frameworkFactory.getModuleScanPolicy(
+                            id,
+                            ModuleClass
+                        )
+                });
+
+            this.siteIntelligenceService =
+                siteIntelligenceService;
 
             this.frameworkFactory = new FrameworkFactory({
                 version: this.version,
@@ -744,6 +773,78 @@
                 setModuleTTL: (id, ttl) =>
                     moduleManager.setModuleTTL(id, ttl),
 
+                // SITE INTELLIGENCE API
+
+                siteIntelligenceDiscover: (url, options) =>
+                    siteIntelligenceService.discover(url, options),
+
+                siteIntelligenceDiscoverMany: (urls, options) =>
+                    siteIntelligenceService.discoverMany(urls, options),
+
+                siteIntelligenceScan: (url, options) =>
+                    siteIntelligenceService.scan(url, options),
+
+                siteIntelligenceScanMany: (urls, options) =>
+                    siteIntelligenceService.scanMany(urls, options),
+
+                siteIntelligenceScanForModule: (
+                    moduleId,
+                    ModuleClass,
+                    url,
+                    options
+                ) =>
+                    siteIntelligenceService.scanForModule(
+                        moduleId,
+                        ModuleClass,
+                        url,
+                        options
+                    ),
+
+                siteIntelligenceGetResource: url =>
+                    siteIntelligenceService.getResource(url),
+
+                siteIntelligenceGetAllResources: () =>
+                    siteIntelligenceService.getAllResources(),
+
+                siteIntelligenceHasResource: url =>
+                    siteIntelligenceService.hasResource(url),
+
+                siteIntelligenceIsResourceFresh: (url, ttl) =>
+                    siteIntelligenceService.isResourceFresh(url, ttl),
+
+                siteIntelligenceGetStructure: options =>
+                    siteIntelligenceService.getStructure(options),
+
+                siteIntelligenceGetNode: path =>
+                    siteIntelligenceService.getNode(path),
+
+                siteIntelligenceGetChildren: path =>
+                    siteIntelligenceService.getChildren(path),
+
+                siteIntelligenceGetParent: path =>
+                    siteIntelligenceService.getParent(path),
+
+                siteIntelligenceGetAncestors: path =>
+                    siteIntelligenceService.getAncestors(path),
+
+                siteIntelligenceGetResourcesByStatus: status =>
+                    siteIntelligenceService.getResourcesByStatus(status),
+
+                siteIntelligenceGetResourcesBySource: source =>
+                    siteIntelligenceService.getResourcesBySource(source),
+
+                siteIntelligenceGetStatistics: () =>
+                    siteIntelligenceService.getStatistics(),
+
+                siteIntelligenceGetStatus: () =>
+                    siteIntelligenceService.getStatus(),
+
+                siteIntelligenceOn: (event, callback) =>
+                    siteIntelligenceService.on(event, callback),
+
+                siteIntelligenceOff: (event, callback) =>
+                    siteIntelligenceService.off(event, callback),
+
                 openSettings: () => {
                     if (uiManager) {
                         uiManager.openSettings();
@@ -802,7 +903,6 @@
                     getSettings: () =>
                         settingsManager.getActiveInstances(),
 
-                    // SETTINGS STATUS
                     getSettingsStatus: () =>
                         settingsManager.getStatus()
                 });
@@ -821,6 +921,7 @@
                 cryptoManager: this.cryptoManager,
                 storageManager: this.storageManager,
                 storageAdapter: this.storageAdapter,
+                siteIntelligenceService,
                 uiManager
             };
 
@@ -839,6 +940,12 @@
             app.registerService("sites", this.siteManager);
             app.registerService("crypto", this.cryptoManager);
             app.registerService("storage", this.storageManager);
+
+            // Site Intelligence starts after StorageManager.
+            app.registerService(
+                "siteIntelligence",
+                this.siteIntelligenceService
+            );
 
             // Initialize UI before loading settings.
             app.registerService("ui", {
@@ -1077,6 +1184,10 @@
                 settings: this.settingsManager
                     ? this.settingsManager.getActiveIds()
                     : [],
+
+                siteIntelligence: this.siteIntelligenceService
+                    ? this.siteIntelligenceService.getStatus()
+                    : null,
 
                 ui: this.uiManager
                     ? this.uiManager.getStatus()
