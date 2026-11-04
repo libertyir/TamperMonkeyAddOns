@@ -122,7 +122,11 @@
 
                 this.scanner = new ScannerClass({
                     repository: this.repository,
-                    ...this.scannerOptions
+                    ...this.scannerOptions,
+
+                    onStateChange: event => {
+                        this.emit("scanner:updated", event);
+                    }
                 });
 
                 this.scanner.initialize();
