@@ -1,34 +1,6 @@
+
 (function (root) {
     "use strict";
-
-    // --------------------------------------------------
-    // STORAGE ADAPTER CONFIGURATION
-    // --------------------------------------------------
-
-    const STORAGE_ADAPTER = "gm";
-
-    const STORAGE_ADAPTER_REGISTRY = Object.freeze({
-        gm: {
-            path: "Storage/GMStorageAdapter.js",
-            className: "AnonymousInspectorGMStorageAdapter",
-
-            create: (AdapterClass, kernel) =>
-                new AdapterClass({
-                    gm: kernel.gm
-                })
-        },
-
-        indexedDB: {
-            path: "Storage/IndexedDBAdapter.js",
-            className: "AnonymousInspectorIndexedDBAdapter",
-
-            create: AdapterClass =>
-                new AdapterClass({
-                    databaseName: "AnonymousInspectorHub",
-                    databaseVersion: 2
-                })
-        }
-    });
 
     class Kernel {
         constructor(options = {}) {
@@ -55,10 +27,15 @@
             this.config = { ...this.defaultConfig };
             this.configuredModuleIds = [];
 
-            this.started = false;
-            this.startPromise = null;
-            this.state = "created";
+            this.storageAdapterName = "gm";
+            this.websiteGuid = null;
 
+            this.started = false;
+            this.state = "created";
+            this.startPromise = null;
+            this.bootstrapPromise = null;
+
+            // Runtime services
             this.application = null;
             this.frameworkFactory = null;
             this.Framework = null;
@@ -72,165 +49,222 @@
             this.siteIntelligenceService = null;
             this.uiManager = null;
 
+            // Infrastructure components
             this.coreLoader = null;
             this.serviceFactory = null;
             this.serviceRegistrar = null;
 
-            this.storageAdapterName = STORAGE_ADAPTER;
-            this.websiteGuid = null;
+            // Kernel components
+            this.environment = null;
+            this.kernelConfig = null;
+            this.applicationStartup = null;
+            this.siteInitializer = null;
+            this.moduleRunner = null;
 
             this.services = {};
+            this.onUIReady = null;
         }
 
         // --------------------------------------------------
-        // TAMPERMONKEY API
+        // COMPONENT LOADING
+        // --------------------------------------------------
+
+        async fetchBootstrapFile(path) {
+            return new Promise((resolve, reject) => {
+                const request = this.gm.xmlHttpRequest;
+
+                if (typeof request !== "function") {
+                    reject(new Error(
+                        "GM_xmlhttpRequest is unavailable."
+                    ));
+                    return;
+                }
+
+                const url = this.baseUrl + path;
+
+                request({
+                    method: "GET",
+                    url: url + "?_aih=" + Date.now(),
+                    responseType: "text",
+                    timeout: this.config.requestTimeout,
+
+                    headers: {
+                        "Cache-Control": "no-cache, no-store",
+                        "Pragma": "no-cache"
+                    },
+
+                    onload: response => {
+                        if (
+                            response.status >= 200 &&
+                            response.status < 300 &&
+                            typeof response.responseText === "string"
+                        ) {
+                            resolve(response.responseText);
+                            return;
+                        }
+
+                        reject(new Error(
+                            "Unable to load " + path +
+                            ": HTTP " + response.status
+                        ));
+                    },
+
+                    onerror: () => reject(
+                        new Error("Network request failed: " + path)
+                    ),
+
+                    ontimeout: () => reject(
+                        new Error("Request timed out: " + path)
+                    )
+                });
+            });
+        }
+
+        async loadComponent(path, globalName) {
+            const source = await this.fetchBootstrapFile(path);
+            const url = this.baseUrl + path;
+
+            new Function(
+                source + "\n//# sourceURL=" + url
+            )();
+
+            if (typeof root[globalName] !== "function") {
+                throw new Error(
+                    "Component was not registered: " + globalName
+                );
+            }
+
+            return root[globalName];
+        }
+
+        async loadKernelComponents() {
+            if (
+                this.environment &&
+                this.kernelConfig &&
+                this.applicationStartup &&
+                this.siteInitializer &&
+                this.moduleRunner
+            ) {
+                return;
+            }
+
+            await this.loadComponent(
+                "Core/KernelEnvironment.js",
+                "AnonymousInspectorKernelEnvironment"
+            );
+
+            this.environment =
+                new root.AnonymousInspectorKernelEnvironment(this);
+
+            await this.loadComponent(
+                "Core/KernelConfig.js",
+                "AnonymousInspectorKernelConfig"
+            );
+
+            await this.loadComponent(
+                "Core/SiteInitializer.js",
+                "AnonymousInspectorSiteInitializer"
+            );
+
+            await this.loadComponent(
+                "Core/ModuleRunner.js",
+                "AnonymousInspectorModuleRunner"
+            );
+
+            await this.loadComponent(
+                "Core/ApplicationStartup.js",
+                "AnonymousInspectorApplicationStartup"
+            );
+
+            this.kernelConfig =
+                new root.AnonymousInspectorKernelConfig(this);
+
+            this.siteInitializer =
+                new root.AnonymousInspectorSiteInitializer(this);
+
+            this.moduleRunner =
+                new root.AnonymousInspectorModuleRunner(this);
+
+            this.applicationStartup =
+                new root.AnonymousInspectorApplicationStartup(this);
+        }
+
+        // --------------------------------------------------
+        // ENVIRONMENT FACADE
         // --------------------------------------------------
 
         get GM() {
-            const api = this.gm;
+            if (!this.environment) {
+                throw new Error(
+                    "KernelEnvironment has not been initialized."
+                );
+            }
 
-            return {
-                getValue: (key, fallback) => {
-                    if (typeof api.getValue !== "function") {
-                        throw new Error(
-                            "GM_getValue is unavailable. Check userscript @grant."
-                        );
-                    }
+            return this.environment.GM;
+        }
 
-                    return api.getValue(key, fallback);
-                },
+        request(url, responseType = "text") {
+            return this.environment.request(url, responseType);
+        }
 
-                setValue: (key, value) => {
-                    if (typeof api.setValue !== "function") {
-                        throw new Error(
-                            "GM_setValue is unavailable. Check userscript @grant."
-                        );
-                    }
+        requestText(url) {
+            return this.environment.requestText(url);
+        }
 
-                    return api.setValue(key, value);
-                },
+        requestArrayBuffer(url) {
+            return this.environment.requestArrayBuffer(url);
+        }
 
-                deleteValue: key => {
-                    if (typeof api.deleteValue === "function") {
-                        return api.deleteValue(key);
-                    }
+        createCacheBustedUrl(url) {
+            return this.environment.createCacheBustedUrl(url);
+        }
 
-                    if (typeof api.setValue === "function") {
-                        return api.setValue(key, null);
-                    }
+        createElement(tag, attributes = {}, children = []) {
+            return this.environment.createElement(
+                tag,
+                attributes,
+                children
+            );
+        }
 
-                    throw new Error("GM storage is unavailable.");
-                },
+        copy(value) {
+            return this.environment.copy(value);
+        }
 
-                listValues: () => {
-                    if (typeof api.listValues !== "function") {
-                        throw new Error(
-                            "GM_listValues is unavailable. Check userscript @grant."
-                        );
-                    }
+        open(url) {
+            return this.environment.open(url);
+        }
 
-                    return api.listValues();
-                },
+        getCurrentDirectory() {
+            return this.environment.getCurrentDirectory();
+        }
 
-                get api() {
-                    return {
-                        getValue: this.getValue,
-                        setValue: this.setValue,
-                        deleteValue: this.deleteValue,
-                        listValues: this.listValues,
+        getStorageAdapterDefinition() {
+            return this.environment.getStorageAdapterDefinition();
+        }
 
-                        xmlHttpRequest: api.xmlHttpRequest || undefined,
-                        setClipboard: api.setClipboard || undefined
-                    };
-                }
-            };
+        loadScript(path) {
+            return this.environment.loadScript(path);
         }
 
         // --------------------------------------------------
-        // CONFIGURATION
+        // CONFIGURATION FACADE
         // --------------------------------------------------
 
         normalizeConfig(config = {}) {
-            const result = { ...this.defaultConfig };
-
-            if (
-                Number.isInteger(config.maxConcurrentModules) &&
-                config.maxConcurrentModules >= 1 &&
-                config.maxConcurrentModules <= 10
-            ) {
-                result.maxConcurrentModules =
-                    config.maxConcurrentModules;
-            }
-
-            if (
-                Number.isInteger(config.requestTimeout) &&
-                config.requestTimeout >= 5000 &&
-                config.requestTimeout <= 120000
-            ) {
-                result.requestTimeout = config.requestTimeout;
-            }
-
-            if (
-                typeof config.showInitializationSummary === "boolean"
-            ) {
-                result.showInitializationSummary =
-                    config.showInitializationSummary;
-            }
-
-            return result;
+            return this.kernelConfig.normalizeConfig(config);
         }
 
         loadConfig() {
-            const saved = this.GM.getValue(
-                this.configKey,
-                null
-            );
-
-            this.config = saved && typeof saved === "object"
-                ? this.normalizeConfig(saved)
-                : { ...this.defaultConfig };
+            return this.kernelConfig.loadConfig();
         }
 
         getConfig() {
-            return { ...this.config };
+            return this.kernelConfig.getConfig();
         }
 
         setConfig(updates) {
-            if (
-                !updates ||
-                typeof updates !== "object" ||
-                Array.isArray(updates)
-            ) {
-                throw new Error("Invalid configuration.");
-            }
-
-            const allowed = Object.keys(this.defaultConfig);
-
-            for (const key of Object.keys(updates)) {
-                if (!allowed.includes(key)) {
-                    throw new Error(
-                        "Unknown configuration key: " + key
-                    );
-                }
-            }
-
-            const normalized = this.normalizeConfig({
-                ...this.config,
-                ...updates
-            });
-
-            for (const key of Object.keys(updates)) {
-                if (normalized[key] !== updates[key]) {
-                    throw new Error(
-                        "Invalid configuration value: " + key
-                    );
-                }
-            }
-
-            this.GM.setValue(this.configKey, normalized);
-            this.config = normalized;
-
-            return this.getConfig();
+            return this.kernelConfig.setConfig(updates);
         }
 
         getDisabledModules() {
@@ -252,9 +286,7 @@
         }
 
         getConfiguredModules() {
-            const disabled = new Set(
-                this.getDisabledModules()
-            );
+            const disabled = new Set(this.getDisabledModules());
 
             return this.configuredModuleIds.map(id => ({
                 id,
@@ -262,300 +294,71 @@
             }));
         }
 
-        async setModuleEnabled(id, enabled) {
-            if (!this.configuredModuleIds.includes(id)) {
-                throw new Error("Unknown module: " + id);
-            }
-
-            if (typeof enabled !== "boolean") {
-                throw new Error("Invalid module state.");
-            }
-
-            const disabled = new Set(
-                this.getDisabledModules()
-            );
-
-            if (enabled) {
-                disabled.delete(id);
-            } else {
-                disabled.add(id);
-            }
-
-            this.GM.setValue(
-                this.modulesConfigKey,
-                [...disabled]
-            );
-
-            if (!enabled && this.moduleManager) {
-                await this.moduleManager.destroy(id);
-            }
-
-            return enabled;
+        setModuleEnabled(id, enabled) {
+            return this.kernelConfig.setModuleEnabled(id, enabled);
         }
 
         // --------------------------------------------------
-        // NETWORK
-        // --------------------------------------------------
-
-        createCacheBustedUrl(url) {
-            const separator = url.includes("?") ? "&" : "?";
-
-            return url +
-                separator +
-                "_aih=" +
-                Date.now() +
-                "_" +
-                Math.random().toString(36).slice(2);
-        }
-
-        request(url, responseType = "text") {
-            return new Promise((resolve, reject) => {
-                const requestAPI = this.gm.xmlHttpRequest;
-
-                if (typeof requestAPI !== "function") {
-                    reject(
-                        new Error(
-                            "GM_xmlhttpRequest is unavailable. Check userscript @grant."
-                        )
-                    );
-                    return;
-                }
-
-                requestAPI({
-                    method: "GET",
-                    url: this.createCacheBustedUrl(url),
-
-                    responseType:
-                        responseType === "arraybuffer"
-                            ? "arraybuffer"
-                            : "text",
-
-                    timeout: this.config.requestTimeout,
-
-                    headers: {
-                        "Cache-Control": "no-cache, no-store",
-                        "Pragma": "no-cache",
-                        "Expires": "0"
-                    },
-
-                    onload: response => {
-                        if (
-                            response.status >= 200 &&
-                            response.status < 300
-                        ) {
-                            resolve(
-                                responseType === "arraybuffer"
-                                    ? response.response
-                                    : response.responseText
-                            );
-
-                            return;
-                        }
-
-                        if ([401, 403, 404].includes(response.status)) {
-                            resolve(null);
-                            return;
-                        }
-
-                        reject(
-                            new Error("HTTP " + response.status)
-                        );
-                    },
-
-                    onerror: () => {
-                        reject(
-                            new Error("Network request failed.")
-                        );
-                    },
-
-                    ontimeout: () => {
-                        reject(
-                            new Error("Request timed out.")
-                        );
-                    }
-                });
-            });
-        }
-
-        requestText(url) {
-            return this.request(url, "text");
-        }
-
-        requestArrayBuffer(url) {
-            return this.request(url, "arraybuffer");
-        }
-
-        // --------------------------------------------------
-        // DOM AND BROWSER UTILITIES
-        // --------------------------------------------------
-
-        createElement(tag, attributes = {}, children = []) {
-            const element = document.createElement(tag);
-
-            for (const [key, value] of Object.entries(attributes)) {
-                if (key === "className") {
-                    element.className = value;
-
-                } else if (key === "textContent") {
-                    element.textContent = value;
-
-                } else if (key === "innerHTML") {
-                    element.innerHTML = value;
-
-                } else if (
-                    key.startsWith("on") &&
-                    typeof value === "function"
-                ) {
-                    element.addEventListener(
-                        key.slice(2).toLowerCase(),
-                        value
-                    );
-
-                } else if (
-                    value !== null &&
-                    value !== undefined
-                ) {
-                    element.setAttribute(key, value);
-                }
-            }
-
-            for (const child of children) {
-                if (child instanceof Node) {
-                    element.appendChild(child);
-
-                } else if (
-                    child !== null &&
-                    child !== undefined
-                ) {
-                    element.appendChild(
-                        document.createTextNode(String(child))
-                    );
-                }
-            }
-
-            return element;
-        }
-
-        copy(value) {
-            const clipboardAPI = this.gm.setClipboard;
-
-            if (typeof clipboardAPI === "function") {
-                clipboardAPI(String(value));
-                return;
-            }
-
-            return navigator.clipboard.writeText(String(value));
-        }
-
-        open(url) {
-            window.open(
-                url,
-                "_blank",
-                "noopener,noreferrer"
-            );
-        }
-
-        getCurrentDirectory() {
-            return new URL(".", window.location.href).href;
-        }
-
-        // --------------------------------------------------
-        // STORAGE ADAPTER REGISTRY
-        // --------------------------------------------------
-
-        getStorageAdapterDefinition() {
-            const definition =
-                STORAGE_ADAPTER_REGISTRY[this.storageAdapterName];
-
-            if (!definition) {
-                throw new Error(
-                    "Unknown storage adapter: " +
-                    this.storageAdapterName
-                );
-            }
-
-            return definition;
-        }
-
-        // --------------------------------------------------
-        // SCRIPT LOADING
-        // --------------------------------------------------
-
-        async loadScript(path) {
-            const url = this.baseUrl + path;
-            const source = await this.requestText(url);
-
-            if (
-                typeof source !== "string" ||
-                !source.trim()
-            ) {
-                throw new Error(
-                    "Script file unavailable: " + path
-                );
-            }
-
-            new Function(
-                source + "\n//# sourceURL=" + url
-            )();
-        }
-
-        // --------------------------------------------------
-        // BOOTSTRAP
+        // CORE BOOTSTRAP
         // --------------------------------------------------
 
         async loadBootstrap() {
-            // CoreLoader must be loaded first because it loads
-            // the application Core components.
-
-            await this.loadScript("Core/CoreLoader.js");
-
-            if (
-                typeof root.AnonymousInspectorCoreLoader !== "function"
-            ) {
-                throw new Error(
-                    "CoreLoader component could not be loaded."
-                );
+            if (this.bootstrapPromise) {
+                return this.bootstrapPromise;
             }
 
-            this.coreLoader =
-                new root.AnonymousInspectorCoreLoader({
-                    requestText: url => this.requestText(url),
-                    baseUrl: this.baseUrl,
+            this.bootstrapPromise = (async () => {
+                await this.loadKernelComponents();
 
-                    getStorageAdapterDefinition: () =>
-                        this.getStorageAdapterDefinition()
-                });
-
-            await this.coreLoader.load();
-
-            // These files depend on the Kernel instance but do not
-            // require the application Core classes during evaluation.
-
-            await this.loadScript("Core/ServiceFactory.js");
-            await this.loadScript("Core/ServiceRegistrar.js");
-
-            if (
-                typeof root.AnonymousInspectorServiceFactory !== "function"
-            ) {
-                throw new Error(
-                    "ServiceFactory component could not be loaded."
+                await this.loadComponent(
+                    "Core/CoreLoader.js",
+                    "AnonymousInspectorCoreLoader"
                 );
-            }
 
-            if (
-                typeof root.AnonymousInspectorServiceRegistrar !== "function"
-            ) {
-                throw new Error(
-                    "ServiceRegistrar component could not be loaded."
+                this.coreLoader =
+                    new root.AnonymousInspectorCoreLoader({
+                        requestText: url => this.requestText(url),
+                        baseUrl: this.baseUrl,
+
+                        getStorageAdapterDefinition: () =>
+                            this.getStorageAdapterDefinition()
+                    });
+
+                await this.coreLoader.load();
+
+                await this.loadComponent(
+                    "Core/ServiceFactory.js",
+                    "AnonymousInspectorServiceFactory"
                 );
+
+                await this.loadComponent(
+                    "Core/ServiceRegistrar.js",
+                    "AnonymousInspectorServiceRegistrar"
+                );
+
+                return this.coreLoader.getStatus();
+            })();
+
+            try {
+                return await this.bootstrapPromise;
+            } catch (error) {
+                this.bootstrapPromise = null;
+                throw error;
             }
         }
 
         // --------------------------------------------------
-        // SERVICE CONSTRUCTION
+        // SERVICE LIFECYCLE
         // --------------------------------------------------
 
         createServices() {
+            if (
+                typeof root.AnonymousInspectorServiceFactory !==
+                "function"
+            ) {
+                throw new Error("ServiceFactory is unavailable.");
+            }
+
             this.serviceFactory =
                 new root.AnonymousInspectorServiceFactory(this);
 
@@ -564,11 +367,14 @@
             return this.services;
         }
 
-        // --------------------------------------------------
-        // SERVICE REGISTRATION
-        // --------------------------------------------------
-
         registerApplicationServices() {
+            if (
+                typeof root.AnonymousInspectorServiceRegistrar !==
+                "function"
+            ) {
+                throw new Error("ServiceRegistrar is unavailable.");
+            }
+
             this.serviceRegistrar =
                 new root.AnonymousInspectorServiceRegistrar(this);
 
@@ -578,93 +384,32 @@
         }
 
         // --------------------------------------------------
-        // WEBSITE REGISTRATION
+        // SITE INITIALIZATION
         // --------------------------------------------------
 
         async registerCurrentWebsite() {
-            const hostname = window.location.hostname;
+            const result = await this.siteInitializer.initialize(
+                window.location.hostname
+            );
 
-            const website = await this.storageManager.upsertWebsite({
-                domain: hostname
-            });
-
-            this.websiteGuid = website.guid;
-
-            this.moduleManager.websiteGuid = website.guid;
-
-            return website;
+            return result.website;
         }
 
         // --------------------------------------------------
         // MODULE EXECUTION
         // --------------------------------------------------
 
-        async runModules(moduleIds) {
-            const requestedIds = [...new Set(moduleIds)];
-
-            const disabled = new Set(
-                this.getDisabledModules()
-            );
-
-            const ids = requestedIds.filter(
-                id => !disabled.has(id)
-            );
-
-            // Remove instances of modules that are now disabled.
-            const activeIds = this.moduleManager.getActiveIds();
-
-            const disabledActiveIds = activeIds.filter(
-                id => disabled.has(id)
-            );
-
-            for (const id of disabledActiveIds) {
-                await this.moduleManager.destroy(id);
-            }
-
-            this.uiManager.showProgress(
-                ids.length
-                    ? "Initializing modules..."
-                    : "No modules to initialize."
-            );
-
-            if (!ids.length) {
-                this.uiManager.refreshMenu();
-                this.uiManager.hideProgress();
-
-                return {
-                    results: [],
-                    total: 0,
-                    completed: 0,
-                    failed: 0,
-                    loaded: 0
-                };
-            }
-
-            const result = await this.moduleManager.initializeMany(
-                ids,
-                {
-                    concurrency: this.config.maxConcurrentModules,
-
-                    onProgress: progress => {
-                        this.uiManager.setProgress(progress);
-                        this.uiManager.refreshMenu();
-                    }
-                }
-            );
-
-            this.uiManager.refreshMenu();
-            this.uiManager.hideProgress();
-
-            return result;
+        runModules(moduleIds) {
+            return this.moduleRunner.run(moduleIds);
         }
 
         // --------------------------------------------------
-        // STARTUP
+        // APPLICATION STARTUP
         // --------------------------------------------------
 
-        async start(...moduleArguments) {
+        start(...moduleArguments) {
             if (this.state === "running") {
-                return this;
+                return Promise.resolve(this);
             }
 
             if (this.startPromise) {
@@ -677,104 +422,24 @@
                     ? moduleArguments[0]
                     : moduleArguments;
 
-            this.startPromise = this.startApplication(moduleIds);
+            this.startPromise =
+                this.applicationStartup
+                    ? this.applicationStartup.start(moduleIds)
+                    : this.loadKernelComponents().then(() => {
+                        return this.applicationStartup.start(moduleIds);
+                    });
 
-            try {
-                return await this.startPromise;
-            } finally {
+            return this.startPromise.finally(() => {
                 this.startPromise = null;
-            }
+            });
         }
 
-        async startApplication(moduleIds) {
-            this.state = "starting";
-
-            try {
-                this.loadConfig();
-
-                this.configuredModuleIds = [
-                    ...new Set(moduleIds)
-                ];
-
-                // Load CoreLoader, application Core files,
-                // ServiceFactory and ServiceRegistrar.
-                await this.loadBootstrap();
-
-                // Construct service instances.
-                this.createServices();
-
-                // Register services in Application.
-                this.registerApplicationServices();
-
-                // Initialize registered services.
-                await this.application.start({
-                    kernel: this,
-                    hostname: window.location.hostname
-                });
-
-                // Register the current website after storage is ready.
-                await this.registerCurrentWebsite();
-
-                const disabled = new Set(
-                    this.getDisabledModules()
-                );
-
-                const globallyEnabled =
-                    this.configuredModuleIds.filter(
-                        id => !disabled.has(id)
-                    );
-
-                const allowed =
-                    this.siteManager.getAllowedModules(
-                        globallyEnabled,
-                        window.location.hostname
-                    );
-
-                await this.runModules(allowed);
-
-                this.uiManager.refreshMenu();
-
-                this.started = true;
-                this.state = "running";
-
-                if (this.config.showInitializationSummary) {
-                    console.info(
-                        "[Anonymous Inspector] Initialization complete:",
-                        {
-                            version: this.version,
-                            storageAdapter: this.storageAdapterName,
-                            totalModules: allowed.length,
-                            loaded: this.moduleManager.getActiveIds().length,
-                            settings:
-                                this.settingsManager.getActiveIds().length,
-                            hostname: window.location.hostname,
-                            allowedModules: allowed
-                        }
-                    );
-                }
-
-                return this;
-
-            } catch (error) {
-                this.state = "failed";
-
-                console.error(
-                    "[Anonymous Inspector] Startup failed:",
-                    error
-                );
-
-                if (this.uiManager) {
-                    this.uiManager.showProgress(
-                        "Initialization failed: " + error.message
-                    );
-                }
-
-                throw error;
-            }
+        startApplication(moduleIds = []) {
+            return this.applicationStartup.start(moduleIds);
         }
 
         // --------------------------------------------------
-        // SHUTDOWN AND STATUS
+        // SHUTDOWN
         // --------------------------------------------------
 
         async stop() {
@@ -784,7 +449,13 @@
 
             this.started = false;
             this.state = "stopped";
+
+            return this;
         }
+
+        // --------------------------------------------------
+        // STATUS
+        // --------------------------------------------------
 
         getStatus() {
             return {
@@ -810,6 +481,10 @@
 
                 ui: this.uiManager
                     ? this.uiManager.getStatus()
+                    : null,
+
+                coreLoader: this.coreLoader
+                    ? this.coreLoader.getStatus()
                     : null
             };
         }
