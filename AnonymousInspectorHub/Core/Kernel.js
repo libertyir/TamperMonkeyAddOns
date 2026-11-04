@@ -1,4 +1,3 @@
-
 (function (root) {
     "use strict";
 
@@ -73,8 +72,11 @@
             this.siteIntelligenceService = null;
             this.uiManager = null;
 
-            this.storageAdapterName = STORAGE_ADAPTER;
+            this.coreLoader = null;
+            this.serviceFactory = null;
+            this.serviceRegistrar = null;
 
+            this.storageAdapterName = STORAGE_ADAPTER;
             this.websiteGuid = null;
 
             this.services = {};
@@ -476,77 +478,76 @@
         }
 
         // --------------------------------------------------
-        // CORE LOADER
+        // SCRIPT LOADING
         // --------------------------------------------------
 
-        async loadCore() {
-            const files = [
-                "Core/Application.js",
-                "Core/Framework.js",
-                "Core/ModuleManager.js",
-                "Core/SettingsManager.js",
-                "Core/SiteManager.js",
-                "Core/CryptoManager.js",
-                "Core/StorageManager.js",
+        async loadScript(path) {
+            const url = this.baseUrl + path;
+            const source = await this.requestText(url);
 
-                // Site Intelligence
-                "Core/SiteIntelligence/ResourceRepository.js",
-                "Core/SiteIntelligence/ResourceScanner.js",
-                "Core/SiteIntelligence/SiteStructureManager.js",
-                "Core/SiteIntelligence/SiteIntelligenceService.js",
-
-                "Storage/StorageAdapter.js"
-            ];
-
-            const adapterDefinition =
-                this.getStorageAdapterDefinition();
-
-            files.push(adapterDefinition.path);
-            files.push("Core/UIManager.js");
-
-            for (const path of files) {
-                const url = this.baseUrl + path;
-                const source = await this.requestText(url);
-
-                if (
-                    typeof source !== "string" ||
-                    !source.trim()
-                ) {
-                    throw new Error(
-                        "Core file unavailable: " + path
-                    );
-                }
-
-                new Function(
-                    source + "\n//# sourceURL=" + url
-                )();
+            if (
+                typeof source !== "string" ||
+                !source.trim()
+            ) {
+                throw new Error(
+                    "Script file unavailable: " + path
+                );
             }
 
-            const required = [
-                "AnonymousInspectorApplication",
-                "AnonymousInspectorFrameworkFactory",
-                "AnonymousInspectorModuleManager",
-                "AnonymousInspectorSettingsManager",
-                "AnonymousInspectorSiteManager",
-                "AnonymousInspectorCryptoManager",
-                "AnonymousInspectorStorageManager",
-                "AnonymousInspectorStorageAdapter",
-                adapterDefinition.className,
-                "AnonymousInspectorUIManager",
+            new Function(
+                source + "\n//# sourceURL=" + url
+            )();
+        }
 
-                // Site Intelligence
-                "AnonymousInspectorResourceRepository",
-                "AnonymousInspectorResourceScanner",
-                "AnonymousInspectorSiteStructureManager",
-                "AnonymousInspectorSiteIntelligenceService"
-            ];
+        // --------------------------------------------------
+        // BOOTSTRAP
+        // --------------------------------------------------
 
-            for (const name of required) {
-                if (typeof root[name] !== "function") {
-                    throw new Error(
-                        "Core component not loaded: " + name
-                    );
-                }
+        async loadBootstrap() {
+            // CoreLoader must be loaded first because it loads
+            // the application Core components.
+
+            await this.loadScript("Core/CoreLoader.js");
+
+            if (
+                typeof root.AnonymousInspectorCoreLoader !== "function"
+            ) {
+                throw new Error(
+                    "CoreLoader component could not be loaded."
+                );
+            }
+
+            this.coreLoader =
+                new root.AnonymousInspectorCoreLoader({
+                    requestText: url => this.requestText(url),
+                    baseUrl: this.baseUrl,
+
+                    getStorageAdapterDefinition: () =>
+                        this.getStorageAdapterDefinition()
+                });
+
+            await this.coreLoader.load();
+
+            // These files depend on the Kernel instance but do not
+            // require the application Core classes during evaluation.
+
+            await this.loadScript("Core/ServiceFactory.js");
+            await this.loadScript("Core/ServiceRegistrar.js");
+
+            if (
+                typeof root.AnonymousInspectorServiceFactory !== "function"
+            ) {
+                throw new Error(
+                    "ServiceFactory component could not be loaded."
+                );
+            }
+
+            if (
+                typeof root.AnonymousInspectorServiceRegistrar !== "function"
+            ) {
+                throw new Error(
+                    "ServiceRegistrar component could not be loaded."
+                );
             }
         }
 
@@ -555,415 +556,25 @@
         // --------------------------------------------------
 
         createServices() {
-            const GM = this.GM;
+            this.serviceFactory =
+                new root.AnonymousInspectorServiceFactory(this);
 
-            let moduleManager;
-            let settingsManager;
-            let uiManager;
-            let siteIntelligenceService;
-
-            const Application =
-                root.AnonymousInspectorApplication;
-
-            const FrameworkFactory =
-                root.AnonymousInspectorFrameworkFactory;
-
-            this.application = new Application({
-                version: this.version
-            });
-
-            this.siteManager =
-                new root.AnonymousInspectorSiteManager({
-                    storageKey: this.sitesConfigKey,
-                    getValue: GM.getValue,
-                    setValue: GM.setValue
-                });
-
-            this.cryptoManager =
-                new root.AnonymousInspectorCryptoManager({
-                    storageKey: this.cryptoKey,
-                    getValue: GM.getValue,
-                    setValue: GM.setValue
-                });
-
-            const adapterDefinition =
-                this.getStorageAdapterDefinition();
-
-            const AdapterClass =
-                root[adapterDefinition.className];
-
-            this.storageAdapter =
-                adapterDefinition.create(
-                    AdapterClass,
-                    this
-                );
-
-            this.storageManager =
-                new root.AnonymousInspectorStorageManager({
-                    defaultAdapter: this.storageAdapterName
-                });
-
-            this.storageManager.registerAdapter(
-                this.storageAdapterName,
-                this.storageAdapter
-            );
-
-            // Site Intelligence service instance.
-            // It is initialized by Application after StorageManager.
-
-            siteIntelligenceService =
-                new root.AnonymousInspectorSiteIntelligenceService({
-                    storage: this.storageManager,
-
-                    getModuleScanPolicy: (id, ModuleClass) =>
-                        this.frameworkFactory.getModuleScanPolicy(
-                            id,
-                            ModuleClass
-                        )
-                });
-
-            this.siteIntelligenceService =
-                siteIntelligenceService;
-
-            this.frameworkFactory = new FrameworkFactory({
-                version: this.version,
-
-                registerModule: (id, ModuleClass) =>
-                    moduleManager.register(id, ModuleClass),
-
-                registerSettings: (id, SettingsClass) =>
-                    settingsManager.register(id, SettingsClass),
-
-                requestText: url => this.requestText(url),
-                requestArrayBuffer: url =>
-                    this.requestArrayBuffer(url),
-
-                createElement: (tag, attributes, children) =>
-                    this.createElement(tag, attributes, children),
-
-                getCurrentDirectory: () =>
-                    this.getCurrentDirectory(),
-
-                copy: value => this.copy(value),
-                open: url => this.open(url),
-
-                // CRYPTO API
-                getEncryptionKey: () =>
-                    this.cryptoManager.getKey(),
-
-                getCryptoAlgorithm: () =>
-                    this.cryptoManager.getAlgorithm(),
-
-                getCryptoStatus: () =>
-                    this.cryptoManager.getStatus(),
-
-                encrypt: data =>
-                    this.cryptoManager.encrypt(data),
-
-                decrypt: payload =>
-                    this.cryptoManager.decrypt(payload),
-
-                // STORAGE API
-                storageGet: (store, key) =>
-                    this.storageManager.get(store, key),
-
-                storagePut: (store, key, value) =>
-                    this.storageManager.put(store, key, value),
-
-                storageDelete: (store, key) =>
-                    this.storageManager.delete(store, key),
-
-                storageGetAll: store =>
-                    this.storageManager.getAll(store),
-
-                storageClear: store =>
-                    this.storageManager.clear(store),
-
-                // Website storage
-                storageGetWebsite: guid =>
-                    this.storageManager.getWebsite(guid),
-
-                storageSaveWebsite: website =>
-                    this.storageManager.saveWebsite(website),
-
-                storageUpsertWebsite: website =>
-                    this.storageManager.upsertWebsite(website),
-
-                storageDeleteWebsite: guid =>
-                    this.storageManager.deleteWebsite(guid),
-
-                storageGetAllWebsites: () =>
-                    this.storageManager.getAllWebsites(),
-
-                // Result storage
-                storageGetResult: guid =>
-                    this.storageManager.getResult(guid),
-
-                storageSaveResult: result =>
-                    this.storageManager.saveResult(result),
-
-                storageDeleteResult: guid =>
-                    this.storageManager.deleteResult(guid),
-
-                storageGetAllResults: () =>
-                    this.storageManager.getAllResults(),
-
-                // Execution storage
-                storageGetExecution: guid =>
-                    this.storageManager.getExecution(guid),
-
-                storageSaveExecution: record =>
-                    this.storageManager.saveExecution(record),
-
-                storageDeleteExecution: guid =>
-                    this.storageManager.deleteExecution(guid),
-
-                storageGetAllExecutions: () =>
-                    this.storageManager.getAllExecutions(),
-
-                storageGetExecutionsByModule: moduleId =>
-                    this.storageManager.getExecutionsByModule(moduleId),
-
-                // Metadata storage
-                storageGetMetadata: key =>
-                    this.storageManager.getMetadata(key),
-
-                storageSaveMetadata: (key, value) =>
-                    this.storageManager.saveMetadata(key, value),
-
-                storageDeleteMetadata: key =>
-                    this.storageManager.deleteMetadata(key),
-
-                // Import / Export
-                storageExportAll: () =>
-                    this.storageManager.exportAll(),
-
-                storageImportAll: (payload, options) =>
-                    this.storageManager.importAll(payload, options),
-
-                storageGetStatus: () =>
-                    this.storageManager.getStatus(),
-
-                // CONFIGURATION
-                getConfig: () => this.getConfig(),
-                setConfig: updates => this.setConfig(updates),
-
-                getSitesConfig: () => this.siteManager.getAll(),
-                setSitesConfig: sites => this.siteManager.setAll(sites),
-
-                getConfiguredModules: () =>
-                    this.getConfiguredModules(),
-
-                setModuleEnabled: (id, enabled) =>
-                    this.setModuleEnabled(id, enabled),
-
-                getModuleTTL: async id => {
-                    const ModuleClass = moduleManager.get(id);
-
-                    if (!ModuleClass) {
-                        return moduleManager.defaultTTL;
-                    }
-
-                    return moduleManager.getEffectiveTTL(
-                        id,
-                        ModuleClass
-                    );
-                },
-
-                setModuleTTL: (id, ttl) =>
-                    moduleManager.setModuleTTL(id, ttl),
-
-                // SITE INTELLIGENCE API
-
-                siteIntelligenceDiscover: (url, options) =>
-                    siteIntelligenceService.discover(url, options),
-
-                siteIntelligenceDiscoverMany: (urls, options) =>
-                    siteIntelligenceService.discoverMany(urls, options),
-
-                siteIntelligenceScan: (url, options) =>
-                    siteIntelligenceService.scan(url, options),
-
-                siteIntelligenceScanMany: (urls, options) =>
-                    siteIntelligenceService.scanMany(urls, options),
-
-                siteIntelligenceScanForModule: (
-                    moduleId,
-                    ModuleClass,
-                    url,
-                    options
-                ) =>
-                    siteIntelligenceService.scanForModule(
-                        moduleId,
-                        ModuleClass,
-                        url,
-                        options
-                    ),
-
-                siteIntelligenceGetResource: url =>
-                    siteIntelligenceService.getResource(url),
-
-                siteIntelligenceGetAllResources: () =>
-                    siteIntelligenceService.getAllResources(),
-
-                siteIntelligenceHasResource: url =>
-                    siteIntelligenceService.hasResource(url),
-
-                siteIntelligenceIsResourceFresh: (url, ttl) =>
-                    siteIntelligenceService.isResourceFresh(url, ttl),
-
-                siteIntelligenceGetStructure: options =>
-                    siteIntelligenceService.getStructure(options),
-
-                siteIntelligenceGetNode: path =>
-                    siteIntelligenceService.getNode(path),
-
-                siteIntelligenceGetChildren: path =>
-                    siteIntelligenceService.getChildren(path),
-
-                siteIntelligenceGetParent: path =>
-                    siteIntelligenceService.getParent(path),
-
-                siteIntelligenceGetAncestors: path =>
-                    siteIntelligenceService.getAncestors(path),
-
-                siteIntelligenceGetResourcesByStatus: status =>
-                    siteIntelligenceService.getResourcesByStatus(status),
-
-                siteIntelligenceGetResourcesBySource: source =>
-                    siteIntelligenceService.getResourcesBySource(source),
-
-                siteIntelligenceGetStatistics: () =>
-                    siteIntelligenceService.getStatistics(),
-
-                siteIntelligenceGetStatus: () =>
-                    siteIntelligenceService.getStatus(),
-
-                siteIntelligenceOn: (event, callback) =>
-                    siteIntelligenceService.on(event, callback),
-
-                siteIntelligenceOff: (event, callback) =>
-                    siteIntelligenceService.off(event, callback),
-
-                openSettings: () => {
-                    if (uiManager) {
-                        uiManager.openSettings();
-                    }
-                },
-
-                closeSettings: () => {
-                    if (uiManager) {
-                        uiManager.closePanel();
-                    }
-                }
-            });
-
-            this.Framework = this.frameworkFactory.create();
-
-            moduleManager =
-                new root.AnonymousInspectorModuleManager({
-                    baseUrl: this.baseUrl + "Modules/",
-                    requestText: url => this.requestText(url),
-                    Framework: this.Framework,
-                    BaseModule: this.Framework.BaseModule,
-                    gm: GM.api
-                });
-
-            settingsManager =
-                new root.AnonymousInspectorSettingsManager({
-                    manifestUrl:
-                        this.baseUrl + "Settings/manifest.json",
-
-                    baseUrl: this.baseUrl + "Settings/",
-                    requestText: url => this.requestText(url),
-                    Framework: this.Framework,
-                    BaseSettings: this.Framework.BaseSettings,
-                    gm: GM.api,
-
-                    onRefresh: () => {
-                        if (uiManager) {
-                            uiManager.refreshMenu();
-                        }
-                    }
-                });
-
-            uiManager =
-                new root.AnonymousInspectorUIManager({
-                    version: this.version,
-
-                    createElement: (tag, attributes, children) =>
-                        this.createElement(tag, attributes, children),
-
-                    onOpenSettings: () =>
-                        uiManager.openSettings(),
-
-                    getModules: () =>
-                        moduleManager.getActiveInstances(),
-
-                    getSettings: () =>
-                        settingsManager.getActiveInstances(),
-
-                    getSettingsStatus: () =>
-                        settingsManager.getStatus()
-                });
-
-            this.moduleManager = moduleManager;
-            this.settingsManager = settingsManager;
-            this.uiManager = uiManager;
-
-            this.services = {
-                application: this.application,
-                frameworkFactory: this.frameworkFactory,
-                Framework: this.Framework,
-                moduleManager,
-                settingsManager,
-                siteManager: this.siteManager,
-                cryptoManager: this.cryptoManager,
-                storageManager: this.storageManager,
-                storageAdapter: this.storageAdapter,
-                siteIntelligenceService,
-                uiManager
-            };
-
-            this.registerApplicationServices();
+            this.services = this.serviceFactory.create();
 
             return this.services;
         }
 
         // --------------------------------------------------
-        // APPLICATION LIFECYCLE
+        // SERVICE REGISTRATION
         // --------------------------------------------------
 
         registerApplicationServices() {
-            const app = this.application;
+            this.serviceRegistrar =
+                new root.AnonymousInspectorServiceRegistrar(this);
 
-            app.registerService("sites", this.siteManager);
-            app.registerService("crypto", this.cryptoManager);
-            app.registerService("storage", this.storageManager);
+            this.serviceRegistrar.register();
 
-            // Site Intelligence starts after StorageManager.
-            app.registerService(
-                "siteIntelligence",
-                this.siteIntelligenceService
-            );
-
-            // Initialize UI before loading settings.
-            app.registerService("ui", {
-                initialize: async context => {
-                    await this.uiManager.initialize(context);
-
-                    if (typeof this.onUIReady === "function") {
-                        this.onUIReady();
-                    }
-                },
-
-                destroy: () => this.uiManager.destroy()
-            });
-
-            app.registerService("settings", {
-                initialize: () => this.settingsManager.loadAll(),
-                destroy: () => this.settingsManager.destroyAll()
-            });
+            return this.application;
         }
 
         // --------------------------------------------------
@@ -1085,15 +696,23 @@
                     ...new Set(moduleIds)
                 ];
 
-                await this.loadCore();
+                // Load CoreLoader, application Core files,
+                // ServiceFactory and ServiceRegistrar.
+                await this.loadBootstrap();
 
+                // Construct service instances.
                 this.createServices();
 
+                // Register services in Application.
+                this.registerApplicationServices();
+
+                // Initialize registered services.
                 await this.application.start({
                     kernel: this,
                     hostname: window.location.hostname
                 });
 
+                // Register the current website after storage is ready.
                 await this.registerCurrentWebsite();
 
                 const disabled = new Set(
