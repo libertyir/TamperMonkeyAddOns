@@ -50,6 +50,7 @@
                 "Core/SiteIntelligence/ResourceScanner.js",
                 "Core/SiteIntelligence/SiteStructureManager.js",
                 "Core/SiteIntelligence/SiteIntelligenceService.js",
+                "Core/SiteIntelligence/SiteIntelligenceDialog.js",
 
                 // Storage
                 "Storage/StorageAdapter.js"
@@ -94,7 +95,8 @@
                 "AnonymousInspectorResourceRepository",
                 "AnonymousInspectorResourceScanner",
                 "AnonymousInspectorSiteStructureManager",
-                "AnonymousInspectorSiteIntelligenceService"
+                "AnonymousInspectorSiteIntelligenceService",
+                "AnonymousInspectorSiteIntelligenceDialog"
             ];
         }
 
