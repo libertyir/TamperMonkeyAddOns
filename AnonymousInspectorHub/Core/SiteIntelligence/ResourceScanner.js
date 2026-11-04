@@ -586,17 +586,16 @@
             await this.cancelResponse(response);
 
             if (status === 404) {
-                await this.repository.remove(url);
-
-                return {
+                return this.saveResult(
                     url,
-                    source: "network",
-                    status,
-                    record: null,
-                    content: null,
-                    contentAvailable: false,
-                    resourceStatus: "not-found"
-                };
+                    {
+                        status: "not-found",
+                        httpStatus: status,
+                        headers: response.headers,
+                        source: options.source
+                    },
+                    null
+                );
             }
 
             let resourceStatus = "http-error";
@@ -683,7 +682,7 @@
                 const response = await fetch(url, {
                     method,
                     credentials: "same-origin",
-                    redirect: "follow",
+                    redirect: "manual",
                     cache: "no-store",
                     signal: controller.signal,
                     headers: {
@@ -700,8 +699,11 @@
                 );
 
                 return {
-                    status: response.status,
-                    url: response.url,
+                    status: response.type === "opaqueredirect"
+                        ? 0
+                        : response.status,
+                    responseType: response.type,
+                    url: response.url || url,
                     headers: this.extractHeaders(
                         response.headers
                     ),
