@@ -145,8 +145,76 @@
             return false;
         }
 
+        createRecord(url, status, contentType, mode, confirmed, contentAnalyzed) {
+            const record = this.module.analyzer.analyze(
+                url.href,
+                "sensitive-scan",
+                {
+                    status,
+                    contentType
+                }
+            );
+
+            if (!record) return null;
+
+            const isNameSensitive =
+                record.tags.includes("sensitive-type");
+
+            record.tags = record.tags.filter(tag =>
+                !tag.startsWith("sensitive")
+            );
+
+            if (confirmed) {
+                record.tags.push("sensitive-confirmed");
+            } else if (
+                (mode === "extension-name" || mode === "both") &&
+                isNameSensitive
+            ) {
+                record.tags.push("sensitive-type");
+            }
+
+            record.status = status;
+
+            record.sensitive = {
+                confirmed,
+                contentAnalyzed,
+                valuesStored: false,
+                access: "accessible"
+            };
+
+            return record;
+        }
+
+        createDeniedRecord(url) {
+            const record = this.module.analyzer.analyze(
+                url.href,
+                "sensitive-scan",
+                {
+                    status: "denied"
+                }
+            );
+
+            if (!record) return null;
+
+            record.tags = record.tags.filter(tag =>
+                !tag.startsWith("sensitive")
+            );
+
+            record.status = "denied";
+
+            record.sensitive = {
+                confirmed: false,
+                contentAnalyzed: false,
+                valuesStored: false,
+                access: "denied"
+            };
+
+            return record;
+        }
+
         async inspectFile(url, mode) {
             const controller = new AbortController();
+
             const timeoutId = setTimeout(
                 () => controller.abort(),
                 this.timeout
@@ -180,11 +248,17 @@
                     };
                 }
 
-                if (
-                    response.status === 403 ||
-                    response.status >= 500 ||
-                    !response.ok
-                ) {
+                if (response.status === 403) {
+                    return {
+                        url: url.href,
+                        status: 403,
+                        record: this.createDeniedRecord(url)
+                    };
+                }
+
+                if (response.status >= 500 || !response.ok) {
+                    response.body?.cancel().catch(() => {});
+
                     return {
                         url: url.href,
                         status: response.status,
@@ -193,6 +267,8 @@
                 }
 
                 if (response.status !== 200) {
+                    response.body?.cancel().catch(() => {});
+
                     return {
                         url: url.href,
                         status: response.status,
@@ -202,15 +278,13 @@
 
                 const finalUrl = new URL(response.url || url.href);
 
-                if (finalUrl.origin !== location.origin) {
-                    return {
-                        url: url.href,
-                        status: response.status,
-                        record: null
-                    };
-                }
+                if (
+                    finalUrl.origin !== location.origin ||
+                    finalUrl.username ||
+                    finalUrl.password
+                ) {
+                    response.body?.cancel().catch(() => {});
 
-                if (finalUrl.username || finalUrl.password) {
                     return {
                         url: url.href,
                         status: response.status,
@@ -229,68 +303,29 @@
                 if (mode === "content" || mode === "both") {
                     const result = await this.readLimited(response);
 
-                    if (result.truncated || !result.text) {
-                        return {
-                            url: url.href,
-                            status: response.status,
-                            record: null
-                        };
+                    if (!result.truncated && result.text) {
+                        if (!this.isHtml(contentType, result.text)) {
+                            confirmed = this.hasSensitiveContent(
+                                name,
+                                contentType,
+                                result.text
+                            );
+
+                            contentAnalyzed = true;
+                        }
                     }
-
-                    if (this.isHtml(contentType, result.text)) {
-                        return {
-                            url: url.href,
-                            status: response.status,
-                            record: null
-                        };
-                    }
-
-                    confirmed = this.hasSensitiveContent(
-                        name,
-                        contentType,
-                        result.text
-                    );
-
-                    contentAnalyzed = true;
                 } else {
                     response.body?.cancel().catch(() => {});
                 }
 
-                const record = this.module.analyzer.analyze(
-                    finalUrl.href,
-                    "sensitive-scan",
-                    {
-                        status: "verified",
-                        contentType
-                    }
-                );
-
-                if (!record) {
-                    return {
-                        url: url.href,
-                        status: response.status,
-                        record: null
-                    };
-                }
-
-                record.status = confirmed ? "confirmed" : "verified";
-
-                record.tags = [
-                    ...new Set([
-                        ...record.tags.filter(tag =>
-                            !tag.startsWith("sensitive")
-                        ),
-                        confirmed
-                            ? "sensitive-confirmed"
-                            : "sensitive-type"
-                    ])
-                ];
-
-                record.sensitive = {
+                const record = this.createRecord(
+                    finalUrl,
+                    "verified",
+                    contentType,
+                    mode,
                     confirmed,
-                    contentAnalyzed,
-                    valuesStored: false
-                };
+                    contentAnalyzed
+                );
 
                 return {
                     url: finalUrl.href,
@@ -372,9 +407,13 @@
             );
 
             for (const record of existingRecords) {
-                const url = new URL(record.url);
+                try {
+                    const url = new URL(record.url);
 
-                candidates.set(url.pathname, url);
+                    candidates.set(url.pathname, url);
+                } catch {
+                    continue;
+                }
             }
 
             for (const name of this.knownFiles) {
@@ -395,38 +434,9 @@
                 inspected.missing
             );
 
-            if (mode === "extension-name" || mode === "both") {
-                for (const record of this.module.store.getAll()) {
-                    if (!record.path.startsWith(directory.pathname)) {
-                        continue;
-                    }
-
-                    const analyzed = this.module.analyzer.analyze(
-                        record.url,
-                        "sensitive-classification"
-                    );
-
-                    if (
-                        analyzed &&
-                        analyzed.tags.includes("sensitive-type")
-                    ) {
-                        record.tags = [
-                            ...new Set([
-                                ...(record.tags || []),
-                                "sensitive-type"
-                            ])
-                        ];
-
-                        this.module.store.upsert(record, false);
-                    }
-                }
-            }
-
-            await this.module.store.upsertMany(inspected.results);
-
-            if (inspected.results.length === 0 && removed === 0) {
-                await this.module.store.save();
-            }
+            await this.module.store.replaceMany(
+                inspected.results
+            );
 
             return {
                 candidatesChecked: candidateList.length,

@@ -199,6 +199,63 @@
             return record;
         }
 
+        replace(item, persist = true) {
+            if (!item || typeof item.url !== "string") return null;
+
+            const url = this.normalizeUrl(item.url);
+            if (!url) return null;
+
+            const key = this.getKey(url);
+            if (!key) return null;
+
+            const previous = this.records.get(key) || {};
+            const now = new Date().toISOString();
+
+            const record = {
+                ...item,
+                url,
+                path: key,
+                sources: [
+                    ...new Set([
+                        ...this.normalizeArray(previous.sources),
+                        ...this.normalizeArray(item.sources)
+                    ])
+                ],
+                tags: this.normalizeArray(item.tags),
+                firstSeen: previous.firstSeen || item.firstSeen || now,
+                lastSeen: now
+            };
+
+            this.records.delete(key);
+            this.records.set(key, record);
+
+            while (this.records.size > this.maxRecords) {
+                const oldestKey = this.records.keys().next().value;
+                this.records.delete(oldestKey);
+            }
+
+            if (persist) {
+                this.save().catch(error =>
+                    console.error(
+                        "[WebStructureInspector] Storage error:",
+                        error
+                    )
+                );
+            }
+
+            return record;
+        }
+
+        async replaceMany(items) {
+            if (!Array.isArray(items) || !items.length) return;
+
+            for (const item of items) {
+                this.replace(item, false);
+            }
+
+            await this.save();
+        }
+
         get(url) {
             const key = this.getKey(url);
             return key ? this.records.get(key) || null : null;
