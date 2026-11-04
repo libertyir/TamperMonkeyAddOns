@@ -4,32 +4,32 @@
     class ModuleRunner {
         constructor(kernel) {
             if (!kernel) {
-                throw new Error(
-                    "ModuleRunner requires a Kernel instance."
-                );
+                throw new Error("ModuleRunner requires a Kernel instance.");
             }
-
             this.kernel = kernel;
         }
 
-        async run(moduleIds) {
+        async run(moduleIds = []) {
             const kernel = this.kernel;
-            const requestedIds = [...new Set(moduleIds)];
+
+            if (!kernel.moduleManager || !kernel.uiManager) {
+                throw new Error(
+                    "ModuleRunner requires ModuleManager and UIManager."
+                );
+            }
+
+            const ids = [...new Set(
+                moduleIds.filter(id => typeof id === "string")
+            )];
 
             const disabled = new Set(
-                await kernel.kernelConfig.getDisabledModules()
+                kernel.kernelConfig.getDisabledModules()
             );
 
-            const ids = requestedIds.filter(
-                id => !disabled.has(id)
-            );
-
-            // Remove instances of modules that are now disabled.
-            const activeIds = kernel.moduleManager.getActiveIds();
-
-            const disabledActiveIds = activeIds.filter(
-                id => disabled.has(id)
-            );
+            const disabledActiveIds =
+                kernel.moduleManager.getActiveIds().filter(
+                    id => disabled.has(id)
+                );
 
             for (const id of disabledActiveIds) {
                 await kernel.moduleManager.destroy(id);
@@ -41,40 +41,31 @@
                     : "No modules to initialize."
             );
 
-            if (!ids.length) {
+            try {
+                if (!ids.length) {
+                    kernel.uiManager.refreshMenu();
+                    return {
+                        results: [],
+                        total: 0,
+                        completed: 0,
+                        failed: 0,
+                        loaded: 0
+                    };
+                }
+
+                return await kernel.moduleManager.initializeMany(ids, {
+                    concurrency: kernel.config.maxConcurrentModules,
+                    onProgress: progress => {
+                        kernel.uiManager.setProgress(progress);
+                        kernel.uiManager.refreshMenu();
+                    }
+                });
+            } finally {
                 kernel.uiManager.refreshMenu();
                 kernel.uiManager.hideProgress();
-
-                return {
-                    results: [],
-                    total: 0,
-                    completed: 0,
-                    failed: 0,
-                    loaded: 0
-                };
             }
-
-            const result =
-                await kernel.moduleManager.initializeMany(
-                    ids,
-                    {
-                        concurrency:
-                            kernel.config.maxConcurrentModules,
-
-                        onProgress: progress => {
-                            kernel.uiManager.setProgress(progress);
-                            kernel.uiManager.refreshMenu();
-                        }
-                    }
-                );
-
-            kernel.uiManager.refreshMenu();
-            kernel.uiManager.hideProgress();
-
-            return result;
         }
     }
 
     root.AnonymousInspectorModuleRunner = ModuleRunner;
-
 })(globalThis);

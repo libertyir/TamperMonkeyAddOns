@@ -8,7 +8,6 @@
                     "ApplicationStartup requires a Kernel instance."
                 );
             }
-
             this.kernel = kernel;
         }
 
@@ -22,15 +21,11 @@
             kernel.state = "starting";
 
             try {
-                await kernel.kernelConfig.loadConfig();
+                kernel.kernelConfig.loadConfig();
 
-                kernel.configuredModuleIds = [
-                    ...new Set(
-                        moduleIds.filter(
-                            id => typeof id === "string"
-                        )
-                    )
-                ];
+                kernel.configuredModuleIds = [...new Set(
+                    moduleIds.filter(id => typeof id === "string")
+                )];
 
                 await kernel.loadBootstrap();
 
@@ -38,30 +33,14 @@
                 kernel.registerApplicationServices();
 
                 const hostname = window.location.hostname;
+                await kernel.application.start({ kernel, hostname });
 
-                await kernel.application.start({
-                    kernel,
-                    hostname
-                });
+                const {
+                    website,
+                    allowedModules
+                } = await kernel.siteInitializer.initialize(hostname);
 
-                await kernel.registerCurrentWebsite();
-
-                const disabled =
-                    await kernel.kernelConfig.getDisabledModules();
-
-                const globallyEnabled =
-                    kernel.configuredModuleIds.filter(
-                        id => !disabled.includes(id)
-                    );
-
-                const allowed =
-                    kernel.siteManager.getAllowedModules(
-                        globallyEnabled,
-                        hostname
-                    );
-
-                await kernel.runModules(allowed);
-
+                await kernel.runModules(allowedModules);
                 kernel.uiManager.refreshMenu();
 
                 kernel.started = true;
@@ -77,14 +56,15 @@
                             loaded: kernel.moduleManager.getActiveIds(),
                             settings: kernel.settingsManager.getActiveIds(),
                             hostname,
-                            allowedModules: allowed
+                            websiteGuid: website.guid,
+                            allowedModules
                         }
                     );
                 }
 
                 return kernel;
-
             } catch (error) {
+                kernel.started = false;
                 kernel.state = "failed";
 
                 console.error(
@@ -97,12 +77,10 @@
                         "Initialization failed: " + error.message
                     );
                 }
-
                 throw error;
             }
         }
     }
 
     root.AnonymousInspectorApplicationStartup = ApplicationStartup;
-
 })(globalThis);

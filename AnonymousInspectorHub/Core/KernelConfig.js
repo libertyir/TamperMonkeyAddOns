@@ -4,182 +4,132 @@
     class KernelConfig {
         constructor(kernel) {
             if (!kernel) {
-                throw new Error(
-                    "KernelConfig requires a kernel instance."
-                );
+                throw new Error("KernelConfig requires a kernel instance.");
             }
-
             this.kernel = kernel;
         }
 
         normalizeConfig(config = {}) {
             const defaults = this.kernel.defaultConfig;
-
-            const maxConcurrentModules =
-                Number.isInteger(config.maxConcurrentModules) &&
-                config.maxConcurrentModules >= 1 &&
-                config.maxConcurrentModules <= 10
-                    ? config.maxConcurrentModules
-                    : defaults.maxConcurrentModules;
-
-            const requestTimeout =
-                Number.isInteger(config.requestTimeout) &&
-                config.requestTimeout >= 5000 &&
-                config.requestTimeout <= 120000
-                    ? config.requestTimeout
-                    : defaults.requestTimeout;
-
-            const showInitializationSummary =
-                typeof config.showInitializationSummary === "boolean"
-                    ? config.showInitializationSummary
-                    : defaults.showInitializationSummary;
-
             return {
-                maxConcurrentModules,
-                requestTimeout,
-                showInitializationSummary
+                maxConcurrentModules:
+                    Number.isInteger(config.maxConcurrentModules) &&
+                    config.maxConcurrentModules >= 1 &&
+                    config.maxConcurrentModules <= 10
+                        ? config.maxConcurrentModules
+                        : defaults.maxConcurrentModules,
+
+                requestTimeout:
+                    Number.isInteger(config.requestTimeout) &&
+                    config.requestTimeout >= 5000 &&
+                    config.requestTimeout <= 120000
+                        ? config.requestTimeout
+                        : defaults.requestTimeout,
+
+                showInitializationSummary:
+                    typeof config.showInitializationSummary === "boolean"
+                        ? config.showInitializationSummary
+                        : defaults.showInitializationSummary
             };
         }
 
-        async loadConfig() {
-            const savedConfig = await this.kernel.GM.getValue(
+        loadConfig() {
+            const saved = this.kernel.GM.getValue(
                 this.kernel.configKey,
                 null
             );
 
-            if (
-                savedConfig &&
-                typeof savedConfig === "object" &&
-                !Array.isArray(savedConfig)
-            ) {
-                this.kernel.config = this.normalizeConfig(savedConfig);
-            } else {
-                this.kernel.config = {
-                    ...this.kernel.defaultConfig
-                };
-            }
+            this.kernel.config =
+                saved &&
+                typeof saved === "object" &&
+                !Array.isArray(saved)
+                    ? this.normalizeConfig(saved)
+                    : { ...this.kernel.defaultConfig };
 
             return this.getConfig();
         }
 
         getConfig() {
-            return {
-                ...this.kernel.config
-            };
+            return { ...this.kernel.config };
         }
 
-        async setConfig(updates) {
+        setConfig(updates) {
             if (
                 !updates ||
                 typeof updates !== "object" ||
                 Array.isArray(updates)
             ) {
-                throw new Error(
-                    "Configuration updates must be an object."
-                );
+                throw new Error("Configuration updates must be an object.");
             }
 
-            const allowedKeys = Object.keys(
-                this.kernel.defaultConfig
-            );
-
+            const allowedKeys = Object.keys(this.kernel.defaultConfig);
             const unknownKeys = Object.keys(updates).filter(
                 key => !allowedKeys.includes(key)
             );
 
             if (unknownKeys.length) {
                 throw new Error(
-                    "Unknown configuration keys: " +
-                    unknownKeys.join(", ")
+                    "Unknown configuration keys: " + unknownKeys.join(", ")
                 );
             }
 
-            const mergedConfig = {
+            const normalized = this.normalizeConfig({
                 ...this.kernel.config,
                 ...updates
-            };
-
-            const normalizedConfig =
-                this.normalizeConfig(mergedConfig);
+            });
 
             for (const key of Object.keys(updates)) {
-                if (normalizedConfig[key] !== updates[key]) {
-                    throw new Error(
-                        "Invalid configuration value: " + key
-                    );
+                if (normalized[key] !== updates[key]) {
+                    throw new Error("Invalid configuration value: " + key);
                 }
             }
 
-            await this.kernel.GM.setValue(
-                this.kernel.configKey,
-                normalizedConfig
-            );
-
-            this.kernel.config = normalizedConfig;
-
+            this.kernel.GM.setValue(this.kernel.configKey, normalized);
+            this.kernel.config = normalized;
             return this.getConfig();
         }
 
-        async getDisabledModules() {
-            const disabled = await this.kernel.GM.getValue(
+        getDisabledModules() {
+            const saved = this.kernel.GM.getValue(
                 this.kernel.modulesConfigKey,
                 []
             );
 
-            if (!Array.isArray(disabled)) {
-                return [];
-            }
+            if (!Array.isArray(saved)) return [];
 
-            return [
-                ...new Set(
-                    disabled.filter(
-                        id =>
-                            typeof id === "string" &&
-                            /^[a-zA-Z0-9_-]+$/.test(id)
-                    )
-                )
-            ];
+            return [...new Set(saved.filter(
+                id =>
+                    typeof id === "string" &&
+                    /^[a-zA-Z0-9_-]+$/.test(id)
+            ))];
         }
 
-        async getConfiguredModules() {
-            const disabled = await this.getDisabledModules();
+        getConfiguredModules() {
+            const disabled = new Set(this.getDisabledModules());
 
             return this.kernel.configuredModuleIds.map(id => ({
                 id,
-                enabled: !disabled.includes(id)
+                enabled: !disabled.has(id)
             }));
         }
 
         async setModuleEnabled(id, enabled) {
-            if (
-                !this.kernel.configuredModuleIds.includes(id)
-            ) {
-                throw new Error(
-                    "Module is not configured: " + id
-                );
+            if (!this.kernel.configuredModuleIds.includes(id)) {
+                throw new Error("Module is not configured: " + id);
             }
 
             if (typeof enabled !== "boolean") {
-                throw new Error(
-                    "Module enabled state must be a boolean."
-                );
+                throw new Error("Module enabled state must be a boolean.");
             }
 
-            const disabled = await this.getDisabledModules();
-
+            const disabled = this.getDisabledModules();
             const updated = enabled
                 ? disabled.filter(moduleId => moduleId !== id)
                 : [...new Set([...disabled, id])];
 
-            await this.kernel.GM.setValue(
-                this.kernel.modulesConfigKey,
-                updated
-            );
+            this.kernel.GM.setValue(this.kernel.modulesConfigKey, updated);
 
-            if (
-                !enabled &&
-                this.kernel.moduleManager
-            ) {
+            if (!enabled && this.kernel.moduleManager) {
                 await this.kernel.moduleManager.destroy(id);
             }
 
@@ -188,5 +138,4 @@
     }
 
     root.AnonymousInspectorKernelConfig = KernelConfig;
-
 })(globalThis);
