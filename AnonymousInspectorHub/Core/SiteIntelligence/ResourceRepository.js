@@ -132,6 +132,14 @@
                 throw new Error("Invalid resource URL.");
             }
 
+            if (!["http:", "https:"].includes(url.protocol)) {
+                throw new Error("Only HTTP and HTTPS resources are allowed.");
+            }
+
+            if (url.username || url.password) {
+                throw new Error("Resource URLs containing credentials are not allowed.");
+            }
+
             url.hash = "";
 
             return url.href;
