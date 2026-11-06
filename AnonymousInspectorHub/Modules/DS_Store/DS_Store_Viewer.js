@@ -6,8 +6,7 @@
         static title = "DS_Store Viewer";
         static description = "Inspect exposed macOS directory metadata";
         static icon = "📁";
-        static scannerId = "DS_Store_Scanner";
-        static scannerPath = "DS_Store/DS_Store_Scanner.js";
+        static providerId = "DS_Store_Provider";
 
         constructor() {
             super();

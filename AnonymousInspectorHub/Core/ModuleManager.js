@@ -12,6 +12,10 @@
 
             this.modules = new Map();
             this.activeInstances = new Map();
+            this.descriptors = new Map();
+            this.providers = new Map();
+            this.providerInstances = new Map();
+            this.scannerInstances = new Map();
 
             this.loadingPromises = new Map();
             this.initializingPromises = new Map();
@@ -82,6 +86,133 @@
 
         getRegisteredIds() {
             return [...this.modules.keys()];
+        }
+
+        registerDescriptor(id, descriptor = {}) {
+            this.validateId(id);
+            if (!descriptor || !Array.isArray(descriptor.components)) {
+                throw new Error("Invalid module descriptor: " + id);
+            }
+            const components = descriptor.components.map(component => {
+                if (!component || typeof component.id !== "string" ||
+                    typeof component.path !== "string" ||
+                    !["module", "provider"].includes(component.type)) {
+                    throw new Error("Invalid descriptor component: " + id);
+                }
+                this.validateId(component.id);
+                const path = component.path.replace(/^\/+/, "");
+                if (path.split("/").some(part => !part || part === "." || part === "..") ||
+                    !/\.js$/i.test(path)) {
+                    throw new Error("Invalid descriptor component path: " + path);
+                }
+                return Object.freeze({ id: component.id, type: component.type, path });
+            });
+            this.descriptors.set(id, Object.freeze({
+                id,
+                components: Object.freeze(components)
+            }));
+            return this.descriptors.get(id);
+        }
+
+        registerProvider(id, ProviderClass) {
+            this.validateId(id);
+            if (typeof ProviderClass !== "function") {
+                throw new Error("Invalid provider class: " + id);
+            }
+            this.providers.set(id, ProviderClass);
+            this.providerInstances.delete(id);
+            return ProviderClass;
+        }
+
+        getProvider(id) {
+            const ProviderClass = this.providers.get(id);
+            if (!ProviderClass) return null;
+            if (!this.providerInstances.has(id)) {
+                this.providerInstances.set(id, new ProviderClass());
+            }
+            return this.providerInstances.get(id);
+        }
+
+        async loadDescriptorComponents(id) {
+            const descriptor = this.descriptors.get(id);
+            if (!descriptor) return;
+            for (const component of descriptor.components) {
+                if (component.type === "module" && this.modules.has(component.id)) continue;
+                if (component.type === "provider" && this.providers.has(component.id)) continue;
+                const url = this.baseUrl + component.path;
+                const source = await this.requestText(url);
+                if (typeof source !== "string" || !source.trim()) {
+                    throw new Error("Module component unavailable: " + component.path);
+                }
+                this.executeSource(source, url);
+                const registered = component.type === "module"
+                    ? this.modules.has(component.id)
+                    : this.providers.has(component.id);
+                if (!registered) {
+                    throw new Error("Module component did not register: " + component.id);
+                }
+            }
+        }
+
+        async startScanner(id, context = {}) {
+            const ModuleClass = await this.load(id);
+            if (typeof ModuleClass.prototype.scan !== "function") {
+                throw new Error("Scanner does not implement scan(): " + id);
+            }
+            const previous = this.scannerInstances.get(id);
+            if (previous && previous.status === "running") {
+                throw new Error("Scanner is already running: " + id);
+            }
+            if (previous) {
+                if (typeof previous.instance.destroy === "function") {
+                    await previous.instance.destroy();
+                }
+                this.scannerInstances.delete(id);
+            }
+            const instance = new ModuleClass();
+            const state = {
+                id,
+                instance,
+                status: "running",
+                startedAt: new Date().toISOString(),
+                completedAt: null,
+                error: null
+            };
+            this.scannerInstances.set(id, state);
+            try {
+                const result = await instance.scan(context);
+                state.status = "completed";
+                state.completedAt = new Date().toISOString();
+                return result;
+            } catch (error) {
+                state.status = "failed";
+                state.error = error.message || String(error);
+                state.completedAt = new Date().toISOString();
+                throw error;
+            }
+        }
+
+        async stopScanner(id) {
+            const state = this.scannerInstances.get(id);
+            if (!state) return false;
+            if (typeof state.instance.stop === "function") await state.instance.stop();
+            if (typeof state.instance.destroy === "function") await state.instance.destroy();
+            state.status = "stopped";
+            state.completedAt = new Date().toISOString();
+            this.scannerInstances.delete(id);
+            return true;
+        }
+
+        getScannerStatus(id) {
+            const state = this.scannerInstances.get(id);
+            if (!state) return null;
+            return {
+                id: state.id,
+                status: state.status,
+                startedAt: state.startedAt,
+                completedAt: state.completedAt,
+                error: state.error
+            };
         }
 
         // --------------------------------------------------
@@ -764,9 +895,7 @@
 
             const relativePath = typeof sourcePath === "string" && sourcePath.trim()
                 ? sourcePath.replace(/^\/+/, "")
-                : id.startsWith("DS_Store_")
-                    ? "DS_Store/" + id + ".js"
-                    : id + ".js";
+                : id + ".js";
 
             if (
                 relativePath.split("/").some(part =>
@@ -794,6 +923,7 @@
                 );
             }
 
+            await this.loadDescriptorComponents(id);
             return this.modules.get(id);
         }
 

@@ -121,6 +121,24 @@
                 registerModule: (id, ModuleClass) =>
                     moduleManager.register(id, ModuleClass),
 
+                registerModuleDescriptor: (id, descriptor) =>
+                    moduleManager.registerDescriptor(id, descriptor),
+
+                registerModuleProvider: (id, ProviderClass) =>
+                    moduleManager.registerProvider(id, ProviderClass),
+
+                scannerStart: (id, context) =>
+                    moduleManager.startScanner(id, context),
+
+                scannerStop: id =>
+                    moduleManager.stopScanner(id),
+
+                scannerGetStatus: id =>
+                    moduleManager.getScannerStatus(id),
+
+                providerGet: id =>
+                    moduleManager.getProvider(id),
+
                 registerSettings: (id, SettingsClass) =>
                     settingsManager.register(id, SettingsClass),
 

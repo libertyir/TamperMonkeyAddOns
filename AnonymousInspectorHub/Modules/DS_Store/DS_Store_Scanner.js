@@ -5,15 +5,21 @@
         static id = "DS_Store_Scanner";
         static title = "DS_Store Scanner";
         static description = "Fetch and parse exposed macOS directory metadata";
+        static scanPolicy = {
+            scope: "directory",
+            defaultTTL: "7d"
+        };
 
         constructor() {
             super();
             this.KaitaiStream = null;
             this.DsStore = null;
+            this.cancelled = false;
         }
 
         async scan(context = {}) {
             this.available = false;
+            this.cancelled = false;
 
             const pageUrl = typeof context.url === "string"
                 ? context.url
@@ -32,6 +38,9 @@
             try {
                 buffer = await Framework.requestArrayBuffer(fileUrl);
 
+                if (this.cancelled) {
+                    throw new Error("DS_Store scan was cancelled.");
+                }
                 if (!buffer || buffer.byteLength < 36) {
                     throw new Error("The .DS_Store file is unavailable or too small.");
                 }
@@ -233,7 +242,11 @@
             return results;
         }
 
+        stop() {
+            this.cancelled = true;
+        }
         destroy() {
+            this.cancelled = true;
             this.KaitaiStream = null;
             this.DsStore = null;
         }

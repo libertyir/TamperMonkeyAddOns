@@ -726,6 +726,14 @@
                     );
                 },
 
+                registerDescriptor(id, descriptor) {
+                    return factory.invoke("registerModuleDescriptor", [id, descriptor]);
+                },
+
+                registerProvider(id, ProviderClass) {
+                    return factory.invoke("registerModuleProvider", [id, ProviderClass]);
+                },
+
                 registerSettings(id, SettingsClass) {
                     return factory.invoke(
                         "registerSettings",
@@ -868,8 +876,24 @@
                 SiteIntelligence:
                     factory.createSiteIntelligenceAPI(),
 
-                // Viewer infrastructure
-                Viewers: factory.createViewerAPI()
+                // Viewer and module component infrastructure
+                Viewers: factory.createViewerAPI(),
+                Scanners: Object.freeze({
+                    start(id, context = {}) {
+                        return factory.invoke("scannerStart", [id, context]);
+                    },
+                    stop(id) {
+                        return factory.invoke("scannerStop", [id]);
+                    },
+                    getStatus(id) {
+                        return factory.invoke("scannerGetStatus", [id]);
+                    }
+                }),
+                Providers: Object.freeze({
+                    get(id) {
+                        return factory.invoke("providerGet", [id]);
+                    }
+                })
             };
 
             this.framework = Object.freeze(api);

@@ -43,7 +43,7 @@
     }
 
     AnonymousInspector(
-        "DS_Store_Viewer", 
+        "DS_Store_Module", 
         "GitConfig_Viewer",
         "PhpInfo_Viewer",
         "EnvFile_Viewer",
