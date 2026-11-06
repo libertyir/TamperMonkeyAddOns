@@ -40,7 +40,10 @@
                     allowedModules
                 } = await kernel.siteInitializer.initialize(hostname);
 
-                await kernel.runModules(allowedModules);
+                kernel.allowedModuleIds = [...allowedModules];
+                kernel.modulesStarted = false;
+                kernel.modulesStartPromise = null;
+                kernel.moduleRunResult = null;
                 kernel.uiManager.refreshMenu();
 
                 kernel.started = true;
