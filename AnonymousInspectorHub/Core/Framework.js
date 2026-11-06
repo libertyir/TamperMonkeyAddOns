@@ -699,6 +699,21 @@
             const api = {
                 version: this.version,
 
+                GM: Object.freeze({
+                    getValue(key, fallback) {
+                        return factory.invoke("gmGetValue", [key, fallback]);
+                    },
+                    setValue(key, value) {
+                        return factory.invoke("gmSetValue", [key, value]);
+                    },
+                    deleteValue(key) {
+                        return factory.invoke("gmDeleteValue", [key]);
+                    },
+                    listValues() {
+                        return factory.invoke("gmListValues", []);
+                    }
+                }),
+
                 // Base classes
                 BaseModule: this.BaseModule,
                 BaseSettings: this.BaseSettings,

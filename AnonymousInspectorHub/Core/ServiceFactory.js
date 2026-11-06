@@ -151,6 +151,13 @@
                 copy: value => kernel.copy(value),
                 open: url => kernel.open(url),
 
+                // TAMPERMONKEY STORAGE API
+
+                gmGetValue: (key, fallback) => GM.getValue(key, fallback),
+                gmSetValue: (key, value) => GM.setValue(key, value),
+                gmDeleteValue: key => GM.deleteValue(key),
+                gmListValues: () => GM.listValues(),
+
                 // CRYPTO API
 
                 getEncryptionKey: () =>

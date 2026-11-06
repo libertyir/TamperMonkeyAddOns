@@ -201,15 +201,20 @@ class StorageUI extends Framework.BaseSettings {
         return row;
     }
 
-    async readGMEntries() {
-        if (
-            typeof GM_getValue !== "function" ||
-            typeof GM_listValues !== "function"
-        ) {
-            throw new Error("GM storage APIs are unavailable.");
+    getGMStorage() {
+        const storage = Framework.GM;
+        if (!storage ||
+            typeof storage.getValue !== "function" ||
+            typeof storage.listValues !== "function" ||
+            typeof storage.deleteValue !== "function") {
+            throw new Error("Tampermonkey storage bridge is unavailable.");
         }
+        return storage;
+    }
 
-        const listedKeys = await GM_listValues();
+    async readGMEntries() {
+        const gm = this.getGMStorage();
+        const listedKeys = await gm.listValues();
         const keys = new Set([
             ...Object.keys(this.constructor.CONFIG_KEYS),
             ...(Array.isArray(listedKeys) ? listedKeys : [])
@@ -226,7 +231,7 @@ class StorageUI extends Framework.BaseSettings {
                 continue;
             }
 
-            const value = await GM_getValue(key, undefined);
+            const value = await gm.getValue(key, undefined);
 
             if (value === undefined) {
                 continue;
@@ -251,14 +256,14 @@ class StorageUI extends Framework.BaseSettings {
     }
 
     async readTemporaryEntries() {
-        if (typeof GM_listValues !== "function") throw new Error("GM_listValues is unavailable.");
-        const keys = await GM_listValues();
+        const gm = this.getGMStorage();
+        const keys = await gm.listValues();
         const entries = [];
         for (const key of keys) {
             if (typeof key !== "string" || !key.startsWith("aih_temp_")) continue;
             const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)$/i);
             if (!match || Number(match[1]) <= Date.now()) {
-                if (typeof GM_deleteValue === "function") await GM_deleteValue(key);
+                await gm.deleteValue(key);
                 continue;
             }
             entries.push({ key, expiresAt: Number(match[1]), size: Number(match[2]) });
@@ -267,19 +272,16 @@ class StorageUI extends Framework.BaseSettings {
     }
 
     async clearTemporaryData() {
-        if (typeof GM_listValues !== "function" || typeof GM_deleteValue !== "function") throw new Error("GM storage APIs are unavailable.");
-        const keys = await GM_listValues();
+        const gm = this.getGMStorage();
+        const keys = await gm.listValues();
         const temporaryKeys = keys.filter(key => typeof key === "string" && key.startsWith("aih_temp_"));
-        await Promise.all(temporaryKeys.map(key => GM_deleteValue(key)));
+        await Promise.all(temporaryKeys.map(key => gm.deleteValue(key)));
         return temporaryKeys.length;
     }
 
     async deleteGMEntry(key) {
-        if (typeof GM_deleteValue !== "function") {
-            throw new Error("GM_deleteValue is unavailable.");
-        }
-
-        await GM_deleteValue(key);
+        const gm = this.getGMStorage();
+        await gm.deleteValue(key);
     }
 
     async deleteStoreEntry(store, key) {
@@ -291,8 +293,9 @@ class StorageUI extends Framework.BaseSettings {
             await Framework.Storage.clear(store.id);
         }
 
-        if (typeof GM_listValues === "function") {
-            const keys = await GM_listValues();
+        const gm = this.getGMStorage();
+        if (gm && typeof gm.listValues === "function") {
+            const keys = await gm.listValues();
 
             for (const key of keys) {
                 if (
