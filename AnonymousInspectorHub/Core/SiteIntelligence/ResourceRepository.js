@@ -313,6 +313,27 @@
                 : null;
         }
 
+        async getStructureRecords() {
+            this.ensureInitialized();
+
+            return [...this.records.values()].map(record => ({
+                url: record.url,
+                origin: record.origin,
+                status: record.status,
+                httpStatus: record.httpStatus,
+                contentType: record.contentType,
+                contentLength: record.contentLength,
+                discoveredAt: record.discoveredAt,
+                validatedAt: record.validatedAt,
+                lastSeenAt: record.lastSeenAt,
+                tags: Array.isArray(record.tags) ? [...record.tags] : [],
+                sources: Array.isArray(record.sources) ? [...record.sources] : [],
+                metadata: record.metadata?.directoryListing === true
+                    ? { directoryListing: true }
+                    : {}
+            }));
+        }
+
         async getAll() {
             this.ensureInitialized();
 

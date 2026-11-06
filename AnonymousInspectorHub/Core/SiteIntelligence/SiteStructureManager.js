@@ -291,7 +291,7 @@
             }
 
             const records =
-                await this.repository.getAll();
+                await this.repository.getStructureRecords();
 
             this.records.clear();
 

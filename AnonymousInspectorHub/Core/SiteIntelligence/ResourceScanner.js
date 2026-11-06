@@ -520,14 +520,10 @@
 
         async processResource(url, options) {
             if (!options.force && options.needContent) {
-                try {
-                    const temporary = await this.getTemporaryContent(url);
-                    if (temporary) {
-                        const cachedRecord = await this.repository.get(url);
-                        return { url, source: "temporary-cache", status: cachedRecord?.httpStatus ?? 200, record: cachedRecord, content: temporary.content, contentAvailable: true, contentType: temporary.contentType };
-                    }
-                } catch (error) {
-                    console.warn("[ResourceScanner] Temporary cache read failed; fetching resource again.", error);
+                const temporary = await this.getTemporaryContent(url);
+                if (temporary) {
+                    const cachedRecord = await this.repository.get(url);
+                    return { url, source: "temporary-cache", status: cachedRecord?.httpStatus ?? 200, record: cachedRecord, content: temporary.content, contentAvailable: true, contentType: temporary.contentType };
                 }
             }
 
@@ -667,11 +663,7 @@
                 const headers = response.headers;
 
                 if (options.needContent && contentComplete) {
-                    try {
-                        await this.storeTemporaryContent(url, content, headers["content-type"] || "");
-                    } catch (error) {
-                        console.warn("[ResourceScanner] Temporary cache write failed.", error);
-                    }
+                    await this.storeTemporaryContent(url, content, headers["content-type"] || "");
                 }
                 const result = await this.saveResult(
                     url,
