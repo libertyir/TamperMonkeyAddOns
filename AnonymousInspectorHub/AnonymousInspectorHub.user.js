@@ -2,14 +2,14 @@
 // ==UserScript==
 // @name         Anonymous Inspector Hub
 // @namespace    https://github.com/libertyir/TamperMonkeyAddOns
-// @version      1.1.2
+// @version      1.1.3
 // @description  Modular exposure inspectors for public web directories
 // @author       libertyir
 // @homepageURL  https://github.com/libertyir/TamperMonkeyAddOns
 // @match        http://*/*
 // @match        https://*/*
 // @run-at       document-idle
-// @require      https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/main.js?v=1.5.0
+// @require      https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/main.js?v=1.5.1
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
 // @grant        GM_registerMenuCommand
