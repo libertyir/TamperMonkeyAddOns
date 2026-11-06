@@ -13,6 +13,7 @@
             this.modules = new Map();
             this.activeInstances = new Map();
             this.descriptors = new Map();
+            this.componentPaths = new Map();
             this.providers = new Map();
             this.providerInstances = new Map();
             this.scannerInstances = new Map();
@@ -105,6 +106,7 @@
                     !/\.js$/i.test(path)) {
                     throw new Error("Invalid descriptor component path: " + path);
                 }
+                this.componentPaths.set(component.id, path);
                 return Object.freeze({ id: component.id, type: component.type, path });
             });
             this.descriptors.set(id, Object.freeze({
@@ -183,6 +185,24 @@
                 const result = await instance.scan(context);
                 state.status = "completed";
                 state.completedAt = new Date().toISOString();
+
+                if (result && result.directoryUrl &&
+                    this.Framework && this.Framework.Storage) {
+                    const key = [
+                        "module-result",
+                        id,
+                        encodeURIComponent(result.directoryUrl)
+                    ].join(":");
+
+                    await this.Framework.Storage.saveMetadata(key, {
+                        moduleId: id,
+                        scope: result.directoryUrl,
+                        schemaVersion: 1,
+                        createdAt: state.completedAt,
+                        data: result
+                    });
+                }
+
                 return result;
             } catch (error) {
                 state.status = "failed";
@@ -895,7 +915,7 @@
 
             const relativePath = typeof sourcePath === "string" && sourcePath.trim()
                 ? sourcePath.replace(/^\/+/, "")
-                : id + ".js";
+                : this.componentPaths.get(id) || id + ".js";
 
             if (
                 relativePath.split("/").some(part =>
