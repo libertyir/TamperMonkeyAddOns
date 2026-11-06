@@ -49,17 +49,63 @@
                         total: 0,
                         completed: 0,
                         failed: 0,
-                        loaded: 0
+                        loaded: 0,
+                        deferredViewers: []
                     };
                 }
 
-                return await kernel.moduleManager.initializeMany(ids, {
-                    concurrency: kernel.config.maxConcurrentModules,
-                    onProgress: progress => {
-                        kernel.uiManager.setProgress(progress);
-                        kernel.uiManager.refreshMenu();
+                const viewerIds = ids.filter(
+                    id => /(?:_Viewer|Viewer)$/i.test(id)
+                );
+
+                const loadedViewers = await Promise.allSettled(
+                    viewerIds.map(id => kernel.moduleManager.load(id))
+                );
+
+                const deferredViewers = new Set();
+
+                for (let index = 0; index < loadedViewers.length; index++) {
+                    const loaded = loadedViewers[index];
+
+                    if (
+                        loaded.status === "fulfilled" &&
+                        typeof loaded.value.scannerId === "string" &&
+                        loaded.value.scannerId.trim()
+                    ) {
+                        deferredViewers.add(viewerIds[index]);
                     }
-                });
+                }
+
+                const moduleIdsToInitialize = ids.filter(
+                    id => !deferredViewers.has(id)
+                );
+
+                const result = moduleIdsToInitialize.length
+                    ? await kernel.moduleManager.initializeMany(
+                        moduleIdsToInitialize,
+                        {
+                            concurrency: kernel.config.maxConcurrentModules,
+                            onProgress: progress => {
+                                kernel.uiManager.setProgress(progress);
+                                kernel.uiManager.refreshMenu();
+                            }
+                        }
+                    )
+                    : {
+                        results: [],
+                        total: 0,
+                        completed: 0,
+                        failed: 0,
+                        loaded: 0
+                    };
+
+                return {
+                    ...result,
+                    total: result.total + deferredViewers.size,
+                    completed: result.completed + deferredViewers.size,
+                    loaded: result.loaded + deferredViewers.size,
+                    deferredViewers: [...deferredViewers]
+                };
             } finally {
                 kernel.uiManager.refreshMenu();
                 kernel.uiManager.hideProgress();
