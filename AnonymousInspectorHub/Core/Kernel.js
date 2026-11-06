@@ -300,6 +300,37 @@
             return this.moduleRunner.run(moduleIds);
         }
 
+        startModules() {
+            if (this.modulesStarted) {
+                return Promise.resolve(this.moduleRunResult || this);
+            }
+
+            if (this.modulesStartPromise) {
+                return this.modulesStartPromise;
+            }
+
+            if (this.state !== "running") {
+                return Promise.reject(
+                    new Error("Application shell is not ready.")
+                );
+            }
+
+            this.modulesStartPromise = (async () => {
+                const result = await this.runModules(
+                    this.allowedModuleIds || []
+                );
+
+                this.modulesStarted = true;
+                this.moduleRunResult = result;
+
+                return result;
+            })();
+
+            return this.modulesStartPromise.finally(() => {
+                this.modulesStartPromise = null;
+            });
+        }
+
         start(...moduleArguments) {
             if (this.state === "running") {
                 return Promise.resolve(this);
@@ -347,6 +378,10 @@
             }
 
             this.started = false;
+            this.modulesStarted = false;
+            this.modulesStartPromise = null;
+            this.allowedModuleIds = [];
+            this.moduleRunResult = null;
             this.state = "stopped";
             return this;
         }
