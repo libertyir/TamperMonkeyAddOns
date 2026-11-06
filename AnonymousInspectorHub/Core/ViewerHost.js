@@ -18,20 +18,20 @@
             try {
                 const providerId = viewer.ModuleClass.providerId;
                 let result = context.result || null;
-                if (!result && typeof providerId === "string" && providerId.trim()) {
-                    const provider = this.moduleManager.getProvider(providerId);
-                    if (!provider || typeof provider.getResult !== "function") {
-                        throw new Error("Viewer provider is unavailable: " + providerId);
-                    }
+                const provider = typeof providerId === "string" && providerId.trim()
+                    ? this.moduleManager.getProvider(providerId)
+                    : null;
+
+                if (!result && provider && typeof provider.getResult === "function") {
                     result = await provider.getResult(context);
                 }
-                if (typeof providerId === "string" && providerId.trim()) {
-                    if (!result) throw new Error("No compatible stored result is available for: " + id);
+
+                if (result) {
                     managed = false;
                     instance = new viewer.ModuleClass();
                     await instance.init({ ...context, result });
                 } else {
-                    instance = await this.moduleManager.initialize(id);
+                    instance = await this.moduleManager.initialize(id, context);
                 }
                 if (!instance || instance.available === false) {
                     throw new Error("Viewer initialization failed: " + id);
