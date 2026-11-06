@@ -733,7 +733,7 @@
         // MODULE LOADING
         // --------------------------------------------------
 
-        async load(id) {
+        async load(id, sourcePath = null) {
             this.validateId(id);
 
             if (this.modules.has(id)) {
@@ -744,7 +744,7 @@
                 return this.loadingPromises.get(id);
             }
 
-            const promise = this.loadSource(id);
+            const promise = this.loadSource(id, sourcePath);
 
             this.loadingPromises.set(id, promise);
 
@@ -755,14 +755,29 @@
             }
         }
 
-        async loadSource(id) {
+        async loadSource(id, sourcePath = null) {
             if (typeof this.requestText !== "function") {
                 throw new Error(
                     "Module source loader is unavailable."
                 );
             }
 
-            const url = this.baseUrl + id + ".js";
+            const relativePath = typeof sourcePath === "string" && sourcePath.trim()
+                ? sourcePath.replace(/^\/+/, "")
+                : id.startsWith("DS_Store_")
+                    ? "DS_Store/" + id + ".js"
+                    : id + ".js";
+
+            if (
+                relativePath.split("/").some(part =>
+                    !part || part === "." || part === ".."
+                ) ||
+                !/\.js$/i.test(relativePath)
+            ) {
+                throw new Error("Invalid module source path: " + relativePath);
+            }
+
+            const url = this.baseUrl + relativePath;
             const source = await this.requestText(url);
 
             if (source === null || source === undefined) {

@@ -13,6 +13,7 @@
             this.currentDirectory = module.currentDirectory;
             this.lastRoot = null;
             this.busy = false;
+            this.activeViewer = null;
         }
 
         el(tag, attributes = {}, text = null) {
@@ -356,6 +357,33 @@
                         "wsi-small"
                     )
                 );
+            } else {
+                const matchingViewers = Framework.Viewers.find({
+                    url: node.url,
+                    path: node.path,
+                    name: node.name
+                });
+
+                for (const viewer of matchingViewers) {
+                    row.appendChild(
+                        this.button(
+                            "View",
+                            () => this.execute(async () => {
+                                const result = await Framework.Viewers.open(
+                                    viewer.id,
+                                    {
+                                        url: node.url,
+                                        fileUrl: node.url,
+                                        directoryUrl: new URL(".", node.url).href
+                                    }
+                                );
+
+                                this.activeViewer = result;
+                            }),
+                            "wsi-small"
+                        )
+                    );
+                }
             }
 
             wrapper.appendChild(row);
@@ -558,6 +586,33 @@
             }
 
             rootElement.appendChild(treeContainer);
+
+            if (this.activeViewer) {
+                const viewerPanel = this.el("section", {
+                    className: "wsi-viewer-panel"
+                });
+
+                const viewerHeader = this.el("div", {
+                    className: "wsi-toolbar"
+                });
+
+                viewerHeader.append(
+                    this.el("strong", {}, this.activeViewer.metadata.title),
+                    this.button("Close Viewer", () => this.execute(async () => {
+                        await Framework.Viewers.close();
+                        this.activeViewer = null;
+                    }), "wsi-small")
+                );
+
+                viewerPanel.appendChild(viewerHeader);
+
+                if (this.activeViewer.content) {
+                    viewerPanel.appendChild(this.activeViewer.content);
+                }
+
+                rootElement.appendChild(viewerPanel);
+            }
+
             this.lastRoot = rootElement;
 
             return rootElement;

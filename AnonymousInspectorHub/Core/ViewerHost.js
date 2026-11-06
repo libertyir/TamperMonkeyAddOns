@@ -34,7 +34,10 @@
                     managed = false;
 
                     const ScannerClass =
-                        await this.moduleManager.load(scannerId);
+                        await this.moduleManager.load(
+                            scannerId,
+                            viewer.ModuleClass.scannerPath || null
+                        );
 
                     scanner = new ScannerClass();
 
