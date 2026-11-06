@@ -118,8 +118,8 @@
                         height: 48px;
                         border: 1px solid #555;
                         border-radius: 50%;
-                        background: #171717;
-                        color: #fff;
+                        background: #171717 !important;
+                        color: #fff !important;
                         font-size: 25px;
                         font-family: inherit !important;
                         direction: ltr !important;
@@ -135,7 +135,8 @@
                         width: 280px;
                         max-height: 65vh;
                         overflow-y: auto;
-                        background: #171717;
+                        background: #171717 !important;
+                        color: #eee !important;
                         border: 1px solid #444;
                         border-radius: 8px;
                         box-shadow: 0 5px 20px rgba(0,0,0,.5);
@@ -194,7 +195,8 @@
                         bottom: 58px;
                         width: 220px;
                         padding: 12px;
-                        background: #171717;
+                        background: #171717 !important;
+                        color: #eee !important;
                         border: 1px solid #444;
                         border-radius: 8px;
                         box-shadow: 0 5px 20px rgba(0,0,0,.5);
