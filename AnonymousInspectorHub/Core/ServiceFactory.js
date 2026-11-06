@@ -102,6 +102,7 @@
             kernel.siteIntelligenceService =
                 new root.AnonymousInspectorSiteIntelligenceService({
                     storage: kernel.storageManager,
+                    gm: GM.api,
 
                     getModuleScanPolicy: (id, ModuleClass) =>
                         kernel.frameworkFactory.getModuleScanPolicy(

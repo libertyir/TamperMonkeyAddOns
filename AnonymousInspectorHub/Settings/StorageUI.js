@@ -244,12 +244,34 @@ class StorageUI extends Framework.BaseSettings {
 
     async readStores() {
         const stores = {};
-
         for (const item of this.constructor.STORES) {
             stores[item.id] = await Framework.Storage.getAll(item.id);
         }
-
         return stores;
+    }
+
+    async readTemporaryEntries() {
+        if (typeof GM_listValues !== "function") throw new Error("GM_listValues is unavailable.");
+        const keys = await GM_listValues();
+        const entries = [];
+        for (const key of keys) {
+            if (typeof key !== "string" || !key.startsWith("aih_temp_")) continue;
+            const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)$/i);
+            if (!match || Number(match[1]) <= Date.now()) {
+                if (typeof GM_deleteValue === "function") await GM_deleteValue(key);
+                continue;
+            }
+            entries.push({ key, expiresAt: Number(match[1]), size: Number(match[2]) });
+        }
+        return entries;
+    }
+
+    async clearTemporaryData() {
+        if (typeof GM_listValues !== "function" || typeof GM_deleteValue !== "function") throw new Error("GM storage APIs are unavailable.");
+        const keys = await GM_listValues();
+        const temporaryKeys = keys.filter(key => typeof key === "string" && key.startsWith("aih_temp_"));
+        await Promise.all(temporaryKeys.map(key => GM_deleteValue(key)));
+        return temporaryKeys.length;
     }
 
     async deleteGMEntry(key) {
@@ -315,9 +337,10 @@ class StorageUI extends Framework.BaseSettings {
             status.textContent = "";
 
             try {
-                const [gmEntries, stores] = await Promise.all([
+                const [gmEntries, stores, temporaryEntries] = await Promise.all([
                     this.readGMEntries(),
-                    this.readStores()
+                    this.readStores(),
+                    this.readTemporaryEntries()
                 ]);
 
                 let totalBytes = 0;
@@ -358,6 +381,33 @@ class StorageUI extends Framework.BaseSettings {
                 }
 
                 storageList.appendChild(gmSection.section);
+
+                const temporaryBytes = temporaryEntries.reduce((total, entry) => total + entry.size, 0);
+                const temporarySection = this.createSection(
+                    "Temporary Resource Cache",
+                    temporaryEntries.length + " compressed temporary record(s), " + this.formatSize(temporaryBytes) + ". Payloads are not read while listing storage."
+                );
+                for (const entry of temporaryEntries) {
+                    totalBytes += entry.size;
+                    totalEntries++;
+                    temporarySection.list.appendChild(this.createRow(
+                        "Temporary Resource",
+                        "Key: " + entry.key + " | Expires: " + new Date(entry.expiresAt).toLocaleString(),
+                        entry.size,
+                        async () => {
+                            if (!confirm("Delete this temporary resource?")) return;
+                            try {
+                                await this.deleteGMEntry(entry.key);
+                                await renderStorage();
+                                showStatus("Temporary resource deleted.", true);
+                            } catch (error) {
+                                showStatus("Delete failed: " + error.message);
+                            }
+                        }
+                    ));
+                }
+                if (!temporaryEntries.length) temporarySection.list.textContent = "No temporary resources.";
+                storageList.appendChild(temporarySection.section);
 
                 for (const store of this.constructor.STORES) {
                     const records = stores[store.id] || [];
@@ -436,6 +486,21 @@ class StorageUI extends Framework.BaseSettings {
             }
         );
 
+        const clearTemporaryButton = this.createButton(
+            "Clear Temporary Cache",
+            async () => {
+                if (!confirm("Delete all temporary resource cache entries?")) return;
+                try {
+                    const count = await this.clearTemporaryData();
+                    await renderStorage();
+                    showStatus(count + " temporary record(s) deleted.", true);
+                } catch (error) {
+                    showStatus("Temporary cache cleanup failed: " + error.message);
+                }
+            },
+            "#493d24"
+        );
+
         const clearAllButton = this.createButton(
             "Clear All Application Data",
             async () => {
@@ -469,6 +534,7 @@ class StorageUI extends Framework.BaseSettings {
                 style: "display:flex;gap:8px;flex-wrap:wrap;"
             }, [
                 refreshButton,
+                clearTemporaryButton,
                 clearAllButton
             ]),
             summary,

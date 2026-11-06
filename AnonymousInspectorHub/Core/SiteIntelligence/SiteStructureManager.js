@@ -163,7 +163,7 @@
                 );
             }
 
-            this.records.set(normalizedUrl, record);
+            this.records.set(normalizedUrl, this.toTreeRecord(record));
 
             this.rebuildTree();
 
@@ -265,7 +265,7 @@
                             );
                     }
 
-                    this.records.set(item.url, record);
+                    this.records.set(item.url, this.toTreeRecord(record));
 
                     results.push(record);
                 }
@@ -303,7 +303,7 @@
                 try {
                     const url = this.normalizeUrl(record.url);
 
-                    this.records.set(url, record);
+                    this.records.set(url, this.toTreeRecord(record));
                 } catch {
                     continue;
                 }
@@ -494,20 +494,27 @@
             };
         }
 
-        cloneRecord(record) {
+        toTreeRecord(record) {
+            const metadata = {};
+            if (record.metadata?.directoryListing === true) metadata.directoryListing = true;
             return {
-                ...record,
-                tags: Array.isArray(record.tags)
-                    ? [...record.tags]
-                    : [],
-                sources: Array.isArray(record.sources)
-                    ? [...record.sources]
-                    : [],
-                headers: record.headers &&
-                    typeof record.headers === "object"
-                        ? { ...record.headers }
-                        : {}
+                url: record.url,
+                origin: record.origin,
+                status: record.status,
+                httpStatus: record.httpStatus,
+                contentType: record.contentType,
+                contentLength: record.contentLength,
+                discoveredAt: record.discoveredAt,
+                validatedAt: record.validatedAt,
+                lastSeenAt: record.lastSeenAt,
+                tags: Array.isArray(record.tags) ? [...record.tags] : [],
+                sources: Array.isArray(record.sources) ? [...record.sources] : [],
+                metadata
             };
+        }
+
+        cloneRecord(record) {
+            return this.toTreeRecord(record);
         }
 
         getStructure() {

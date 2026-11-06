@@ -390,10 +390,9 @@
                 ])
             ];
 
-            record.headers = {
-                ...(existing?.headers || {}),
-                ...(updates.headers || {})
-            };
+            record.headers = updates.headers && typeof updates.headers === "object"
+                ? { ...updates.headers }
+                : { ...(existing?.headers || {}) };
 
             this.records.set(normalizedUrl, record);
 

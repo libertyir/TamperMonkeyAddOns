@@ -11,6 +11,7 @@
             }
 
             this.storage = options.storage;
+            this.gm = options.gm || {};
 
             this.origin =
                 options.origin ||
@@ -123,6 +124,7 @@
 
                 this.scanner = new ScannerClass({
                     repository: this.repository,
+                    gm: this.gm,
                     ...this.scannerOptions,
 
                     onStateChange: event => {

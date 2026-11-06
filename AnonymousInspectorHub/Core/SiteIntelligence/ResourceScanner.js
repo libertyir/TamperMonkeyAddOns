@@ -11,6 +11,10 @@
             }
 
             this.repository = options.repository;
+            this.gm = options.gm || {};
+            this.temporaryPrefix = "aih_temp_";
+            this.temporaryTTL = 15 * 60 * 1000;
+            this.temporaryCleanupTimer = null;
 
             this.concurrency = Number.isInteger(options.concurrency)
                 ? Math.max(1, options.concurrency)
@@ -56,6 +60,12 @@
             }
 
             this.initialized = true;
+            this.cleanupExpiredTemporaryEntries().catch(() => {});
+            if (!this.temporaryCleanupTimer) {
+                this.temporaryCleanupTimer = setInterval(() => {
+                    this.cleanupExpiredTemporaryEntries().catch(() => {});
+                }, 60 * 1000);
+            }
 
             return this;
         }
@@ -387,10 +397,140 @@
         }
 
         // --------------------------------------------------
+        // TEMPORARY RESOURCE CACHE
+        // --------------------------------------------------
+
+        async getTemporaryHash(url) {
+            if (root.crypto?.subtle && root.TextEncoder) {
+                const digest = await root.crypto.subtle.digest("SHA-256", new TextEncoder().encode(url));
+                return Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
+            }
+            let first = 2166136261;
+            let second = 5381;
+            for (let i = 0; i < url.length; i++) {
+                first = Math.imul(first ^ url.charCodeAt(i), 16777619);
+                second = Math.imul(second, 33) ^ url.charCodeAt(i);
+            }
+            return (first >>> 0).toString(16) + (second >>> 0).toString(16);
+        }
+
+        isTemporaryMimeAllowed(contentType) {
+            const mime = String(contentType || "").split(";")[0].trim().toLowerCase();
+            return ["text/html", "text/css", "text/javascript", "application/javascript", "application/x-javascript", "text/plain"].includes(mime);
+        }
+
+        bytesToBase64(bytes) {
+            let binary = "";
+            for (let i = 0; i < bytes.length; i += 0x8000) {
+                binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            }
+            return btoa(binary);
+        }
+
+        async encodeTemporaryContent(content) {
+            const bytes = new TextEncoder().encode(content);
+            if (typeof CompressionStream === "function") {
+                try {
+                    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+                    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+                    return { encoding: "gzip-base64", data: this.bytesToBase64(compressed) };
+                } catch { }
+            }
+            return { encoding: "utf8-base64", data: this.bytesToBase64(bytes) };
+        }
+
+        async decodeTemporaryContent(value) {
+            if (!value || typeof value.data !== "string") return null;
+            const bytes = Uint8Array.from(atob(value.data), character => character.charCodeAt(0));
+            if (value.encoding === "gzip-base64") {
+                if (typeof DecompressionStream !== "function") return null;
+                const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+                return await new Response(stream).text();
+            }
+            return value.encoding === "utf8-base64" ? new TextDecoder().decode(bytes) : null;
+        }
+
+        async cleanupExpiredTemporaryEntries() {
+            const gm = this.gm;
+            if (typeof gm.listValues !== "function" || typeof gm.deleteValue !== "function") return 0;
+            const keys = await gm.listValues();
+            const expired = keys.filter(key => {
+                if (typeof key !== "string" || !key.startsWith(this.temporaryPrefix)) return false;
+                const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)$/i);
+                return !match || Number(match[1]) <= Date.now();
+            });
+            await Promise.all(expired.map(key => gm.deleteValue(key)));
+            return expired.length;
+        }
+
+        async getTemporaryContent(url) {
+            const gm = this.gm;
+            if (typeof gm.listValues !== "function" || typeof gm.getValue !== "function" || typeof gm.deleteValue !== "function") return null;
+            const hash = await this.getTemporaryHash(url);
+            const keys = await gm.listValues();
+            const matching = keys.filter(key => typeof key === "string" && key.startsWith(this.temporaryPrefix) && key.endsWith("_" + hash));
+            let selected = null;
+            for (const key of matching) {
+                const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)$/i);
+                if (!match || Number(match[1]) <= Date.now()) {
+                    await gm.deleteValue(key);
+                    continue;
+                }
+                if (!selected || Number(match[1]) > selected.expiresAt) selected = { key, expiresAt: Number(match[1]) };
+            }
+            if (!selected) return null;
+            const stored = await gm.getValue(selected.key, undefined);
+            if (!stored) return null;
+            try {
+                const content = await this.decodeTemporaryContent(stored);
+                return typeof content === "string" ? { content, contentType: stored.contentType || null } : null;
+            } catch {
+                await gm.deleteValue(selected.key);
+                return null;
+            }
+        }
+
+        async storeTemporaryContent(url, content, contentType) {
+            const gm = this.gm;
+            if (!this.isTemporaryMimeAllowed(contentType) || typeof content !== "string" || typeof gm.setValue !== "function" || typeof gm.listValues !== "function" || typeof gm.deleteValue !== "function") return false;
+            const hash = await this.getTemporaryHash(url);
+            const keys = await gm.listValues();
+            for (const key of keys) {
+                if (typeof key === "string" && key.startsWith(this.temporaryPrefix) && key.endsWith("_" + hash)) await gm.deleteValue(key);
+            }
+            const encoded = await this.encodeTemporaryContent(content);
+            const expiresAt = Date.now() + this.temporaryTTL;
+            const key = this.temporaryPrefix + expiresAt + "_" + encoded.data.length + "_" + hash;
+            await gm.setValue(key, { version: 1, encoding: encoded.encoding, contentType: String(contentType || ""), data: encoded.data });
+            return true;
+        }
+
+        async clearTemporaryCache() {
+            const gm = this.gm;
+            if (typeof gm.listValues !== "function" || typeof gm.deleteValue !== "function") return 0;
+            const keys = await gm.listValues();
+            const temporaryKeys = keys.filter(key => typeof key === "string" && key.startsWith(this.temporaryPrefix));
+            await Promise.all(temporaryKeys.map(key => gm.deleteValue(key)));
+            return temporaryKeys.length;
+        }
+
+        // --------------------------------------------------
         // RESOURCE PROCESSING
         // --------------------------------------------------
 
         async processResource(url, options) {
+            if (!options.force && options.needContent) {
+                try {
+                    const temporary = await this.getTemporaryContent(url);
+                    if (temporary) {
+                        const cachedRecord = await this.repository.get(url);
+                        return { url, source: "temporary-cache", status: cachedRecord?.httpStatus ?? 200, record: cachedRecord, content: temporary.content, contentAvailable: true, contentType: temporary.contentType };
+                    }
+                } catch (error) {
+                    console.warn("[ResourceScanner] Temporary cache read failed; fetching resource again.", error);
+                }
+            }
+
             const previous = await this.repository.get(url);
 
             if (!options.force && previous) {
@@ -400,29 +540,14 @@
                     options.ttl
                 );
 
-                const contentValid =
-                    !options.needContent ||
-                    (
-                        typeof previous.content === "string" &&
-                        previous.contentComplete === true &&
-                        this.isTimestampFresh(
-                            previous.contentFetchedAt,
-                            options.ttl
-                        )
-                    );
-
-                if (valid && contentValid) {
+                if (valid && !options.needContent) {
                     return {
                         url,
                         source: "cache",
                         status: previous.httpStatus,
                         record: previous,
-                        content: options.needContent
-                            ? previous.content
-                            : null,
-                        contentAvailable:
-                            typeof previous.content === "string" &&
-                            previous.contentComplete === true
+                        content: null,
+                        contentAvailable: false
                     };
                 }
             }
@@ -472,7 +597,7 @@
                         {
                             status: "accessible",
                             httpStatus: status,
-                            headers,
+                            headers: {},
                             contentType:
                                 headers["content-type"] || null,
                             contentLength: this.parseLength(
@@ -541,35 +666,26 @@
 
                 const headers = response.headers;
 
+                if (options.needContent && contentComplete) {
+                    try {
+                        await this.storeTemporaryContent(url, content, headers["content-type"] || "");
+                    } catch (error) {
+                        console.warn("[ResourceScanner] Temporary cache write failed.", error);
+                    }
+                }
                 const result = await this.saveResult(
                     url,
                     {
                         status: "accessible",
                         httpStatus: status,
-                        headers,
-                        contentType:
-                            headers["content-type"] || null,
-                        contentLength: this.parseLength(
-                            headers["content-length"]
-                        ),
+                        headers: {},
+                        contentType: headers["content-type"] || null,
+                        contentLength: this.parseLength(headers["content-length"]),
                         source: options.source
                     },
-                    options.needContent
-                        ? {
-                            content,
-                            contentComplete,
-                            contentTruncated: !contentComplete,
-                            contentFetchedAt:
-                                new Date().toISOString()
-                        }
-                        : null
+                    null
                 );
-
-                return {
-                    ...result,
-                    content,
-                    contentAvailable: contentComplete
-                };
+                return { ...result, content, contentAvailable: contentComplete, contentType: headers["content-type"] || null };
 
             } finally {
                 this.releaseResponse(response);
@@ -591,7 +707,7 @@
                     {
                         status: "not-found",
                         httpStatus: status,
-                        headers: response.headers,
+                        headers: {},
                         source: options.source
                     },
                     null
@@ -612,7 +728,7 @@
                 {
                     status: resourceStatus,
                     httpStatus: status,
-                    headers: response.headers,
+                    headers: {},
                     source: options.source
                 },
                 null
@@ -629,13 +745,6 @@
                 validation
             );
 
-            if (contentData) {
-                await this.repository.upsert(
-                    url,
-                    contentData
-                );
-            }
-
             const record = await this.repository.get(url);
 
             return {
@@ -643,9 +752,8 @@
                 source: "network",
                 status: validation.httpStatus,
                 record,
-                content: contentData?.content ?? null,
-                contentAvailable:
-                    contentData?.contentComplete === true
+                content: null,
+                contentAvailable: false
             };
         }
 
@@ -908,6 +1016,10 @@
         destroy() {
             this.destroyed = true;
             this.initialized = false;
+            if (this.temporaryCleanupTimer) {
+                clearInterval(this.temporaryCleanupTimer);
+                this.temporaryCleanupTimer = null;
+            }
 
             const pending = this.queue.splice(0);
 

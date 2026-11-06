@@ -273,6 +273,13 @@
             return style;
         }
 
+        getDisplayName(value) {
+            let fullName = String(value || "");
+            try { fullName = decodeURIComponent(fullName); } catch { }
+            const characters = Array.from(fullName);
+            return { fullName, displayName: characters.length > 25 ? characters.slice(0, 24).join("") + "…" : fullName };
+        }
+
         renderNode(node, depth = 0) {
             const wrapper = this.el("div", {
                 className: "wsi-node"
@@ -308,10 +315,12 @@
                 toggle.disabled = true;
             }
 
+            const display = this.getDisplayName(node.name);
             const name = this.el("button", {
                 type: "button",
-                className: "wsi-name"
-            }, this.getIcon(node) + " " + node.name);
+                className: "wsi-name",
+                title: display.fullName
+            }, this.getIcon(node) + " " + display.displayName);
 
             name.addEventListener("click", () => {
                 if (isDirectory) {
