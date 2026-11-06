@@ -180,7 +180,7 @@
                 return;
             }
 
-            if (pendingButtonClick) {
+            if (pendingButtonClick && kernel.state === "running") {
                 pendingButtonClick = false;
                 startModulesFromButton();
             }
