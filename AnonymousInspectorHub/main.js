@@ -9,6 +9,7 @@
     let settingsRequested = false;
     let pendingButtonClick = false;
     let bootstrapButton = null;
+    let modulesStarting = false;
 
     // --------------------------------------------------
     // TAMPERMONKEY API
@@ -77,6 +78,10 @@
                 background: #222;
                 color: #fff;
                 font-size: 22px;
+                font-family: Arial, sans-serif !important;
+                direction: ltr !important;
+                text-align: center !important;
+                color-scheme: dark;
                 cursor: pointer;
                 box-shadow: 0 2px 10px rgba(0,0,0,.4);
             }
@@ -89,7 +94,8 @@
         bootstrapButton.id = "aih-button";
         bootstrapButton.type = "button";
         bootstrapButton.title = "Anonymous Inspector";
-        bootstrapButton.textContent = "◉";
+        bootstrapButton.textContent = "▶";
+        bootstrapButton.setAttribute("aria-label", "Start modules");
 
         bootstrapButton.addEventListener("click", () => {
             if (
@@ -97,7 +103,11 @@
                 kernel.uiManager &&
                 kernel.uiManager.initialized
             ) {
-                kernel.uiManager.toggleMenu();
+                if (!kernel.modulesStarted) {
+                    startModulesFromButton();
+                } else {
+                    kernel.uiManager.toggleMenu();
+                }
                 return;
             }
 
@@ -121,6 +131,42 @@
     // SETTINGS COMMAND
     // --------------------------------------------------
 
+    function startModulesFromButton() {
+        if (!kernel || modulesStarting || kernel.modulesStarted) return;
+
+        modulesStarting = true;
+
+        if (bootstrapButton) {
+            bootstrapButton.textContent = "…";
+            bootstrapButton.title = "Starting modules";
+            bootstrapButton.setAttribute("aria-label", "Starting modules");
+        }
+
+        kernel.startModules()
+            .then(() => {
+                if (bootstrapButton) {
+                    bootstrapButton.textContent = "☰";
+                    bootstrapButton.title = "Anonymous Inspector";
+                    bootstrapButton.setAttribute("aria-label", "Open menu");
+                }
+            })
+            .catch(error => {
+                console.error(
+                    "[Anonymous Inspector] Module startup failed:",
+                    error
+                );
+
+                if (bootstrapButton) {
+                    bootstrapButton.textContent = "▶";
+                    bootstrapButton.title = "Retry module startup";
+                    bootstrapButton.setAttribute("aria-label", "Retry module startup");
+                }
+            })
+            .finally(() => {
+                modulesStarting = false;
+            });
+    }
+
     function openSettingsWhenReady() {
         if (!kernel) return;
 
@@ -136,7 +182,7 @@
 
             if (pendingButtonClick) {
                 pendingButtonClick = false;
-                kernel.uiManager.toggleMenu();
+                startModulesFromButton();
             }
         }
     }
