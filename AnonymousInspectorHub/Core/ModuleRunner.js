@@ -54,30 +54,34 @@
                     };
                 }
 
-                const viewerIds = ids.filter(
-                    id => /(?:_Viewer|Viewer)$/i.test(id)
+                const loadedModules = await Promise.allSettled(
+                    ids.map(id => kernel.moduleManager.load(id))
                 );
 
-                const loadedViewers = await Promise.allSettled(
-                    viewerIds.map(id => kernel.moduleManager.load(id))
+                const descriptorIds = new Set(
+                    ids.filter(id => kernel.moduleManager.isDescriptor(id))
                 );
 
-                const deferredViewers = new Set();
+                const deferredViewers = new Set(
+                    ids.filter(id => {
+                        if (!/(?:_Viewer|Viewer)$/i.test(id)) return false;
+                        const ModuleClass = kernel.moduleManager.get(id);
+                        return ModuleClass && (
+                            (typeof ModuleClass.providerId === "string" && ModuleClass.providerId.trim()) ||
+                            (typeof ModuleClass.scannerId === "string" && ModuleClass.scannerId.trim())
+                        );
+                    })
+                );
 
-                for (let index = 0; index < loadedViewers.length; index++) {
-                    const loaded = loadedViewers[index];
-
-                    if (
-                        loaded.status === "fulfilled" &&
-                        typeof loaded.value.scannerId === "string" &&
-                        loaded.value.scannerId.trim()
-                    ) {
-                        deferredViewers.add(viewerIds[index]);
+                const failedLoads = new Map();
+                for (let index = 0; index < loadedModules.length; index++) {
+                    if (loadedModules[index].status === "rejected") {
+                        failedLoads.set(ids[index], loadedModules[index].reason);
                     }
                 }
 
                 const moduleIdsToInitialize = ids.filter(
-                    id => !deferredViewers.has(id)
+                    id => !descriptorIds.has(id) && !deferredViewers.has(id) && !failedLoads.has(id)
                 );
 
                 const result = moduleIdsToInitialize.length
@@ -101,10 +105,12 @@
 
                 return {
                     ...result,
-                    total: result.total + deferredViewers.size,
-                    completed: result.completed + deferredViewers.size,
-                    loaded: result.loaded + deferredViewers.size,
-                    deferredViewers: [...deferredViewers]
+                    total: result.total + deferredViewers.size + descriptorIds.size + failedLoads.size,
+                    completed: result.completed + deferredViewers.size + descriptorIds.size,
+                    failed: result.failed + failedLoads.size,
+                    loaded: result.loaded + deferredViewers.size + descriptorIds.size,
+                    deferredViewers: [...deferredViewers],
+                    descriptors: [...descriptorIds]
                 };
             } finally {
                 kernel.uiManager.refreshMenu();

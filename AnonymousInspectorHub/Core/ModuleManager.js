@@ -89,6 +89,10 @@
             return [...this.modules.keys()];
         }
 
+        isDescriptor(id) {
+            return this.descriptors.has(id);
+        }
+
         registerDescriptor(id, descriptor = {}) {
             this.validateId(id);
             if (!descriptor || !Array.isArray(descriptor.components)) {

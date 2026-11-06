@@ -7,6 +7,7 @@
         static title = "Git Config Viewer";
         static description = "Inspect exposed Git configuration";
         static icon = "⑂";
+        static providerId = "GitConfig_Provider";
         static scanPolicy = {
             scope: "origin-root",
             defaultTTL: "7d"

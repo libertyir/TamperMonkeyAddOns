@@ -9,9 +9,7 @@
             this.available = true;
         }
         render() {
-            return Framework.createElement("div", {
-                textContent: "DS_Store components are registered and ready."
-            });
+            return null;
         }
     }
     Framework.register(DSStoreModule.id, DSStoreModule);

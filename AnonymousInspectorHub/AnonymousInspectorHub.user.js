@@ -44,7 +44,7 @@
 
     AnonymousInspector(
         "DS_Store_Module", 
-        "GitConfig_Viewer",
+        "GitConfig_Module",
         "PhpInfo_Viewer",
         "EnvFile_Viewer",
         "WebStructureInspector",
