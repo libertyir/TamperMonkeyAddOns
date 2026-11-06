@@ -105,8 +105,12 @@
                         right: 20px;
                         bottom: 20px;
                         z-index: 2147483647;
-                        font-family: Arial, sans-serif;
-                        color: #eee;
+                        font-family: Arial, sans-serif !important;
+                        color: #eee !important;
+                        direction: ltr !important;
+                        text-align: left !important;
+                        color-scheme: dark;
+                        unicode-bidi: isolate;
                     }
 
                     #aih-button {
@@ -117,6 +121,8 @@
                         background: #171717;
                         color: #fff;
                         font-size: 25px;
+                        font-family: inherit !important;
+                        direction: ltr !important;
                         cursor: pointer;
                         box-shadow: 0 3px 12px rgba(0,0,0,.45);
                     }
@@ -144,8 +150,10 @@
                         border: 0;
                         border-bottom: 1px solid #333;
                         background: transparent;
-                        color: #eee;
-                        text-align: left;
+                        color: #eee !important;
+                        font-family: inherit !important;
+                        direction: ltr !important;
+                        text-align: left !important;
                         cursor: pointer;
                     }
 
@@ -221,8 +229,13 @@
                         z-index: 2147483647;
                         overflow: auto;
                         padding: 20px;
-                        background: #171717;
-                        color: #eee;
+                        background: #171717 !important;
+                        color: #eee !important;
+                        font-family: Arial, sans-serif !important;
+                        direction: ltr !important;
+                        text-align: left !important;
+                        color-scheme: dark;
+                        unicode-bidi: isolate;
                         border: 1px solid #555;
                         border-radius: 8px;
                         box-shadow: 0 5px 30px rgba(0,0,0,.7);
@@ -290,6 +303,32 @@
                         padding: 20px;
                         color: #aaa;
                         font-size: 13px;
+                    }
+
+                    #aih-root *,
+                    #aih-panel * {
+                        font-family: Arial, sans-serif !important;
+                        direction: ltr !important;
+                    }
+
+                    #aih-panel input,
+                    #aih-panel select,
+                    #aih-panel textarea {
+                        box-sizing: border-box;
+                        color-scheme: dark;
+                        background-color: #222 !important;
+                        color: #eee !important;
+                        border-color: #555 !important;
+                    }
+
+                    #aih-panel select option {
+                        background: #222 !important;
+                        color: #eee !important;
+                    }
+
+                    #aih-panel button {
+                        font-family: Arial, sans-serif !important;
+                        direction: ltr !important;
                     }
 
                     @media (max-width: 600px) {
@@ -362,7 +401,7 @@
                     id: "aih-button",
                     type: "button",
                     title: "Anonymous Inspector",
-                    textContent: "◉"
+                    textContent: "▶"
                 });
 
                 // Standalone fallback when no bootstrap button exists.
