@@ -19,12 +19,12 @@ This contract is more important than convenience and must be followed in every f
 
 1. **No source-file exchange as attachments.** The user does not want to download files from the assistant and upload files back, nor to send source files as chat attachments to bypass limits.
 2. **GitHub is our shared workspace/reference.** The assistant should inspect the current source directly in the repository when a task requires it. The user and assistant communicate about code by referring to the repository paths and current GitHub contents.
-3. **The assistant must not directly modify the code repository.** Do not create/update/delete source files, commit, push, open PRs, or otherwise write to GitHub on the user's behalf.
+3. **GitHub code writes require explicit, task-specific authorization.** Default to read-only access. Do not modify code, commit, push, or open PRs unless the user explicitly authorizes those actions and identifies the requested scope. A specific authorization applies only to that task; it is not blanket permission for future code changes.
 4. **Normal code-editing workflow:** first fetch/read the current GitHub version of the exact file; understand it and compare the requested change against it; then provide the complete revised file in the chat, one file per response, with the smallest necessary changes. The user applies the code in their own environment and updates GitHub. Do not provide a patch or invented reconstruction when the agreed workflow calls for a complete file.
 5. **One-file-at-a-time delivery.** When multiple files need changes, work in the agreed order and deliver one complete file per response. Do not dump several files together.
 6. **No unrequested scope expansion.** Do not refactor, rename, redesign, or alter finalized/unrelated files. Preserve the existing project structure and conventions.
 7. **Read before proposing/editing.** Verify actual paths, dependencies, current source, and state from GitHub. Never assume a filename or architecture from an earlier chat if current source can be inspected.
-8. **The only currently authorized GitHub write exception:** the user explicitly authorized creating and maintaining this single persistent memory file, `AnonymousInspectorHub/AI_PROJECT_CONTEXT.md`, so project context can survive across chats. This exception is limited to this memory file. It does not authorize direct edits to code or any other repository file.
+8. **Persistent memory file:** the user explicitly authorizes creating and maintaining `AnonymousInspectorHub/AI_PROJECT_CONTEXT.md`. This file may be updated to preserve project decisions and verified implementation history. This standing permission does not itself authorize code changes; code writes still require the task-specific authorization described in Rule 3.
 9. Do not claim that code was applied, tested, committed, or deployed unless that actually happened. A file supplied in chat is a proposed revision until the user applies it.
 10. The user prefers Persian, concise, direct, technically exact communication.
 
@@ -83,7 +83,7 @@ Confirmed decisions from the later implementation discussion:
 
 ### 4.4 Current focus explicitly narrowed
 
-The user explicitly stated that the current task is **only WebStructureInspector**. Older notes about `main.js`, `AdminPanel_Viewer`, and other prior-stage files must not be mixed into the current work unless the user explicitly reopens them or an actual dependency is demonstrated from current source.
+The earlier WebStructureInspector-only scope was later expanded by the user to include the hub's Core/SiteIntelligence infrastructure, temporary resource caching, storage management, and tree memory/display behavior. The active scope is whichever concrete task the user currently specifies. Do not assume the older WebStructureInspector-only restriction still applies.
 
 ## 5. Current WebStructureInspector architecture (repository snapshot)
 
@@ -165,13 +165,13 @@ This inventory can become stale. The repository's current file contents always t
 ## 8. Resume procedure for every new chat
 
 1. Read this entire `AI_PROJECT_CONTEXT.md` first.
-2. Remember the no-file-exchange and no-direct-GitHub-code-edit contract.
+2. Remember the no-file-exchange preference and the task-specific GitHub authorization rule.
 3. Treat GitHub as the shared source of truth; use the project root and live root in Section 1.
-4. Ask/identify the user's current requested scope. Unless explicitly changed, it is WebStructureInspector only.
-5. Fetch the exact current GitHub source files needed for that task.
-6. Explain the smallest necessary change and the file order.
-7. Provide one complete revised file per response in chat; the user applies it and updates GitHub.
-8. Do not directly write to GitHub. The sole currently authorized exception is maintaining this `AI_PROJECT_CONTEXT.md` file.
+4. Identify the user's current requested scope; do not assume the old WebStructureInspector-only scope.
+5. Fetch the exact current GitHub source files needed for the task.
+6. Make the smallest necessary change and preserve unrelated files and structure.
+7. For small changes, provide only the exact snippet and location when the user is applying changes; for large changes, provide the complete file inline. If the user explicitly authorizes a GitHub commit for that task, the assistant may apply and commit only the authorized scope.
+8. The assistant may maintain this `AI_PROJECT_CONTEXT.md` file under the user's standing authorization.
 9. Keep implemented facts separate from proposals and unknown history. Never fill gaps by guessing.
 
 ## 9. Current work update — independent scanner dialog
@@ -192,3 +192,67 @@ Next task is analysis, not immediate implementation:
 6. Report the actual implemented state, missing pieces, dependencies, and the smallest safe implementation order before changing code.
 
 Keep the proposed central-scanner behavior in Section 6 as the target design, not as implemented functionality. Continue to fetch current GitHub files before analyzing or changing them. The no-direct-GitHub-code-edit rule remains in force; the existing exception permits writes only to this memory file.
+
+
+## 10. Current verified implementation update — temporary resource cache, tree memory, and Storage UI
+
+This section supersedes older status notes where they conflict. The repository state and commits listed here were checked against branch `main` on 2026-11-07.
+
+### 10.1 Recent verified commits
+
+- `c91e66bf33faa430083ed399e881dcdf6f159274` — Storage UI management improvements. Added visibility and management for application storage records and nested metadata entries.
+- `322cf180ca49b48f16eaebabbf8ced25381e18d9` — Added temporary resource cache and reduced tree memory copies. Changes included:
+  - `Core/SiteIntelligence/ResourceScanner.js`
+  - `Core/SiteIntelligence/ResourceRepository.js`
+  - `Core/SiteIntelligence/SiteIntelligenceService.js`
+  - `Core/SiteIntelligence/SiteStructureManager.js`
+  - `Core/ServiceFactory.js`
+  - `Settings/StorageUI.js`
+  - `Modules/WebStructureInspector/WebStructureInspector.UIManager.js`
+- `e7d1be00a5437c34b764933c7bf355c2368a3ec2` — Fixed Storage UI access to Tampermonkey GM APIs through the central Framework bridge. Changes:
+  - `Core/Framework.js`
+  - `Core/ServiceFactory.js`
+  - `Settings/StorageUI.js`
+
+### 10.2 Temporary resource cache — implemented behavior
+
+- Temporary resource entries use the GM storage key prefix `aih_temp_`.
+- Default lifetime is 15 minutes.
+- Keys encode expiration timestamp, stored-size metadata, and a hash of the resource URL. The URL itself is not used as the storage key.
+- Allowed content types are HTML, CSS, JavaScript, and plain text. JSON/Swagger and binary resources are not cached.
+- Content is gzip-compressed when the browser supports `CompressionStream`; otherwise it is stored as Base64-encoded UTF-8.
+- Cache reads are lazy: listing Storage metadata does not read payloads into RAM; the payload is read and decoded only when a module requests that resource.
+- Expired/malformed temporary entries are removed during cleanup. A periodic cleanup runs while the scanner is initialized.
+- If no valid temporary cache entry exists, the resource is fetched again.
+- The temporary cache is separate from persistent findings/application stores. Storage UI has a dedicated Temporary Resource Cache section, supports individual deletion, and can clear all keys with the `aih_temp_` prefix.
+- Cache read/write failures are caught and logged so they do not prevent the resource request from proceeding.
+- Important implementation caveat: the current key includes expiry and URL hash, and the writer removes prior keys matching the URL hash before writing. Storage UI can enumerate and bulk-delete by prefix. Do not claim that GM Storage itself enforces TTL; cleanup is performed by application code.
+
+### 10.3 Resource and tree memory behavior
+
+- ResourceScanner no longer persists fetched response bodies in ResourceRepository as part of its normal scan result.
+- Stored resource records no longer retain response headers from the scanner's fetched response; header data is not copied into the tree records.
+- The tree uses a lightweight projection of resource records rather than cloning full records/payloads.
+- ResourceRepository exposes a lightweight structure-record retrieval path used by SiteStructureManager to rebuild the tree.
+- WebStructureInspector tree labels decode percent-encoded names for display, limit the visible label to 25 characters, and retain the full decoded name in the element's `title` tooltip.
+- This does not prove total per-tab RAM usage is now bounded to a specific number. Browser profiling and runtime verification are still required to quantify actual memory use.
+
+### 10.4 GM storage bridge fix
+
+- StorageUI previously called legacy global identifiers such as `GM_getValue` and `GM_listValues` directly. In the current execution context these were not reliably available, causing: `Storage read failed: GM storage APIs are unavailable.`
+- Framework now exposes a `GM` facade with `getValue`, `setValue`, `deleteValue`, and `listValues`.
+- ServiceFactory routes those operations to the Kernel's GM API object.
+- StorageUI now uses the Framework facade for listing, reading, deleting regular GM entries and temporary cache entries.
+- The three changed files passed JavaScript syntax checks after commit. Browser runtime behavior has not yet been independently verified.
+
+### 10.5 Current next verification
+
+After updating/reloading the userscript, verify in a real browser:
+1. Storage UI opens and reads regular GM keys, application stores, and temporary cache entries without the previous GM API error.
+2. Temporary cache records appear under the dedicated section and can be individually deleted or cleared as a group.
+3. A second request for an eligible resource can use the temporary cache; after expiry or manual deletion, it is fetched again.
+4. JSON/Swagger and binary content are not stored in the temporary cache.
+5. Tree labels display at most 25 characters and show the full decoded name on hover.
+6. The tree remains functional after the lightweight record projection, especially directory-listing metadata and status/tag behavior.
+
+Do not claim these browser checks passed until they are actually performed.
