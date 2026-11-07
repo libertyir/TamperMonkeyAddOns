@@ -43,28 +43,28 @@
     }
 
     AnonymousInspector(
-        "DS_Store_Module", 
-        "GitConfig_Module",
-        "PhpInfo_Module",
-        "EnvFile_Module",
+        "DS_StoreModule", 
+        "GitConfigModule",
+        "PhpInfoModule",
+        "EnvFileModule",
         "WebStructureInspector",
 
         "DebugModeInspector",
-        "SwaggerUI_Module",
-        "OpenAPI_Module",
-        "ApiDocs_Module",
-        "ApachiServerStatus_Module",
-        "DirectoryBrowsing_Module",
-        "GraphQL_Module",
+        "SwaggerUIModule",
+        "OpenAPIModule",
+        "ApiDocsModule",
+        "ApachiServerStatusModule",
+        "DirectoryBrowsingModule",
+        "GraphQLModule",
 
-        "CommonTestFiles_Module",
-        "Redoc_Module",
-        "Scalar_Module",
-        "ServerInfo_Module",
-        "Status_Module",
-        "Metrics_Module",
-        "HealthCheck_Module",
-        "AdminPanel_Module"
+        "CommonTestFilesModule",
+        "RedocModule",
+        "ScalarModule",
+        "ServerInfoModule",
+        "StatusModule",
+        "MetricsModule",
+        "HealthCheckModule",
+        "AdminPanelModule"
     );
 
 })();
