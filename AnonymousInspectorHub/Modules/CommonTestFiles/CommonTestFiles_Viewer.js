@@ -1,7 +1,4 @@
-(function (Framework) {
-    "use strict";
-
-    class CommonTestFilesViewer extends Framework.BaseModule {
+(function(Framework){"use strict";class CommonTestFilesViewer extends Framework.BaseModule{
 
         static id = "CommonTestFiles_Viewer";
         static title = "Common Test Files";
@@ -12,111 +9,10 @@
             defaultTTL: "7d"
         };
 
-        constructor() {
-            super();
+
+static providerId="CommonTestFiles_Provider";async init(context={}){const result=context&&context.result;this.available=Boolean(result&&this.restoreResult(result,context));}
+        destroy() {
             this.foundFiles = [];
-            this.scannedAt = null;
-        }
-
-        getMetadata() {
-            return {
-                id: CommonTestFilesViewer.id,
-                title: CommonTestFilesViewer.title,
-                description: CommonTestFilesViewer.description,
-                icon: CommonTestFilesViewer.icon
-            };
-        }
-
-        async init() {
-            this.available = false;
-            this.foundFiles = [];
-            this.scannedAt = new Date().toISOString();
-
-            const base = new URL("/", window.location.origin);
-
-            const candidates = [
-                "test.php",
-                "test.aspx",
-                "test",
-                "test.html",
-                "test.asp",
-                "testing.php",
-                "test/index.html",
-                "index2.php",
-                "index3.php",
-                "index2.aspx",
-                "index3.aspx"
-            ];
-
-            // Sequential HEAD requests to avoid unnecessary server load.
-            for (const path of candidates) {
-                const url = new URL(path, base);
-
-                if (url.origin !== window.location.origin) {
-                    continue;
-                }
-
-                try {
-                    const response = await Framework.SiteIntelligence.fetch(url.href, {
-                        method: "HEAD",
-                        credentials: "same-origin",
-                        redirect: "follow",
-                        cache: "no-store"
-                    });
-
-                    if (
-                        response.status >= 200 &&
-                        response.status < 300 &&
-                        new URL(response.url).origin === window.location.origin
-                    ) {
-                        this.foundFiles.push({
-                            path,
-                            url: response.url
-                        });
-                    }
-
-                } catch (error) {
-                    // Unavailable paths are ignored.
-                }
-            }
-
-            this.available = this.foundFiles.length > 0;
-        }
-
-        getResult() {
-            return {
-                page: window.location.href,
-                scannedAt: this.scannedAt,
-                totalFound: this.foundFiles.length,
-                foundFiles: this.foundFiles.map(file => ({
-                    path: file.path,
-                    url: file.url
-                }))
-            };
-        }
-
-        restoreResult(data) {
-            if (
-                !data ||
-                !Array.isArray(data.foundFiles) ||
-                !data.foundFiles.every(file =>
-                    file &&
-                    typeof file.path === "string" &&
-                    typeof file.url === "string"
-                )
-            ) {
-                return false;
-            }
-
-            this.foundFiles = data.foundFiles.map(file => ({
-                path: file.path,
-                url: file.url
-            }));
-
-            this.scannedAt = data.scannedAt || null;
-            this.available = true;
-
-            return true;
         }
 
         render() {
@@ -205,14 +101,42 @@
             return container;
         }
 
-        destroy() {
-            this.foundFiles = [];
+        restoreResult(data) {
+            if (
+                !data ||
+                !Array.isArray(data.foundFiles) ||
+                !data.foundFiles.every(file =>
+                    file &&
+                    typeof file.path === "string" &&
+                    typeof file.url === "string"
+                )
+            ) {
+                return false;
+            }
+
+            this.foundFiles = data.foundFiles.map(file => ({
+                path: file.path,
+                url: file.url
+            }));
+
+            this.scannedAt = data.scannedAt || null;
+            this.available = true;
+
+            return true;
         }
-    }
 
-    Framework.register(
-        CommonTestFilesViewer.id,
-        CommonTestFilesViewer
-    );
+        getMetadata() {
+            return {
+                id: CommonTestFilesViewer.id,
+                title: CommonTestFilesViewer.title,
+                description: CommonTestFilesViewer.description,
+                icon: CommonTestFilesViewer.icon
+            };
+        }
 
-})(Framework);
+        constructor() {
+            super();
+            this.foundFiles = [];
+            this.scannedAt = null;
+        }
+}Framework.register(CommonTestFilesViewer.id,CommonTestFilesViewer);})(Framework);

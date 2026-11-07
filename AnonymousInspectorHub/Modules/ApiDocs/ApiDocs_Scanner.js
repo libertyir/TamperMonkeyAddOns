@@ -1,8 +1,5 @@
-(function (Framework) {
-    "use strict";
-
-    class ApiDocsViewer extends Framework.BaseModule {
-        static id = "ApiDocs_Viewer";
+(function(Framework){"use strict";class ApiDocsViewerScanner extends Framework.BaseModule{
+        static id = "ApiDocs_Scanner";
         static title = "API Docs Viewer";
         static description = "Discover API documentation platforms and interfaces";
         static icon = "📚";
@@ -11,23 +8,20 @@
             defaultTTL: "7d"
         };
 
-        constructor() {
-            super();
-            this.available = false;
-            this.foundPages = [];
-            this.scannedAt = null;
-        }
 
-        getMetadata() {
+        getResult() {
             return {
-                id: ApiDocsViewer.id,
-                title: ApiDocsViewer.title,
-                description: ApiDocsViewer.description,
-                icon: ApiDocsViewer.icon
+                page: location.href,
+                scannedAt: this.scannedAt,
+                totalFound: this.foundPages.length,
+                foundPages: this.foundPages.map(page => ({
+                    ...page,
+                    indicators: [...page.indicators]
+                }))
             };
         }
 
-        async init() {
+        async runScan() {
             this.available = false;
             this.foundPages = [];
             this.scannedAt = new Date().toISOString();
@@ -124,45 +118,20 @@
             }
         }
 
-        getResult() {
-            return {
-                page: location.href,
-                scannedAt: this.scannedAt,
-                totalFound: this.foundPages.length,
-                foundPages: this.foundPages.map(page => ({
-                    ...page,
-                    indicators: [...page.indicators]
-                }))
-            };
-        }
+        extractTitle(html) {
+            const match = html.match(
+                /<title[^>]*>([\s\S]*?)<\/title>/i
+            );
 
-        restoreResult(data) {
-            if (
-                !data ||
-                !Array.isArray(data.foundPages) ||
-                !data.foundPages.every(page =>
-                    page &&
-                    typeof page.url === "string" &&
-                    typeof page.title === "string" &&
-                    typeof page.platform === "string" &&
-                    Array.isArray(page.indicators)
-                )
-            ) {
-                return false;
-            }
+            if (!match) return "API Documentation";
 
-            this.foundPages = data.foundPages.map(page => ({
-                url: page.url,
-                path: page.path || "",
-                title: page.title,
-                platform: page.platform,
-                indicators: [...page.indicators]
-            }));
-
-            this.scannedAt = data.scannedAt || null;
-            this.available = true;
-
-            return true;
+            return match[1]
+                .replace(/<[^>]+>/g, "")
+                .replace(/&amp;/g, "&")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&quot;/g, '"')
+                .trim() || "API Documentation";
         }
 
         detectPlatform(html) {
@@ -246,93 +215,11 @@
             return null;
         }
 
-        extractTitle(html) {
-            const match = html.match(
-                /<title[^>]*>([\s\S]*?)<\/title>/i
-            );
-
-            if (!match) return "API Documentation";
-
-            return match[1]
-                .replace(/<[^>]+>/g, "")
-                .replace(/&amp;/g, "&")
-                .replace(/&lt;/g, "<")
-                .replace(/&gt;/g, ">")
-                .replace(/&quot;/g, '"')
-                .trim() || "API Documentation";
+        constructor() {
+            super();
+            this.available = false;
+            this.foundPages = [];
+            this.scannedAt = null;
         }
-
-        render() {
-            const root = Framework.createElement("div", {
-                className: "api-docs-viewer",
-                style: "padding:12px;overflow:auto;max-height:75vh;"
-            });
-
-            root.appendChild(
-                Framework.createElement("h2", {
-                    textContent: "API Documentation Discovery"
-                })
-            );
-
-            root.appendChild(
-                Framework.createElement("p", {
-                    textContent:
-                        `${this.foundPages.length} API documentation page(s) found.`
-                })
-            );
-
-            for (const page of this.foundPages) {
-                const card = Framework.createElement("div", {
-                    style: "margin:12px 0;padding:12px;border:1px solid #888;border-radius:6px;"
-                });
-
-                card.appendChild(
-                    Framework.createElement("strong", {
-                        textContent: page.title
-                    })
-                );
-
-                card.appendChild(
-                    Framework.createElement("p", {
-                        textContent: `Platform: ${page.platform}`
-                    })
-                );
-
-                card.appendChild(
-                    Framework.createElement("p", {
-                        textContent: page.url
-                    })
-                );
-
-                const openButton = Framework.createElement("button", {
-                    textContent: "Open Documentation",
-                    style: "margin:4px;padding:6px 10px;cursor:pointer;"
-                });
-
-                openButton.addEventListener("click", () => {
-                    Framework.open(page.url);
-                });
-
-                card.appendChild(openButton);
-
-                const copyButton = Framework.createElement("button", {
-                    textContent: "Copy URL",
-                    style: "margin:4px;padding:6px 10px;cursor:pointer;"
-                });
-
-                copyButton.addEventListener("click", () => {
-                    Framework.copy(page.url);
-                });
-
-                card.appendChild(copyButton);
-
-                root.appendChild(card);
-            }
-
-            return root;
-        }
-    }
-
-    Framework.register(ApiDocsViewer.id, ApiDocsViewer);
-
-})(Framework);
+async scan(context={}){await this.runScan(context);if(!this.available)return null;const result=await this.getResult();if(!result||typeof result!=="object")return null;const origin=new URL(context.url||context.currentUrl||location.href).origin;return {...result,directoryUrl:context.directoryUrl||context.scope||origin+"/"};}}
+Framework.register(ApiDocsViewerScanner.id,ApiDocsViewerScanner);})(Framework);
