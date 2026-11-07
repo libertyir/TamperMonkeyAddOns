@@ -47,7 +47,7 @@
         "GitConfigModule",
         "PhpInfoModule",
         "EnvFileModule",
-        "WebStructureInspector",
+        "WebStructureInspectorModule",
 
         "DebugModeInspector",
         "SwaggerUIModule",

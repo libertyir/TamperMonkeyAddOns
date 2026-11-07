@@ -1,1 +1,38 @@
-(function(Framework){"use strict";class ScalarModule extends Framework.BaseModule{static id="Scalar_Module";static title="Scalar Inspector";async init(){this.available=true}render(){return null}}Framework.register(ScalarModule.id,ScalarModule);Framework.registerDescriptor(ScalarModule.id,{components:[{id:"Scalar_Scanner",type:"module",path:"Scalar/Scalar_Scanner.js"},{id:"Scalar_Viewer",type:"module",path:"Scalar/Scalar_Viewer.js"},{id:"Scalar_Provider",type:"provider",path:"Scalar/Scalar_Provider.js"}]});})(Framework);
+(function (Framework) {
+    "use strict";
+
+    class ScalarModule extends Framework.BaseModule {
+        static id = "ScalarModule";
+        static title = "Scalar Inspector";
+
+        async init() {
+            this.available = true;
+        }
+
+        render() {
+            return null;
+        }
+    }
+
+    Framework.register(ScalarModule.id, ScalarModule);
+
+    Framework.registerDescriptor(ScalarModule.id, {
+        components: [
+            {
+                id: "Scalar_Scanner",
+                type: "module",
+                path: "Scalar/Scalar_Scanner.js"
+            },
+            {
+                id: "Scalar_Viewer",
+                type: "module",
+                path: "Scalar/Scalar_Viewer.js"
+            },
+            {
+                id: "Scalar_Provider",
+                type: "provider",
+                path: "Scalar/Scalar_Provider.js"
+            }
+        ]
+    });
+})(Framework);
