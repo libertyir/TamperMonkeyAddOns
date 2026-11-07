@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class GraphQL_Provider {
+    class GraphQL_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

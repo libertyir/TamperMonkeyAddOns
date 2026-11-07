@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class DSStoreProvider {
+    class DSStoreProvider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

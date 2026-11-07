@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class HealthCheck_Provider {
+    class HealthCheck_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

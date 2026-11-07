@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class PhpInfo_Provider {
+    class PhpInfo_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

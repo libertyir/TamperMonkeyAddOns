@@ -237,6 +237,44 @@
             if (typeof ModuleClass.prototype.scan !== "function") {
                 throw new Error("Scanner does not implement scan(): " + id);
             }
+            if (context.force !== true) {
+                const provider = this.getProvider(
+                    id.replace(/_Scanner$/, "_Provider")
+                );
+
+                if (!provider || typeof provider.shouldScan !== "function") {
+                    throw new Error(
+                        "Scanner provider is missing its scan gate: " +
+                        id.replace(/_Scanner$/, "_Provider")
+                    );
+                }
+
+                const scope = this.normalizeScope(
+                    context.scope ||
+                    context.directoryUrl ||
+                    this.createDefaultScope(this.getScanPolicy(ModuleClass))
+                );
+                const ttl = await this.getEffectiveTTL(id, ModuleClass);
+                const key = [
+                    "module-result",
+                    id,
+                    encodeURIComponent(scope)
+                ].join(":");
+                const cachedRecord = await this.Framework.Storage.getMetadata(key);
+                const shouldScan = await provider.shouldScan({
+                    scannerId: id,
+                    scope,
+                    ttl,
+                    ttlMilliseconds: this.getTTLMilliseconds(ttl),
+                    cachedRecord,
+                    force: false
+                });
+
+                if (!shouldScan) {
+                    return cachedRecord.data || null;
+                }
+            }
+
             const previous = this.scannerInstances.get(id);
             if (previous && previous.status === "running") {
                 throw new Error("Scanner is already running: " + id);

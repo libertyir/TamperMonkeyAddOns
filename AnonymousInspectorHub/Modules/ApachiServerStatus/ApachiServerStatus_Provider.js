@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class ApachiServerStatus_Provider {
+    class ApachiServerStatus_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class WebStructureInspectorProvider {
+    class WebStructureInspectorProvider extends Framework.BaseProvider {
         matchesResource(resource) {
             const rawUrl = typeof resource === "string"
                 ? resource

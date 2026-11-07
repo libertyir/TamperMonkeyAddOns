@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class SwaggerUI_Provider {
+    class SwaggerUI_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

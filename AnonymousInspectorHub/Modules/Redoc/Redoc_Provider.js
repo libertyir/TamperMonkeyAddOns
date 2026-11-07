@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class Redoc_Provider {
+    class Redoc_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

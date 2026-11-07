@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class AdminPanel_Provider {
+    class AdminPanel_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

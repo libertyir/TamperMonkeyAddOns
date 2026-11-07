@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class CommonTestFiles_Provider {
+    class CommonTestFiles_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

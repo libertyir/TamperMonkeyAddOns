@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class ApiDocs_Provider {
+    class ApiDocs_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

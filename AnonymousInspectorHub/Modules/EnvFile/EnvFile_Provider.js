@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class EnvFile_Provider {
+    class EnvFile_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

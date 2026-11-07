@@ -9,6 +9,7 @@
 
             this.framework = null;
             this.BaseModule = this.createBaseModule();
+            this.BaseProvider = this.createBaseProvider();
             this.BaseSettings = this.createBaseSettings();
         }
 
@@ -56,6 +57,59 @@
                 }
 
                 destroy() { }
+            };
+        }
+
+        createBaseProvider() {
+            return class BaseProvider {
+                async shouldScan(context = {}) {
+                    if (context.force === true) {
+                        return true;
+                    }
+
+                    const record = context.cachedRecord;
+                    const { scannerId, scope, ttl, ttlMilliseconds } = context;
+
+                    if (
+                        !record ||
+                        record.moduleId !== scannerId ||
+                        record.scope !== scope ||
+                        record.schemaVersion !== 1
+                    ) {
+                        return true;
+                    }
+
+                    if (
+                        record.unavailable !== true &&
+                        (
+                            !record.data ||
+                            typeof record.data !== "object" ||
+                            record.data.directoryUrl !== scope
+                        )
+                    ) {
+                        return true;
+                    }
+
+                    if (ttl === "always") {
+                        return true;
+                    }
+
+                    if (ttl === "permanent") {
+                        return false;
+                    }
+
+                    const createdAt = Date.parse(
+                        record.createdAt ||
+                        record.data?.scannedAt ||
+                        ""
+                    );
+
+                    if (!Number.isFinite(createdAt)) {
+                        return true;
+                    }
+
+                    return Date.now() >= createdAt + ttlMilliseconds;
+                }
             };
         }
 
@@ -716,6 +770,7 @@
 
                 // Base classes
                 BaseModule: this.BaseModule,
+                BaseProvider: this.BaseProvider,
                 BaseSettings: this.BaseSettings,
 
                 // Module registration

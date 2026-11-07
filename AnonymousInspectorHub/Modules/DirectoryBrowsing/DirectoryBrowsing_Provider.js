@@ -1,7 +1,7 @@
 (function (Framework) {
     "use strict";
 
-    class DirectoryBrowsing_Provider {
+    class DirectoryBrowsing_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
             const raw = typeof resource === "string"
                 ? resource

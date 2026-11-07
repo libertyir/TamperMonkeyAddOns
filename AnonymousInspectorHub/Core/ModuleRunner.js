@@ -408,18 +408,34 @@
                             manager
                         );
 
-                        const cacheValid = Boolean(
-                            cached &&
-                            this.isCachedResultValid(
-                                cached,
-                                component.id,
-                                scopeInfo.scope,
-                                ttl,
-                                manager
-                            )
+                        const viewerClass = manager.get(
+                            component.id.replace(/_Scanner$/, "_Viewer")
                         );
+                        const providerId = viewerClass?.providerId ||
+                            component.id.replace(/_Scanner$/, "_Provider");
+                        const provider = manager.getProvider(providerId);
 
-                        if (!options.includeCached && cacheValid) {
+                        if (
+                            !provider ||
+                            typeof provider.shouldScan !== "function"
+                        ) {
+                            console.error(
+                                "[Anonymous Inspector] Scanner provider is missing its scan gate:",
+                                providerId
+                            );
+                            continue;
+                        }
+
+                        const shouldScan = await provider.shouldScan({
+                            scannerId: component.id,
+                            scope: scopeInfo.scope,
+                            ttl,
+                            ttlMilliseconds: manager.getTTLMilliseconds(ttl),
+                            cachedRecord: cached,
+                            force: options.force === true
+                        });
+
+                        if (!options.includeCached && !shouldScan) {
                             continue;
                         }
 
