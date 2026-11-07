@@ -8,18 +8,12 @@
         static description = "Inspect exposed Git configuration";
         static icon = "⑂";
         static providerId = "GitConfig_Provider";
-        static scanPolicy = {
-            scope: "origin-root",
-            defaultTTL: "7d"
-        };
-
-        constructor() {
+constructor() {
             super();
 
             this.content = "";
             this.fileUrl = null;
             this.scannedAt = null;
-            this.error = null;
         }
 
         getMetadata() {
@@ -31,95 +25,29 @@
             };
         }
 
-        async init() {
-            this.available = false;
-            this.content = "";
-            this.error = null;
-            this.scannedAt = new Date().toISOString();
-
-            this.fileUrl = new URL(
-                "/.git/config",
-                window.location.origin
-            ).href;
-
+        async init(context = {}) {
+            const result = context.result;
+            if (!result || typeof result.content !== "string" ||
+                typeof result.fileUrl !== "string" || result.fileName !== ".git/config" ||
+                result.content.length > 262144) {
+                this.available = false;
+                return;
+            }
             try {
-                const content = await Framework.requestText(this.fileUrl);
-
-                if (!content || content.length > 262144) {
+                const fileUrl = new URL(result.fileUrl);
+                const expectedOrigin = new URL(context.url || window.location.href).origin;
+                if (fileUrl.origin !== expectedOrigin || fileUrl.pathname !== "/.git/config" ||
+                    !/^\s*\[[^\]]+\]/m.test(result.content) ||
+                    !/^\s*[\w.-]+\s*=/m.test(result.content)) {
+                    this.available = false;
                     return;
                 }
-
-                if (
-                    !/^\s*\[[^\]]+\]/m.test(content) ||
-                    !/^\s*[\w.-]+\s*=/m.test(content)
-                ) {
-                    return;
-                }
-
-                this.content = content;
-                this.available = true;
-
-            } catch (error) {
-                this.error = error;
-                console.warn("[Git Config Viewer]", error);
-            }
-        }
-
-        getResult() {
-            if (!this.available) {
-                return null;
-            }
-
-            return {
-                page: window.location.href,
-                fileUrl: this.fileUrl,
-                fileName: ".git/config",
-                scannedAt: this.scannedAt,
-                contentLength: this.content.length,
-                content: this.content
-            };
-        }
-
-        restoreResult(data) {
-            if (
-                !data ||
-                typeof data.content !== "string" ||
-                typeof data.fileUrl !== "string" ||
-                data.fileName !== ".git/config"
-            ) {
-                return false;
-            }
-
-            try {
-                const fileUrl = new URL(data.fileUrl);
-
-                if (
-                    fileUrl.origin !== window.location.origin ||
-                    fileUrl.pathname !== "/.git/config"
-                ) {
-                    return false;
-                }
-
-                if (
-                    !/^\s*\[[^\]]+\]/m.test(data.content) ||
-                    !/^\s*[\w.-]+\s*=/m.test(data.content)
-                ) {
-                    return false;
-                }
-
-                if (data.content.length > 262144) {
-                    return false;
-                }
-
-                this.content = data.content;
+                this.content = result.content;
                 this.fileUrl = fileUrl.href;
-                this.scannedAt = data.scannedAt || null;
+                this.scannedAt = result.scannedAt || null;
                 this.available = true;
-
-                return true;
-
-            } catch (error) {
-                return false;
+            } catch {
+                this.available = false;
             }
         }
 

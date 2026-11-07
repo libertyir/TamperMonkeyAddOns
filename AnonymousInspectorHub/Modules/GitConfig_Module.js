@@ -10,8 +10,9 @@
     Framework.register(GitConfigModule.id, GitConfigModule);
     Framework.registerDescriptor(GitConfigModule.id, {
         components: [
-            { id: "GitConfig_Viewer", type: "module", path: "GitConfig_Viewer.js" },
-            { id: "GitConfig_Provider", type: "provider", path: "GitConfig_Provider.js" }
+            { id: "GitConfig_Scanner", type: "module", path: "GitConfig/GitConfig_Scanner.js" },
+            { id: "GitConfig_Viewer", type: "module", path: "GitConfig/GitConfig_Viewer.js" },
+            { id: "GitConfig_Provider", type: "provider", path: "GitConfig/GitConfig_Provider.js" }
         ]
     });
 })(Framework);
