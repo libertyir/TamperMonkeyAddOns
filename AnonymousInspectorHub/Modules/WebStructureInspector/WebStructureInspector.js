@@ -4,6 +4,7 @@
     class WebStructureInspector extends Framework.BaseModule {
         static id = "WebStructureInspector";
         static providerId = "WebStructureInspector_Provider";
+        static autoInitialize = true;
         static title = "Web Structure Inspector";
         static description = "Persistent website resource and directory explorer";
         static icon = "📁";

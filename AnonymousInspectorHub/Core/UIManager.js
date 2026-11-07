@@ -24,6 +24,13 @@
                     loading: false
                 }));
 
+            this.onPlayScan = options.onPlayScan || (() => {});
+            this.onStopScan = options.onStopScan || (() => {});
+            this.onRefreshScan = options.onRefreshScan || (() => {});
+            this.getScanStatus = options.getScanStatus || (() => ({
+                status: "idle"
+            }));
+
             this.root = null;
             this.menu = null;
             this.panel = null;
@@ -31,6 +38,7 @@
             this.progress = null;
             this.progressLabel = null;
             this.progressBar = null;
+            this.mainButton = null;
 
             this.panelMode = null;
 
@@ -105,6 +113,11 @@
                         right: 20px;
                         bottom: 20px;
                         z-index: 2147483647;
+                        display: flex;
+                        flex-direction: row-reverse;
+                        align-items: flex-end;
+                        gap: 10px;
+                        width: max-content;
                         font-family: Arial, sans-serif !important;
                         color: #eee !important;
                         direction: ltr !important;
@@ -114,6 +127,7 @@
                     }
 
                     #aih-button {
+                        flex: 0 0 48px;
                         width: 48px;
                         height: 48px;
                         border: 1px solid #555;
@@ -125,6 +139,16 @@
                         direction: ltr !important;
                         cursor: pointer;
                         box-shadow: 0 3px 12px rgba(0,0,0,.45);
+                    }
+
+                    #aih-button.aih-scanning {
+                        animation: aih-scan-spin 1s linear infinite;
+                    }
+
+                    @keyframes aih-scan-spin {
+                        to {
+                            transform: rotate(360deg);
+                        }
                     }
 
                     #aih-menu {
@@ -189,10 +213,40 @@
                         background: #444;
                     }
 
+                    .aih-scan-controls {
+                        display: flex;
+                        gap: 7px;
+                        padding: 10px;
+                        background: #202020;
+                        border-top: 1px solid #444;
+                    }
+
+                    .aih-scan-button {
+                        flex: 1;
+                        min-width: 0;
+                        padding: 8px 5px;
+                        border: 1px solid #555;
+                        border-radius: 5px;
+                        background: #292929;
+                        color: #eee !important;
+                        font-family: inherit !important;
+                        font-size: 11px;
+                        cursor: pointer;
+                    }
+
+                    .aih-scan-button:hover {
+                        background: #3a3a3a;
+                    }
+
+                    .aih-scan-button:active {
+                        background: #444;
+                    }
+
                     #aih-progress {
-                        position: absolute;
-                        right: 0;
-                        bottom: 58px;
+                        position: relative;
+                        right: auto;
+                        bottom: auto;
+                        flex: 0 0 220px;
                         width: 220px;
                         padding: 12px;
                         background: #171717 !important;
@@ -403,7 +457,7 @@
                     id: "aih-button",
                     type: "button",
                     title: "Anonymous Inspector",
-                    textContent: "▶"
+                    textContent: "☰"
                 });
 
                 // Standalone fallback when no bootstrap button exists.
@@ -463,6 +517,8 @@
                 closeButton,
                 this.panelContent
             );
+
+            this.mainButton = button;
 
             this.root.append(
                 button,
@@ -590,6 +646,58 @@
 
                 this.menu.appendChild(item);
             }
+
+            this.menu.appendChild(
+                this.createElement("div", {
+                    className: "aih-menu-divider"
+                })
+            );
+
+            const scanControls = this.createElement("div", {
+                className: "aih-scan-controls"
+            });
+
+            const scanActions = [
+                {
+                    label: "▶ Play",
+                    title: "Continue website scanning",
+                    callback: this.onPlayScan
+                },
+                {
+                    label: "■ Stop",
+                    title: "Pause website scanning",
+                    callback: this.onStopScan
+                },
+                {
+                    label: "↻ Refresh",
+                    title: "Clear this website's cache and scan again",
+                    callback: this.onRefreshScan
+                }
+            ];
+
+            for (const action of scanActions) {
+                const button = this.createElement("button", {
+                    className: "aih-scan-button",
+                    type: "button",
+                    textContent: action.label,
+                    title: action.title
+                });
+
+                button.addEventListener("click", async () => {
+                    try {
+                        await action.callback();
+                    } catch (error) {
+                        console.error(
+                            "[Anonymous Inspector] Scan control failed:",
+                            error
+                        );
+                    }
+                });
+
+                scanControls.appendChild(button);
+            }
+
+            this.menu.appendChild(scanControls);
 
             // Refresh an open Settings panel after settings loading changes.
             if (
@@ -768,6 +876,34 @@
         // PROGRESS
         // --------------------------------------------------
 
+        setScanState(state = {}) {
+            if (!this.mainButton) {
+                return;
+            }
+
+            const status = state.status || "idle";
+            const scanning = [
+                "running",
+                "refreshing"
+            ].includes(status);
+
+            this.mainButton.classList.toggle(
+                "aih-scanning",
+                scanning
+            );
+
+            this.mainButton.title = scanning
+                ? "Website scanning in progress"
+                : "Anonymous Inspector";
+
+            this.mainButton.setAttribute(
+                "aria-label",
+                scanning
+                    ? "Website scanning in progress"
+                    : "Open menu"
+            );
+        }
+
         setProgress(progress = {}) {
             if (!this.progressLabel || !this.progressBar) {
                 return;
@@ -913,6 +1049,7 @@
             this.progress = null;
             this.progressLabel = null;
             this.progressBar = null;
+            this.mainButton = null;
             this.panelMode = null;
 
             this.initialized = false;

@@ -519,7 +519,19 @@
                         settingsManager.getActiveInstances(),
 
                     getSettingsStatus: () =>
-                        settingsManager.getStatus()
+                        settingsManager.getStatus(),
+
+                    onPlayScan: () =>
+                        kernel.moduleRunner.playScan(),
+
+                    onStopScan: () =>
+                        kernel.moduleRunner.stopScan(),
+
+                    onRefreshScan: () =>
+                        kernel.moduleRunner.refreshScan(),
+
+                    getScanStatus: () =>
+                        kernel.moduleRunner.getScanStatus()
                 });
 
             kernel.moduleManager = moduleManager;

@@ -10,6 +10,14 @@
             this.maxResponseSize = 256 * 1024;
             this.timeout = 7000;
             this.maxEntries = 500;
+            this.controller = null;
+        }
+
+        stop() {
+            if (this.controller) {
+                this.controller.abort();
+                this.controller = null;
+            }
         }
 
         normalizeDirectory(rawUrl) {
@@ -175,6 +183,8 @@
             const directoryUrl = this.normalizeDirectory(rawUrl);
             const controller = new AbortController();
 
+            this.controller = controller;
+
             const timeoutId = setTimeout(
                 () => controller.abort(),
                 this.timeout
@@ -304,6 +314,10 @@
                 };
             } finally {
                 clearTimeout(timeoutId);
+
+                if (this.controller === controller) {
+                    this.controller = null;
+                }
             }
         }
     }

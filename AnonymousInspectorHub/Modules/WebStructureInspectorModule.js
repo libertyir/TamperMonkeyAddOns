@@ -24,6 +24,11 @@
     Framework.registerDescriptor(WebStructureInspectorModule.id, {
         components: [
             {
+                id: "WebStructureInspector_Scanner",
+                type: "module",
+                path: "WebStructureInspector/WebStructureInspector_Scanner.js"
+            },
+            {
                 id: "WebStructureInspector",
                 type: "module",
                 path: "WebStructureInspector/WebStructureInspector.js"

@@ -9,7 +9,6 @@
     let settingsRequested = false;
     let pendingButtonClick = false;
     let bootstrapButton = null;
-    let modulesStarting = false;
 
     // --------------------------------------------------
     // TAMPERMONKEY API
@@ -94,8 +93,8 @@
         bootstrapButton.id = "aih-button";
         bootstrapButton.type = "button";
         bootstrapButton.title = "Anonymous Inspector";
-        bootstrapButton.textContent = "▶";
-        bootstrapButton.setAttribute("aria-label", "Start modules");
+        bootstrapButton.textContent = "☰";
+        bootstrapButton.setAttribute("aria-label", "Open menu");
 
         bootstrapButton.addEventListener("click", () => {
             if (
@@ -103,11 +102,7 @@
                 kernel.uiManager &&
                 kernel.uiManager.initialized
             ) {
-                if (!kernel.modulesStarted) {
-                    startModulesFromButton();
-                } else {
-                    kernel.uiManager.toggleMenu();
-                }
+                kernel.uiManager.toggleMenu();
                 return;
             }
 
@@ -131,42 +126,6 @@
     // SETTINGS COMMAND
     // --------------------------------------------------
 
-    function startModulesFromButton() {
-        if (!kernel || modulesStarting || kernel.modulesStarted) return;
-
-        modulesStarting = true;
-
-        if (bootstrapButton) {
-            bootstrapButton.textContent = "…";
-            bootstrapButton.title = "Starting modules";
-            bootstrapButton.setAttribute("aria-label", "Starting modules");
-        }
-
-        kernel.startModules()
-            .then(() => {
-                if (bootstrapButton) {
-                    bootstrapButton.textContent = "☰";
-                    bootstrapButton.title = "Anonymous Inspector";
-                    bootstrapButton.setAttribute("aria-label", "Open menu");
-                }
-            })
-            .catch(error => {
-                console.error(
-                    "[Anonymous Inspector] Module startup failed:",
-                    error
-                );
-
-                if (bootstrapButton) {
-                    bootstrapButton.textContent = "▶";
-                    bootstrapButton.title = "Retry module startup";
-                    bootstrapButton.setAttribute("aria-label", "Retry module startup");
-                }
-            })
-            .finally(() => {
-                modulesStarting = false;
-            });
-    }
-
     function openSettingsWhenReady() {
         if (!kernel) return;
 
@@ -182,7 +141,7 @@
 
             if (pendingButtonClick && kernel.state === "running") {
                 pendingButtonClick = false;
-                startModulesFromButton();
+                kernel.uiManager.toggleMenu();
             }
         }
     }

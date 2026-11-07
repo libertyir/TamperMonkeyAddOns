@@ -44,10 +44,20 @@
                 kernel.modulesStarted = false;
                 kernel.modulesStartPromise = null;
                 kernel.moduleRunResult = null;
+
+                kernel.moduleRunResult = await kernel.runModules(
+                    kernel.allowedModuleIds
+                );
+
+                kernel.modulesStarted = true;
                 kernel.uiManager.refreshMenu();
 
                 kernel.started = true;
                 kernel.state = "running";
+
+                if (typeof kernel.onUIReady === "function") {
+                    kernel.onUIReady();
+                }
 
                 if (kernel.config.showInitializationSummary) {
                     console.info(

@@ -355,6 +355,22 @@
         // RESOURCE SCANNING
         // --------------------------------------------------
 
+        pauseScanning() {
+            if (!this.scanner) {
+                return false;
+            }
+
+            return this.scanner.pause();
+        }
+
+        resumeScanning() {
+            if (!this.scanner) {
+                return false;
+            }
+
+            return this.scanner.resume();
+        }
+
         async scan(url, options = {}) {
             this.ensureInitialized();
 

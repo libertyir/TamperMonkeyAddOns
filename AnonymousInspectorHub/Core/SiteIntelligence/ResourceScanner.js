@@ -32,6 +32,8 @@
             this.queue = [];
             this.activeCount = 0;
             this.inFlight = new Map();
+            this.requestControllers = new Set();
+            this.paused = false;
 
             // Read-only processing state for independent UI consumers.
             this.activeTasks = new Map();
@@ -221,6 +223,10 @@
         async scan(url, options = {}) {
             this.ensureInitialized();
 
+            if (this.paused) {
+                throw new Error("ResourceScanner is paused.");
+            }
+
             const normalizedUrl = this.normalizeUrl(url);
             const settings = this.validateOptions(options);
 
@@ -279,6 +285,11 @@
 
         enqueue(operation, metadata = {}) {
             return new Promise((resolve, reject) => {
+                if (this.paused) {
+                    reject(new Error("ResourceScanner is paused."));
+                    return;
+                }
+
                 const task = {
                     id: ++this.taskSequence,
                     operation,
@@ -316,6 +327,7 @@
         processQueue() {
             while (
                 !this.destroyed &&
+                !this.paused &&
                 this.activeCount < this.concurrency &&
                 this.queue.length
             ) {
@@ -396,6 +408,43 @@
             }
         }
 
+        pause() {
+            if (this.paused) {
+                return false;
+            }
+
+            this.paused = true;
+
+            for (const controller of this.requestControllers) {
+                controller.abort();
+            }
+
+            const queuedTasks = this.queue.splice(0);
+
+            for (const task of queuedTasks) {
+                task.status = "cancelled";
+                task.phase = "Cancelled";
+                task.completedAt = new Date().toISOString();
+                task.reject(new Error("ResourceScanner paused."));
+            }
+
+            this.notifyStateChange("paused");
+
+            return true;
+        }
+
+        resume() {
+            if (!this.paused) {
+                return false;
+            }
+
+            this.paused = false;
+            this.processQueue();
+            this.notifyStateChange("resumed");
+
+            return true;
+        }
+
         // --------------------------------------------------
         // TEMPORARY RESOURCE CACHE
         // --------------------------------------------------
@@ -456,7 +505,7 @@
             const keys = await gm.listValues();
             const expired = keys.filter(key => {
                 if (typeof key !== "string" || !key.startsWith(this.temporaryPrefix)) return false;
-                const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)$/i);
+                const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)(?:_([a-f0-9]+))?$/i);
                 return !match || Number(match[1]) <= Date.now();
             });
             await Promise.all(expired.map(key => gm.deleteValue(key)));
@@ -471,7 +520,7 @@
             const matching = keys.filter(key => typeof key === "string" && key.startsWith(this.temporaryPrefix) && key.endsWith("_" + hash));
             let selected = null;
             for (const key of matching) {
-                const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)$/i);
+                const match = key.match(/^aih_temp_(\d+)_(\d+)_([a-f0-9]+)(?:_([a-f0-9]+))?$/i);
                 if (!match || Number(match[1]) <= Date.now()) {
                     await gm.deleteValue(key);
                     continue;
@@ -500,17 +549,92 @@
             }
             const encoded = await this.encodeTemporaryContent(content);
             const expiresAt = Date.now() + this.temporaryTTL;
-            const key = this.temporaryPrefix + expiresAt + "_" + encoded.data.length + "_" + hash;
-            await gm.setValue(key, { version: 1, encoding: encoded.encoding, contentType: String(contentType || ""), data: encoded.data });
+            const origin = new URL(url).origin;
+            const originHash = await this.getTemporaryHash(origin);
+            const key = this.temporaryPrefix +
+                expiresAt + "_" +
+                encoded.data.length + "_" +
+                originHash + "_" +
+                hash;
+
+            await gm.setValue(key, {
+                version: 1,
+                origin,
+                encoding: encoded.encoding,
+                contentType: String(contentType || ""),
+                data: encoded.data
+            });
             return true;
         }
 
-        async clearTemporaryCache() {
+        async clearTemporaryCache(origin = null) {
             const gm = this.gm;
-            if (typeof gm.listValues !== "function" || typeof gm.deleteValue !== "function") return 0;
+
+            if (
+                typeof gm.listValues !== "function" ||
+                typeof gm.deleteValue !== "function"
+            ) {
+                return 0;
+            }
+
             const keys = await gm.listValues();
-            const temporaryKeys = keys.filter(key => typeof key === "string" && key.startsWith(this.temporaryPrefix));
-            await Promise.all(temporaryKeys.map(key => gm.deleteValue(key)));
+            let temporaryKeys;
+
+            if (origin) {
+                const normalizedOrigin = new URL(origin).origin;
+                const originHash = await this.getTemporaryHash(
+                    normalizedOrigin
+                );
+
+                const knownResourceHashes = new Set();
+
+                if (this.repository) {
+                    const records = await this.repository.getAll();
+
+                    for (const record of records) {
+                        if (!record || typeof record.url !== "string") {
+                            continue;
+                        }
+
+                        knownResourceHashes.add(
+                            await this.getTemporaryHash(record.url)
+                        );
+                    }
+                }
+
+                temporaryKeys = keys.filter(key => {
+                    if (typeof key !== "string") {
+                        return false;
+                    }
+
+                    const scopedMatch = key.match(
+                        /^aih_temp_(\d+)_(\d+)_([a-f0-9]+)_([a-f0-9]+)$/i
+                    );
+
+                    if (scopedMatch) {
+                        return scopedMatch[3] === originHash;
+                    }
+
+                    const legacyMatch = key.match(
+                        /^aih_temp_(\d+)_(\d+)_([a-f0-9]+)$/i
+                    );
+
+                    return Boolean(
+                        legacyMatch &&
+                        knownResourceHashes.has(legacyMatch[3])
+                    );
+                });
+            } else {
+                temporaryKeys = keys.filter(key =>
+                    typeof key === "string" &&
+                    key.startsWith(this.temporaryPrefix)
+                );
+            }
+
+            await Promise.all(
+                temporaryKeys.map(key => gm.deleteValue(key))
+            );
+
             return temporaryKeys.length;
         }
 
@@ -754,6 +878,10 @@
         // --------------------------------------------------
 
         async request(url, method) {
+            if (this.paused) {
+                throw new Error("ResourceScanner is paused.");
+            }
+
             this.setTaskPhase(
                 url,
                 method,
@@ -761,6 +889,7 @@
             );
 
             const controller = new AbortController();
+            this.requestControllers.add(controller);
 
             const timeoutId = setTimeout(
                 () => controller.abort(),
@@ -776,6 +905,7 @@
 
                 released = true;
                 clearTimeout(timeoutId);
+                this.requestControllers.delete(controller);
             };
 
             try {

@@ -187,6 +187,11 @@
             this.scannerInstances.set(id, state);
             try {
                 const result = await instance.scan(context);
+
+                if (state.status === "stopped") {
+                    return null;
+                }
+
                 state.status = "completed";
                 state.completedAt = new Date().toISOString();
 
@@ -209,6 +214,10 @@
 
                 return result;
             } catch (error) {
+                if (state.status === "stopped") {
+                    return null;
+                }
+
                 state.status = "failed";
                 state.error = error.message || String(error);
                 state.completedAt = new Date().toISOString();
@@ -218,12 +227,26 @@
 
         async stopScanner(id) {
             const state = this.scannerInstances.get(id);
-            if (!state) return false;
-            if (typeof state.instance.stop === "function") await state.instance.stop();
-            if (typeof state.instance.destroy === "function") await state.instance.destroy();
+
+            if (!state) {
+                return false;
+            }
+
             state.status = "stopped";
             state.completedAt = new Date().toISOString();
-            this.scannerInstances.delete(id);
+
+            if (typeof state.instance.stop === "function") {
+                await state.instance.stop();
+            }
+
+            if (typeof state.instance.destroy === "function") {
+                await state.instance.destroy();
+            }
+
+            if (this.scannerInstances.get(id) === state) {
+                this.scannerInstances.delete(id);
+            }
+
             return true;
         }
 

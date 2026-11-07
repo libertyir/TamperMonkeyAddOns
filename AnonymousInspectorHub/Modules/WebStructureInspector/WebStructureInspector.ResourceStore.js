@@ -9,7 +9,14 @@
             this.Framework = Framework;
             this.origin = new URL(origin).origin;
             this.storageKey = "web-structure-tree:" + this.origin;
-            this.records = new Map();
+
+            ns.stores = ns.stores || new Map();
+
+            if (!ns.stores.has(this.origin)) {
+                ns.stores.set(this.origin, new Map());
+            }
+
+            this.records = ns.stores.get(this.origin);
             this.version = 1;
             this.maxRecords = 5000;
             this.statusPriority = {
