@@ -6,7 +6,7 @@
 
         static scanPolicy = {
             scope: "origin-root",
-            defaultTTL: "always"
+            defaultTTL: "7d"
         };
 
         static dependencies = [
