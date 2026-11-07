@@ -77,46 +77,6 @@ class StorageUI extends Framework.BaseSettings {
         return (size / (1024 * 1024 * 1024)).toFixed(2) + " GB";
     }
 
-    getRecordKey(store, record) {
-        if (!record || typeof record !== "object") {
-            return null;
-        }
-
-        const fields = {
-            websites: "guid",
-            results: "resultGuid",
-            metadata: "key",
-            executions: "guid"
-        };
-
-        const field = fields[store];
-        const key = field ? record[field] : null;
-
-        return key === undefined || key === null || key === ""
-            ? null
-            : key;
-    }
-
-    getRecordLabel(store, record, key) {
-        if (store === "metadata") {
-            return String(key);
-        }
-
-        if (store === "websites") {
-            return record.domain || String(key);
-        }
-
-        if (store === "results") {
-            return (record.moduleId || "Unknown module") + " | " + String(key);
-        }
-
-        if (store === "executions") {
-            return (record.moduleId || "Unknown module") + " | " + String(key);
-        }
-
-        return String(key);
-    }
-
     createButton(text, callback, color = "#303030") {
         const button = Framework.createElement("button", {
             type: "button",
@@ -158,47 +118,6 @@ class StorageUI extends Framework.BaseSettings {
         section.append(heading, detail, list);
 
         return { section, list };
-    }
-
-    createRow(title, subtitle, size, onDelete, disabled = false) {
-        const row = Framework.createElement("div", {
-            style: "display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px;margin-bottom:7px;border:1px solid #383838;border-radius:5px;background:#242424;"
-        });
-
-        const details = Framework.createElement("div", {
-            style: "flex:1;min-width:180px;overflow-wrap:anywhere;"
-        });
-
-        details.append(
-            Framework.createElement("div", {
-                textContent: title,
-                style: "font-size:12px;font-weight:bold;color:#eee;"
-            }),
-            Framework.createElement("div", {
-                textContent: subtitle,
-                style: "margin-top:4px;font-size:11px;color:#aaa;"
-            }),
-            Framework.createElement("div", {
-                textContent: "Size: " + this.formatSize(size),
-                style: "margin-top:4px;font-size:11px;color:#8bcf91;"
-            })
-        );
-
-        const removeButton = this.createButton(
-            "Delete",
-            onDelete,
-            "#542929"
-        );
-
-        removeButton.disabled = disabled;
-        if (disabled) {
-            removeButton.style.opacity = "0.45";
-            removeButton.style.cursor = "not-allowed";
-        }
-
-        row.append(details, removeButton);
-
-        return row;
     }
 
     getGMStorage() {
@@ -336,7 +255,7 @@ class StorageUI extends Framework.BaseSettings {
 
         const renderStorage = async () => {
             storageList.replaceChildren();
-            summary.textContent = "Reading stored data...";
+            summary.textContent = "Calculating storage usage...";
             status.textContent = "";
 
             try {
@@ -349,130 +268,74 @@ class StorageUI extends Framework.BaseSettings {
                 let totalBytes = 0;
                 let totalEntries = 0;
 
-                const gmSection = this.createSection(
-                    "Userscript Configuration",
-                    "Tampermonkey storage entries used by the application."
-                );
-
-                for (const entry of gmEntries) {
-                    const size = this.getSize(entry.value);
-                    totalBytes += size;
-                    totalEntries++;
-
-                    gmSection.list.appendChild(
-                        this.createRow(
-                            entry.title,
-                            "Key: " + entry.key,
-                            size,
-                            async () => {
-                                if (!confirm("Delete " + entry.key + "?")) return;
-
-                                try {
-                                    await this.deleteGMEntry(entry.key);
-                                    await renderStorage();
-                                    showStatus("Entry deleted.", true);
-                                } catch (error) {
-                                    showStatus("Delete failed: " + error.message);
-                                }
-                            }
-                        )
+                const appendSummary = (
+                    title,
+                    description,
+                    count,
+                    size
+                ) => {
+                    const section = this.createSection(
+                        title,
+                        description
                     );
-                }
 
-                if (!gmEntries.length) {
-                    gmSection.list.textContent = "No userscript configuration entries found.";
-                }
+                    section.list.style.fontSize = "12px";
+                    section.list.style.color = "#ccc";
+                    section.list.textContent =
+                        count + " record(s) | " +
+                        this.formatSize(size);
 
-                storageList.appendChild(gmSection.section);
+                    storageList.appendChild(section.section);
 
-                const temporaryBytes = temporaryEntries.reduce((total, entry) => total + entry.size, 0);
-                const temporarySection = this.createSection(
-                    "Temporary Resource Cache",
-                    temporaryEntries.length + " compressed temporary record(s), " + this.formatSize(temporaryBytes) + ". Payloads are not read while listing storage."
+                    totalBytes += size;
+                    totalEntries += count;
+                };
+
+                const gmBytes = gmEntries.reduce(
+                    (total, entry) =>
+                        total + this.getSize(entry.value),
+                    0
                 );
-                for (const entry of temporaryEntries) {
-                    totalBytes += entry.size;
-                    totalEntries++;
-                    temporarySection.list.appendChild(this.createRow(
-                        "Temporary Resource",
-                        "Key: " + entry.key + " | Expires: " + new Date(entry.expiresAt).toLocaleString(),
-                        entry.size,
-                        async () => {
-                            if (!confirm("Delete this temporary resource?")) return;
-                            try {
-                                await this.deleteGMEntry(entry.key);
-                                await renderStorage();
-                                showStatus("Temporary resource deleted.", true);
-                            } catch (error) {
-                                showStatus("Delete failed: " + error.message);
-                            }
-                        }
-                    ));
-                }
-                if (!temporaryEntries.length) temporarySection.list.textContent = "No temporary resources.";
-                storageList.appendChild(temporarySection.section);
+
+                appendSummary(
+                    "Userscript Configuration",
+                    "Tampermonkey configuration and application settings.",
+                    gmEntries.length,
+                    gmBytes
+                );
+
+                const temporaryBytes = temporaryEntries.reduce(
+                    (total, entry) => total + entry.size,
+                    0
+                );
+
+                appendSummary(
+                    "Temporary Resource Cache",
+                    "Temporary cached resources stored by the userscript.",
+                    temporaryEntries.length,
+                    temporaryBytes
+                );
 
                 for (const store of this.constructor.STORES) {
                     const records = stores[store.id] || [];
-                    let storeBytes = 0;
-
-                    const section = this.createSection(
-                        store.title,
-                        records.length + " stored record(s)."
+                    const storeBytes = records.reduce(
+                        (total, record) =>
+                            total + this.getSize(record),
+                        0
                     );
 
-                    for (const record of records) {
-                        const key = this.getRecordKey(store.id, record);
-                        const size = this.getSize(record);
-                        storeBytes += size;
-                        totalBytes += size;
-                        totalEntries++;
-
-                        const label = key === null
-                            ? "Unidentified record"
-                            : this.getRecordLabel(store.id, record, key);
-
-                        section.list.appendChild(
-                            this.createRow(
-                                label,
-                                "Store: " + store.id + " | Key: " +
-                                    (key === null ? "Unavailable" : String(key)),
-                                size,
-                                async () => {
-                                    if (key === null) {
-                                        showStatus("This record has no identifiable storage key.");
-                                        return;
-                                    }
-
-                                    if (!confirm("Delete this record?\n" + String(key))) return;
-
-                                    try {
-                                        await this.deleteStoreEntry(store.id, key);
-                                        await renderStorage();
-                                        showStatus("Record deleted.", true);
-                                    } catch (error) {
-                                        showStatus("Delete failed: " + error.message);
-                                    }
-                                },
-                                key === null
-                            )
-                        );
-                    }
-
-                    if (!records.length) {
-                        section.list.textContent = "No records.";
-                    }
-
-                    section.section.firstChild.textContent =
-                        store.title + " — " + records.length +
-                        " record(s), " + this.formatSize(storeBytes);
-
-                    storageList.appendChild(section.section);
+                    appendSummary(
+                        store.title,
+                        "Stored data size for this section.",
+                        records.length,
+                        storeBytes
+                    );
                 }
 
                 summary.textContent =
                     "Total stored entries: " + totalEntries +
-                    " | Estimated total size: " + this.formatSize(totalBytes);
+                    " | Estimated total size: " +
+                    this.formatSize(totalBytes);
 
             } catch (error) {
                 summary.textContent = "Unable to read storage.";
@@ -530,7 +393,7 @@ class StorageUI extends Framework.BaseSettings {
                 style: "font-size:16px;margin-bottom:10px;"
             }),
             Framework.createElement("div", {
-                textContent: "Stored configuration, websites, results, metadata, resource caches and execution records with estimated sizes. Record contents are not displayed.",
+                textContent: "Storage usage totals by section. Individual records and their contents are not displayed.",
                 style: "font-size:12px;color:#aaa;margin-bottom:15px;"
             }),
             Framework.createElement("div", {
