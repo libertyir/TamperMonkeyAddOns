@@ -45,6 +45,13 @@
                 kernel.modulesStartPromise = null;
                 kernel.moduleRunResult = null;
 
+                kernel.moduleRunResult = await kernel.runModules(
+                    kernel.allowedModuleIds || [],
+                    {
+                        loadOnly: true
+                    }
+                );
+
                 kernel.uiManager.refreshMenu();
 
                 kernel.started = true;

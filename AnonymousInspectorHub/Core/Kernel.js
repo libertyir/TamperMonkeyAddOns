@@ -296,11 +296,11 @@
             return this.application;
         }
 
-        runModules(moduleIds) {
-            return this.moduleRunner.run(moduleIds);
+        runModules(moduleIds, options = {}) {
+            return this.moduleRunner.run(moduleIds, options);
         }
 
-        startModules() {
+        startModules(options = {}) {
             if (this.modulesStarted) {
                 return Promise.resolve(this.moduleRunResult || this);
             }
@@ -317,10 +317,14 @@
 
             this.modulesStartPromise = (async () => {
                 const result = await this.runModules(
-                    this.allowedModuleIds || []
+                    this.allowedModuleIds || [],
+                    options
                 );
 
-                this.modulesStarted = true;
+                if (!options.loadOnly) {
+                    this.modulesStarted = true;
+                }
+
                 this.moduleRunResult = result;
 
                 return result;

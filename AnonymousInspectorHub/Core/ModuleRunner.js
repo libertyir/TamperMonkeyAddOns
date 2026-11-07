@@ -18,7 +18,7 @@
             this.scanStatus = "idle";
         }
 
-        async run(moduleIds = []) {
+        async run(moduleIds = [], options = {}) {
             const kernel = this.kernel;
             const manager = kernel.moduleManager;
 
@@ -80,7 +80,7 @@
                 id => !descriptorIds.has(id)
             );
 
-            if (legacyIds.length) {
+            if (legacyIds.length && !options.loadOnly) {
                 await manager.initializeMany(
                     legacyIds,
                     {
