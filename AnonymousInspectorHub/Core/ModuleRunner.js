@@ -152,21 +152,24 @@
                             ScannerClass
                         );
 
-                        const cached = await manager.Framework.Storage.getMetadata(
-                            [
-                                "module-result",
-                                scannerId,
-                                encodeURIComponent(scopeInfo.scope)
-                            ].join(":")
-                        );
-
-                        if (!this.isCachedResultValid(
-                            cached,
+                        const cached = await this.getCachedScannerResult(
                             scannerId,
                             scopeInfo.scope,
                             ttl,
                             manager
-                        )) {
+                        );
+
+                        if (
+                            !cached ||
+                            cached.unavailable ||
+                            !this.isCachedResultValid(
+                                cached,
+                                scannerId,
+                                scopeInfo.scope,
+                                ttl,
+                                manager
+                            )
+                        ) {
                             continue;
                         }
                     }
@@ -210,6 +213,103 @@
                 availableModules,
                 scanners: this.scannerQueue.length
             };
+        }
+
+        async getCachedScannerResult(
+            scannerId,
+            scope,
+            ttl,
+            manager,
+            options = {}
+        ) {
+            const currentKey = [
+                "module-result",
+                scannerId,
+                encodeURIComponent(scope)
+            ].join(":");
+
+            const currentRecord = await manager.Framework.Storage.getMetadata(
+                currentKey
+            );
+
+            if (this.isCachedResultValid(
+                currentRecord,
+                scannerId,
+                scope,
+                ttl,
+                manager
+            )) {
+                return currentRecord;
+            }
+
+            const legacyModuleId = scannerId.replace(/_Scanner$/, "_Viewer");
+
+            if (legacyModuleId === scannerId) {
+                return null;
+            }
+
+            const legacyModuleClass = manager.get(legacyModuleId);
+            const legacyTTL = await manager.getEffectiveTTL(
+                legacyModuleId,
+                legacyModuleClass || manager.get(scannerId)
+            );
+
+            const legacyRecord = await manager.getScanRecord(
+                legacyModuleId,
+                scope
+            );
+
+            if (!manager.isScanRecordValid(legacyRecord, legacyTTL)) {
+                return null;
+            }
+
+            if (legacyRecord.status === "unavailable") {
+                return {
+                    moduleId: scannerId,
+                    scope,
+                    schemaVersion: 1,
+                    createdAt: legacyRecord.completedAt,
+                    data: null,
+                    unavailable: true
+                };
+            }
+
+            if (!legacyRecord.resultGuid) {
+                return null;
+            }
+
+            const legacyResult = await manager.Framework.Storage.getResult(
+                legacyRecord.resultGuid
+            );
+
+            if (
+                !legacyResult ||
+                !legacyResult.data ||
+                typeof legacyResult.data !== "object"
+            ) {
+                return null;
+            }
+
+            const migratedRecord = {
+                moduleId: scannerId,
+                scope,
+                schemaVersion: 1,
+                createdAt: legacyResult.createdAt ||
+                    legacyRecord.completedAt,
+                data: {
+                    ...legacyResult.data,
+                    directoryUrl: scope
+                }
+            };
+
+            if (options.persist !== false) {
+                await manager.Framework.Storage.saveMetadata(
+                    currentKey,
+                    migratedRecord
+                );
+            }
+
+            return migratedRecord;
         }
 
         isCachedResultValid(
@@ -288,20 +388,25 @@
                             ScannerClass
                         );
 
-                        const cached = await manager.Framework.Storage.getMetadata(
-                            [
-                                "module-result",
-                                component.id,
-                                encodeURIComponent(scopeInfo.scope)
-                            ].join(":")
-                        );
-
-                        const cacheValid = this.isCachedResultValid(
-                            cached,
+                        const cached = await this.getCachedScannerResult(
                             component.id,
                             scopeInfo.scope,
                             ttl,
                             manager
+                        );
+
+                        const cacheValid = Boolean(
+                            cached &&
+                            (
+                                cached.unavailable ||
+                                this.isCachedResultValid(
+                                    cached,
+                                    component.id,
+                                    scopeInfo.scope,
+                                    ttl,
+                                    manager
+                                )
+                            )
                         );
 
                         if (!options.includeCached && cacheValid) {
