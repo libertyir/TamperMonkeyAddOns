@@ -1,9 +1,6 @@
-(function (Framework) {
-    "use strict";
+(function(Framework){"use strict";class SwaggerUIViewScanner extends Framework.BaseModule{
 
-    class SwaggerUIView extends Framework.BaseModule {
-
-        static id = "SwaggerUI_Viewer";
+        static id = "SwaggerUI_Scanner";
         static title = "Swagger UI";
         static description = "Open exposed Swagger API documentation";
         static icon = "📘";
@@ -13,23 +10,20 @@
             defaultTTL: "7d"
         };
 
-        constructor() {
-            super();
-            this.swaggerUrl = null;
-            this.scannedAt = null;
-            this.timeout = 7000;
-        }
 
-        getMetadata() {
+        getResult() {
+            if (!this.available || !this.swaggerUrl) {
+                return null;
+            }
+
             return {
-                id: SwaggerUIView.id,
-                title: SwaggerUIView.title,
-                description: SwaggerUIView.description,
-                icon: SwaggerUIView.icon
+                page: window.location.href,
+                scannedAt: this.scannedAt,
+                swaggerUrl: this.swaggerUrl
             };
         }
 
-        async init() {
+        async runScan() {
             this.available = false;
             this.swaggerUrl = null;
             this.scannedAt = new Date().toISOString();
@@ -63,44 +57,6 @@
                     this.available = true;
                     return;
                 }
-            }
-        }
-
-        getResult() {
-            if (!this.available || !this.swaggerUrl) {
-                return null;
-            }
-
-            return {
-                page: window.location.href,
-                scannedAt: this.scannedAt,
-                swaggerUrl: this.swaggerUrl
-            };
-        }
-
-        restoreResult(data) {
-            if (
-                !data ||
-                typeof data.swaggerUrl !== "string"
-            ) {
-                return false;
-            }
-
-            try {
-                const url = new URL(data.swaggerUrl);
-
-                if (url.origin !== window.location.origin) {
-                    return false;
-                }
-
-                this.swaggerUrl = url.href;
-                this.scannedAt = data.scannedAt || null;
-                this.available = true;
-
-                return true;
-
-            } catch (error) {
-                return false;
             }
         }
 
@@ -156,22 +112,11 @@
             }
         }
 
-        render() {
-            if (this.swaggerUrl) {
-                window.open(
-                    this.swaggerUrl,
-                    "_blank",
-                    "noopener,noreferrer"
-                );
-            }
-
-            return null;
+        constructor() {
+            super();
+            this.swaggerUrl = null;
+            this.scannedAt = null;
+            this.timeout = 7000;
         }
-    }
-
-    Framework.register(
-        SwaggerUIView.id,
-        SwaggerUIView
-    );
-
-})(Framework);
+async scan(context={}){await this.runScan(context);if(!this.available)return null;const result=await this.getResult();if(!result||typeof result!=="object")return null;const origin=new URL(context.url||context.currentUrl||location.href).origin;return {...result,directoryUrl:context.directoryUrl||context.scope||origin+"/"};}}
+Framework.register(SwaggerUIViewScanner.id,SwaggerUIViewScanner);})(Framework);
