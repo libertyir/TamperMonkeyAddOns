@@ -143,19 +143,59 @@
 
             this.collector = new ns.Collector(this.module);
 
-            await this.collector.collectCurrentPage();
+            const scanResults = {
+                pageCollection: null,
+                directory: null,
+                sensitive: null,
+                warnings: []
+            };
+
+            try {
+                scanResults.pageCollection =
+                    await this.collector.collectCurrentPage();
+            } catch (error) {
+                if (this.cancelled) {
+                    throw new Error("Web Structure scan was cancelled.");
+                }
+
+                scanResults.warnings.push(
+                    "Page collection: " + (error.message || String(error))
+                );
+            }
 
             if (this.cancelled) {
                 throw new Error("Web Structure scan was cancelled.");
             }
 
-            await this.directoryScanner.scan(rootUrl);
+            try {
+                scanResults.directory =
+                    await this.directoryScanner.scan(rootUrl);
+            } catch (error) {
+                if (this.cancelled) {
+                    throw new Error("Web Structure scan was cancelled.");
+                }
+
+                scanResults.warnings.push(
+                    "Directory scan: " + (error.message || String(error))
+                );
+            }
 
             if (this.cancelled) {
                 throw new Error("Web Structure scan was cancelled.");
             }
 
-            await this.sensitiveScanner.scan(rootUrl);
+            try {
+                scanResults.sensitive =
+                    await this.sensitiveScanner.scan(rootUrl);
+            } catch (error) {
+                if (this.cancelled) {
+                    throw new Error("Web Structure scan was cancelled.");
+                }
+
+                scanResults.warnings.push(
+                    "Sensitive scan: " + (error.message || String(error))
+                );
+            }
 
             if (this.cancelled) {
                 throw new Error("Web Structure scan was cancelled.");
@@ -168,7 +208,8 @@
                 origin,
                 capturedAt: new Date().toISOString(),
                 totalResources: records.length,
-                resources: records
+                resources: records,
+                scanResults
             };
         }
 
