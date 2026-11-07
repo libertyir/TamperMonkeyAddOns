@@ -161,7 +161,6 @@
 
                         if (
                             !cached ||
-                            cached.unavailable ||
                             !this.isCachedResultValid(
                                 cached,
                                 scannerId,
@@ -323,10 +322,20 @@
                 !record ||
                 record.moduleId !== moduleId ||
                 record.scope !== scope ||
-                record.schemaVersion !== 1 ||
-                !record.data ||
-                typeof record.data !== "object" ||
-                record.data.directoryUrl !== scope
+                record.schemaVersion !== 1
+            ) {
+                return false;
+            }
+
+            const isUnavailable = record.unavailable === true;
+
+            if (
+                !isUnavailable &&
+                (
+                    !record.data ||
+                    typeof record.data !== "object" ||
+                    record.data.directoryUrl !== scope
+                )
             ) {
                 return false;
             }
@@ -335,14 +344,18 @@
                 return false;
             }
 
-            const createdAt = Date.parse(record.createdAt);
+            if (ttl === "permanent") {
+                return true;
+            }
+
+            const createdAt = Date.parse(
+                record.createdAt ||
+                record.data?.scannedAt ||
+                ""
+            );
 
             if (!Number.isFinite(createdAt)) {
                 return false;
-            }
-
-            if (ttl === "permanent") {
-                return true;
             }
 
             return Date.now() <
@@ -397,15 +410,12 @@
 
                         const cacheValid = Boolean(
                             cached &&
-                            (
-                                cached.unavailable ||
-                                this.isCachedResultValid(
-                                    cached,
-                                    component.id,
-                                    scopeInfo.scope,
-                                    ttl,
-                                    manager
-                                )
+                            this.isCachedResultValid(
+                                cached,
+                                component.id,
+                                scopeInfo.scope,
+                                ttl,
+                                manager
                             )
                         );
 

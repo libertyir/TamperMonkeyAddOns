@@ -267,20 +267,36 @@
                 state.status = "completed";
                 state.completedAt = new Date().toISOString();
 
-                if (result && result.directoryUrl &&
-                    this.Framework && this.Framework.Storage) {
+                const scope = this.normalizeScope(
+                    context.scope ||
+                    context.directoryUrl ||
+                    result?.directoryUrl ||
+                    this.createDefaultScope(
+                        this.getScanPolicy(ModuleClass)
+                    )
+                );
+
+                if (this.Framework && this.Framework.Storage) {
                     const key = [
                         "module-result",
                         id,
-                        encodeURIComponent(result.directoryUrl)
+                        encodeURIComponent(scope)
                     ].join(":");
+
+                    const data = result && typeof result === "object"
+                        ? {
+                            ...result,
+                            directoryUrl: result.directoryUrl || scope
+                        }
+                        : null;
 
                     await this.Framework.Storage.saveMetadata(key, {
                         moduleId: id,
-                        scope: result.directoryUrl,
+                        scope,
                         schemaVersion: 1,
                         createdAt: state.completedAt,
-                        data: result
+                        data,
+                        unavailable: !data
                     });
                 }
 
