@@ -45,26 +45,26 @@
     AnonymousInspector(
         "DS_Store_Module", 
         "GitConfig_Module",
-        "PhpInfo_Viewer",
-        "EnvFile_Viewer",
+        "PhpInfo_Module",
+        "EnvFile_Module",
         "WebStructureInspector",
 
         "DebugModeInspector",
-        "SwaggerUI_Viewer",
-        "OpenAPI_Viewer",
-        "ApiDocs_Viewer",
-        "ApachiServerStatus_Viewer",
-        "DirectoryBrowsing_Viewer",
-        "GraphQL_Viewer",
+        "SwaggerUI_Module",
+        "OpenAPI_Module",
+        "ApiDocs_Module",
+        "ApachiServerStatus_Module",
+        "DirectoryBrowsing_Module",
+        "GraphQL_Module",
 
-        "CommonTestFiles_Viewer",
-        "Redoc_Viewer",
-        "Scalar_Viewer",
-        "ServerInfo_Viewer",
-        "Status_Viewer",
-        "Metrics_Viewer",
-        "HealthCheck_Viewer",
-        "AdminPanel_Viewer"
+        "CommonTestFiles_Module",
+        "Redoc_Module",
+        "Scalar_Module",
+        "ServerInfo_Module",
+        "Status_Module",
+        "Metrics_Module",
+        "HealthCheck_Module",
+        "AdminPanel_Module"
     );
 
 })();
