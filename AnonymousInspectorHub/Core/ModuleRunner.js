@@ -142,6 +142,35 @@
                         scope: scopeInfo?.scope
                     };
 
+                    if (
+                        ModuleClass.autoInitialize !== true &&
+                        ScannerClass &&
+                        scopeInfo
+                    ) {
+                        const ttl = await manager.getEffectiveTTL(
+                            scannerId,
+                            ScannerClass
+                        );
+
+                        const cached = await manager.Framework.Storage.getMetadata(
+                            [
+                                "module-result",
+                                scannerId,
+                                encodeURIComponent(scopeInfo.scope)
+                            ].join(":")
+                        );
+
+                        if (!this.isCachedResultValid(
+                            cached,
+                            scannerId,
+                            scopeInfo.scope,
+                            ttl,
+                            manager
+                        )) {
+                            continue;
+                        }
+                    }
+
                     try {
                         const instance = ModuleClass.autoInitialize === true
                             ? await manager.initialize(
@@ -183,7 +212,47 @@
             };
         }
 
-        async buildScannerQueue(descriptorIds = this.kernel.allowedModuleIds || []) {
+        isCachedResultValid(
+            record,
+            moduleId,
+            scope,
+            ttl,
+            manager
+        ) {
+            if (
+                !record ||
+                record.moduleId !== moduleId ||
+                record.scope !== scope ||
+                record.schemaVersion !== 1 ||
+                !record.data ||
+                typeof record.data !== "object" ||
+                record.data.directoryUrl !== scope
+            ) {
+                return false;
+            }
+
+            if (ttl === "always") {
+                return false;
+            }
+
+            const createdAt = Date.parse(record.createdAt);
+
+            if (!Number.isFinite(createdAt)) {
+                return false;
+            }
+
+            if (ttl === "permanent") {
+                return true;
+            }
+
+            return Date.now() <
+                createdAt + manager.getTTLMilliseconds(ttl);
+        }
+
+        async buildScannerQueue(
+            descriptorIds = this.kernel.allowedModuleIds || [],
+            options = {}
+        ) {
             const manager = this.kernel.moduleManager;
             const queue = [];
 
@@ -214,6 +283,31 @@
                     );
 
                     for (const scopeInfo of scopes) {
+                        const ttl = await manager.getEffectiveTTL(
+                            component.id,
+                            ScannerClass
+                        );
+
+                        const cached = await manager.Framework.Storage.getMetadata(
+                            [
+                                "module-result",
+                                component.id,
+                                encodeURIComponent(scopeInfo.scope)
+                            ].join(":")
+                        );
+
+                        const cacheValid = this.isCachedResultValid(
+                            cached,
+                            component.id,
+                            scopeInfo.scope,
+                            ttl,
+                            manager
+                        );
+
+                        if (!options.includeCached && cacheValid) {
+                            continue;
+                        }
+
                         queue.push({
                             id: component.id,
                             context: {
@@ -238,50 +332,121 @@
         }
 
         async playScan() {
-            if (!this.scannerQueue.length) {
-                await this.buildScannerQueue();
+            if (this.scanPromise) {
+                return this.scanPromise;
             }
 
-            if (this.nextScannerIndex >= this.scannerQueue.length) {
-                this.scanStatus = "completed";
-                this.kernel.uiManager.setScanState({
-                    status: "completed"
-                });
-                this.kernel.uiManager.hideProgress();
+            const currentPromise = (async () => {
+                try {
+                    this.scanPaused = false;
+                    this.scanStatus = "preparing";
 
-                return {
-                    status: "completed",
-                    completed: this.completedScanners,
-                    total: this.scannerQueue.length
-                };
-            }
+                    this.kernel.uiManager.setScanState({
+                        status: "running"
+                    });
 
-            this.scanPaused = false;
-            this.scanStatus = "running";
-            this.kernel.siteIntelligenceService?.resumeScanning?.();
+                    if (!this.kernel.modulesStarted) {
+                        await this.kernel.startModules();
+                    }
 
-            this.kernel.uiManager.setScanState({
-                status: "running"
-            });
+                    if (this.scanPaused) {
+                        this.scanStatus = "paused";
+                        this.kernel.uiManager.setScanState({
+                            status: "paused"
+                        });
 
-            if (!this.scanPromise) {
-                const currentPromise = this.processScannerQueue();
+                        return {
+                            status: "paused",
+                            completed: this.completedScanners,
+                            total: this.scannerQueue.length
+                        };
+                    }
 
-                this.scanPromise = currentPromise;
+                    await this.buildScannerQueue();
 
-                const clearPromise = () => {
+                    if (this.scanPaused) {
+                        this.scanStatus = "paused";
+                        this.kernel.uiManager.setScanState({
+                            status: "paused"
+                        });
+
+                        return {
+                            status: "paused",
+                            completed: this.completedScanners,
+                            total: this.scannerQueue.length
+                        };
+                    }
+
+                    if (!this.scannerQueue.length) {
+                        this.scanStatus = "completed";
+                        this.kernel.uiManager.setScanState({
+                            status: "completed"
+                        });
+                        this.kernel.uiManager.hideProgress();
+
+                        return {
+                            status: "completed",
+                            completed: 0,
+                            total: 0
+                        };
+                    }
+
+                    this.scanStatus = "running";
+                    this.kernel.siteIntelligenceService?.resumeScanning?.();
+
+                    this.kernel.uiManager.setScanState({
+                        status: "running"
+                    });
+
+                    return await this.processScannerQueue();
+
+                } finally {
                     if (this.scanPromise === currentPromise) {
                         this.scanPromise = null;
                     }
-                };
+                }
+            })();
 
-                currentPromise.then(
-                    clearPromise,
-                    clearPromise
-                );
+            this.scanPromise = currentPromise;
+
+            return currentPromise;
+        }
+
+        async initializeViewerForScanner(item) {
+            const manager = this.kernel.moduleManager;
+
+            for (const descriptorId of this.kernel.allowedModuleIds || []) {
+                const descriptor = manager.getDescriptor(descriptorId);
+
+                if (!descriptor) {
+                    continue;
+                }
+
+                for (const component of descriptor.components) {
+                    if (
+                        component.type !== "module" ||
+                        !component.id.endsWith("_Viewer") ||
+                        component.id.replace(/_Viewer$/, "_Scanner") !== item.id
+                    ) {
+                        continue;
+                    }
+
+                    try {
+                        await manager.initializeFromProvider(
+                            component.id,
+                            item.context
+                        );
+                    } catch (error) {
+                        console.warn(
+                            "[Anonymous Inspector] Viewer result could not be restored:",
+                            component.id,
+                            error
+                        );
+                    }
+
+                    this.kernel.uiManager.refreshMenu();
+                }
             }
-
-            return this.scanPromise;
         }
 
         async processScannerQueue() {
@@ -311,6 +476,10 @@
                         item.id,
                         item.context
                     );
+
+                    if (!this.scanPaused) {
+                        await this.initializeViewerForScanner(item);
+                    }
                 } catch (error) {
                     if (!this.scanPaused) {
                         this.failedScanners++;
@@ -381,7 +550,10 @@
 
         async stopScan() {
             if (
-                this.scanStatus !== "running" &&
+                ![
+                    "running",
+                    "preparing"
+                ].includes(this.scanStatus) &&
                 !this.scanPromise
             ) {
                 return false;
@@ -415,6 +587,15 @@
 
         async refreshScan() {
             await this.stopScan();
+
+            if (!this.kernel.modulesStarted) {
+                await this.kernel.startModules();
+            }
+
+            await this.buildScannerQueue(
+                this.kernel.allowedModuleIds || [],
+                { includeCached: true }
+            );
 
             this.scanStatus = "refreshing";
 

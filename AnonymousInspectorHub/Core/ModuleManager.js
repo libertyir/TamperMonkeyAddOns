@@ -93,6 +93,10 @@
             return this.descriptors.has(id);
         }
 
+        getDescriptor(id) {
+            return this.descriptors.get(id) || null;
+        }
+
         registerDescriptor(id, descriptor = {}) {
             this.validateId(id);
             if (!descriptor || !Array.isArray(descriptor.components)) {
@@ -137,6 +141,74 @@
                 this.providerInstances.set(id, new ProviderClass());
             }
             return this.providerInstances.get(id);
+        }
+
+        async initializeFromProvider(id, context = {}) {
+            const ModuleClass = await this.load(id);
+
+            if (ModuleClass.autoInitialize === true) {
+                return this.initialize(id, context);
+            }
+
+            const providerId = ModuleClass.providerId;
+
+            if (
+                typeof providerId !== "string" ||
+                !providerId.trim()
+            ) {
+                return null;
+            }
+
+            const provider = this.getProvider(providerId);
+
+            if (
+                !provider ||
+                typeof provider.getResult !== "function"
+            ) {
+                return null;
+            }
+
+            const result = await provider.getResult(context);
+
+            if (!result || typeof result !== "object") {
+                return null;
+            }
+
+            const scope = this.normalizeScope(
+                context.scope ||
+                context.directoryUrl ||
+                result.directoryUrl ||
+                this.createDefaultScope(
+                    this.getScanPolicy(ModuleClass)
+                )
+            );
+
+            const instanceKey = this.createInstanceKey(id, scope);
+            const existing = this.activeInstances.get(instanceKey);
+
+            if (existing) {
+                await this.destroyInstance(existing);
+                this.activeInstances.delete(instanceKey);
+            }
+
+            const instance = new ModuleClass();
+            instance.scanScope = scope;
+
+            await instance.init({
+                ...context,
+                scope,
+                directoryUrl: scope,
+                result
+            });
+
+            if (!instance.available) {
+                await this.destroyInstance(instance);
+                return null;
+            }
+
+            this.activeInstances.set(instanceKey, instance);
+
+            return instance;
         }
 
         async loadDescriptorComponents(id) {
