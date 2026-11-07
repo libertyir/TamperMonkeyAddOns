@@ -246,9 +246,18 @@
                         position: relative;
                         right: auto;
                         bottom: auto;
-                        flex: 0 0 220px;
-                        width: 220px;
-                        padding: 12px;
+                        display: flex;
+                        flex: 0 1 380px;
+                        align-items: center;
+                        gap: 12px;
+                        width: 380px;
+                        max-width: calc(100vw - 78px);
+                        min-width: 180px;
+                        height: 48px;
+                        max-height: 48px;
+                        box-sizing: border-box;
+                        overflow: hidden;
+                        padding: 0 12px;
                         background: #171717 !important;
                         color: #eee !important;
                         border: 1px solid #444;
@@ -258,13 +267,21 @@
                     }
 
                     #aih-progress-label {
-                        margin-bottom: 8px;
+                        flex: 0 1 auto;
+                        min-width: 0;
+                        max-width: 65%;
+                        margin: 0;
+                        overflow: hidden;
                         color: #ddd;
                         font-size: 12px;
+                        line-height: 16px;
+                        white-space: nowrap;
+                        text-overflow: ellipsis;
                     }
 
                     #aih-progress-track {
-                        width: 100%;
+                        flex: 1 1 auto;
+                        min-width: 40px;
                         height: 5px;
                         overflow: hidden;
                         background: #333;
@@ -954,7 +971,7 @@
             this.progressBar.style.width = percent + "%";
 
             this.progress.style.display =
-                completed >= total ? "none" : "block";
+                completed >= total ? "none" : "flex";
         }
 
         showProgress(message = "Initializing...") {
@@ -962,7 +979,7 @@
 
             this.progressLabel.textContent = message;
             this.progressBar.style.width = "0%";
-            this.progress.style.display = "block";
+            this.progress.style.display = "flex";
         }
 
         hideProgress() {
