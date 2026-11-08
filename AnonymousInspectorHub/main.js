@@ -184,80 +184,42 @@
         if (kernel) return kernel;
         if (loading) return loading;
 
-        loading = new Promise((resolve, reject) => {
-            if (!gmAPI.xmlHttpRequest) {
-                reject(
-                    new Error("GM_xmlhttpRequest is unavailable.")
-                );
-                return;
+        loading = Promise.resolve().then(() => {
+            const assetManager = root.AnonymousInspectorAssetManager;
+
+            if (
+                !assetManager ||
+                !assetManager.initialized ||
+                typeof assetManager.getText !== "function"
+            ) {
+                throw new Error("AssetManager is not initialized.");
             }
 
-            gmAPI.xmlHttpRequest({
-                method: "GET",
-                url: KERNEL_URL + "?_aih=" + Date.now(),
-                timeout: 20000,
+            const source = assetManager.getText("Core/Kernel.js");
 
-                headers: {
-                    "Cache-Control": "no-cache, no-store",
-                    "Pragma": "no-cache"
-                },
+            if (typeof source !== "string" || !source.trim()) {
+                throw new Error("Kernel.js is missing from the asset cache.");
+            }
 
-                onload(response) {
-                    if (
-                        response.status < 200 ||
-                        response.status >= 300 ||
-                        !response.responseText
-                    ) {
-                        reject(
-                            new Error(
-                                "Kernel loading failed: HTTP " +
-                                response.status
-                            )
-                        );
-                        return;
-                    }
+            const KernelClass = new Function(
+                source +
+                "\\nreturn globalThis.AnonymousInspectorKernel;" +
+                "\\n//# sourceURL=" + KERNEL_URL
+            )();
 
-                    try {
-                        const KernelClass = new Function(
-                            response.responseText +
-                            "\nreturn globalThis.AnonymousInspectorKernel;" +
-                            "\n//# sourceURL=" + KERNEL_URL
-                        )();
+            if (typeof KernelClass !== "function") {
+                throw new Error("Kernel class could not be loaded.");
+            }
 
-                        if (typeof KernelClass !== "function") {
-                            throw new Error(
-                                "Kernel class could not be loaded."
-                            );
-                        }
-
-                        kernel = new KernelClass({
-                            version: "2.0.0",
-                            gm: gmAPI
-                        });
-
-                        kernel.onUIReady = openSettingsWhenReady;
-
-                        root.AIHKernel = kernel;
-
-                        resolve(kernel);
-
-                    } catch (error) {
-                        reject(error);
-                    }
-                },
-
-                onerror() {
-                    reject(
-                        new Error("Kernel network request failed.")
-                    );
-                },
-
-                ontimeout() {
-                    reject(
-                        new Error("Kernel request timed out.")
-                    );
-                }
+            kernel = new KernelClass({
+                version: "2.0.0",
+                gm: gmAPI
             });
+
+            kernel.onUIReady = openSettingsWhenReady;
+            root.AIHKernel = kernel;
+
+            return kernel;
         });
 
         try {
@@ -279,6 +241,14 @@
         if (startupPromise) return startupPromise;
 
         startupPromise = (async () => {
+            const assetManager = root.AnonymousInspectorAssetManager;
+
+            if (!assetManager || typeof assetManager.initialize !== "function") {
+                throw new Error("AssetManager is unavailable.");
+            }
+
+            await assetManager.initialize();
+
             const instance = await loadKernel();
 
             return instance.start(...configuredModuleIds);
