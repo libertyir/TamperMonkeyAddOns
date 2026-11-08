@@ -57,45 +57,27 @@
 
         // The environment cannot load itself; this is the one bootstrap request.
         fetchBootstrapFile(path) {
-            return new Promise((resolve, reject) => {
-                const request = this.gm.xmlHttpRequest;
-                if (typeof request !== "function") {
-                    reject(new Error("GM_xmlhttpRequest is unavailable."));
-                    return;
-                }
+            const assetManager = root.AnonymousInspectorAssetManager;
 
-                const url = this.baseUrl + path;
-                request({
-                    method: "GET",
-                    url: url + "?_aih=" + Date.now(),
-                    responseType: "text",
-                    timeout: this.defaultConfig.requestTimeout,
-                    headers: {
-                        "Cache-Control": "no-cache, no-store",
-                        "Pragma": "no-cache"
-                    },
-                    onload: response => {
-                        if (
-                            response.status >= 200 &&
-                            response.status < 300 &&
-                            typeof response.responseText === "string"
-                        ) {
-                            resolve(response.responseText);
-                        } else {
-                            reject(new Error(
-                                "Unable to load " + path +
-                                ": HTTP " + response.status
-                            ));
-                        }
-                    },
-                    onerror: () => reject(
-                        new Error("Network request failed: " + path)
-                    ),
-                    ontimeout: () => reject(
-                        new Error("Request timed out: " + path)
-                    )
-                });
-            });
+            if (
+                !assetManager ||
+                !assetManager.initialized ||
+                typeof assetManager.getText !== "function"
+            ) {
+                return Promise.reject(
+                    new Error("AssetManager is not ready.")
+                );
+            }
+
+            const source = assetManager.getText(path);
+
+            if (typeof source !== "string") {
+                return Promise.reject(
+                    new Error("Project asset is not cached: " + path)
+                );
+            }
+
+            return Promise.resolve(source);
         }
 
         async loadComponent(path, globalName) {
