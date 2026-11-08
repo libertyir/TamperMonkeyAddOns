@@ -1,7 +1,7 @@
 (function (root) {
     "use strict";
 
-    const VERSION = "1.0.0";
+    const VERSION = "1.0.1";
     const BASE_URL =
         "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/";
     const MANIFEST_URL = BASE_URL + "AssetManifest.json";
