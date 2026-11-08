@@ -361,7 +361,11 @@
                 const matchingViewers = Framework.Viewers.find({
                     url: node.url,
                     path: node.path,
-                    name: node.name
+                    name: node.name,
+                    type: node.type,
+                    extension: node.record?.extension || "",
+                    tags: node.tags || [],
+                    contentType: node.record?.contentType || null
                 });
 
                 for (const viewer of matchingViewers) {
