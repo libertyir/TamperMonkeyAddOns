@@ -348,3 +348,38 @@ Important pending verification:
 ### 11.6 Current immediate status
 
 The latest user request was to update this project memory on GitHub. This memory update is authorized by the standing exception in Section 2; it does not grant permission to edit other source files. The last source-code work added Plain Text Viewer and Image File Viewer; the next technical step should be runtime verification and correction of those modules only when the user asks to continue.
+
+## 12. AssetManager — initial implementation (2026-11-08)
+
+The user explicitly authorized implementation of an independent asset cache and specified that it must use Tampermonkey GM storage, not IndexedDB. The cache is global to the userscript and is not scoped to the current website or tab.
+
+### 12.1 Files added or changed
+
+- Added `AssetManager.js` — standalone bootstrap/cache manager, loaded before `main.js` through userscript `@require`.
+- Added `AssetManifest.json` — data-only manifest listing project JavaScript and JSON assets, with an independent version per asset.
+- Updated `AnonymousInspectorHub.user.js` — requires AssetManager before main.js.
+- Updated `main.js` — initializes AssetManager before loading Kernel.
+- Updated `Core/Kernel.js` — bootstrap components are read from AssetManager rather than downloaded individually.
+- Updated `Core/KernelEnvironment.js` — project-origin text assets are served from AssetManager; external-site requests and binary requests retain the existing GM network path.
+
+### 12.2 Confirmed configuration and behavior in the committed source
+
+- Asset cache is stored with `GM_getValue` / `GM_setValue`; removed asset keys are cleaned with `GM_listValues` / `GM_deleteValue`. No IndexedDB is used by AssetManager.
+- Cache keys use the global prefix `aih_asset_manager_v1:asset:`; they are not keyed by website, origin, tab, or current page.
+- `AssetManifest.json` is requested on every AssetManager initialization with a cache-busting query and no-cache headers. If that request fails, the last saved manifest is used as an offline fallback.
+- Current manifest setting is `ForceLoad: false`: a matching cached version is reused; a missing or version-mismatched asset is downloaded.
+- Every asset has its own `version`. Increment only the changed asset's version when its content changes. The manifest itself is always requested separately.
+- Asset downloads run concurrently with a manifest-configurable limit (currently 16). Execution remains lazy and follows the existing loaders' established order.
+- A failed update does not overwrite a previous cached copy. If a previous copy exists it remains available; a successfully downloaded fresh copy is also kept in memory even if GM cache persistence fails.
+- Cache entries for paths removed from the manifest are cleaned up.
+- AssetManager is not a replacement for the application's existing scan/result/data cache. It only handles project static assets.
+- `EntryPoint` is currently `main.js`; main.js remains the userscript entry bootstrap. AssetManager initializes before Kernel/Core loading.
+- AssetManager and the manifest are intentionally excluded from the manifest's own Assets list; main.js is the declared EntryPoint, not a cached project asset.
+
+### 12.3 Current verification and limitations
+
+- JavaScript syntax checks passed for `AssetManager.js`, `main.js`, `Core/Kernel.js`, and `Core/KernelEnvironment.js` after the initial integration.
+- The manifest parsed successfully and contained 145 project JS/JSON assets at the time of implementation. Kernel.js and KernelEnvironment.js are marked required and their asset versions were bumped to 1.0.1.
+- This is source-level verification only. The complete userscript has not yet been tested in a live Tampermonkey browser session. In particular, verify GM storage persistence across different sites, first-run downloads, second-run cache hits, a single-file version bump, ForceLoad behavior, offline manifest fallback, removed-asset cleanup, and binary viewer requests.
+- Do not claim browser-level behavior is verified until those tests are run.
+
