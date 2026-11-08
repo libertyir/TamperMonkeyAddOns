@@ -1,0 +1,1024 @@
+{
+    "Version": "1.0.0",
+    "ForceLoad": true,
+    "EntryPoint": "main.js",
+    "MaxConcurrency": 16,
+    "RequestTimeout": 20000,
+    "Assets": [
+        {
+            "id": "Core_Application",
+            "path": "Core/Application.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_ApplicationStartup",
+            "path": "Core/ApplicationStartup.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_CoreLoader",
+            "path": "Core/CoreLoader.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_CryptoManager",
+            "path": "Core/CryptoManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_Framework",
+            "path": "Core/Framework.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_Kernel",
+            "path": "Core/Kernel.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_KernelConfig",
+            "path": "Core/KernelConfig.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_KernelEnvironment",
+            "path": "Core/KernelEnvironment.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_ModuleManager",
+            "path": "Core/ModuleManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_ModuleRunner",
+            "path": "Core/ModuleRunner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_ServiceFactory",
+            "path": "Core/ServiceFactory.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_ServiceRegistrar",
+            "path": "Core/ServiceRegistrar.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SettingsManager",
+            "path": "Core/SettingsManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SiteInitializer",
+            "path": "Core/SiteInitializer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SiteIntelligence_ResourceRepository",
+            "path": "Core/SiteIntelligence/ResourceRepository.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SiteIntelligence_ResourceScanner",
+            "path": "Core/SiteIntelligence/ResourceScanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SiteIntelligence_SiteIntelligenceDialog",
+            "path": "Core/SiteIntelligence/SiteIntelligenceDialog.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SiteIntelligence_SiteIntelligenceService",
+            "path": "Core/SiteIntelligence/SiteIntelligenceService.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SiteIntelligence_SiteStructureManager",
+            "path": "Core/SiteIntelligence/SiteStructureManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_SiteManager",
+            "path": "Core/SiteManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_StorageManager",
+            "path": "Core/StorageManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_UIManager",
+            "path": "Core/UIManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_ViewerHost",
+            "path": "Core/ViewerHost.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Core_ViewerRegistry",
+            "path": "Core/ViewerRegistry.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Modules_AdminPanel_AdminPanel_Provider",
+            "path": "Modules/AdminPanel/AdminPanel_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_AdminPanel_AdminPanel_Scanner",
+            "path": "Modules/AdminPanel/AdminPanel_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_AdminPanel_AdminPanel_Viewer",
+            "path": "Modules/AdminPanel/AdminPanel_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_AdminPanelModule",
+            "path": "Modules/AdminPanelModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApachiServerStatus_ApachiServerStatus_Provider",
+            "path": "Modules/ApachiServerStatus/ApachiServerStatus_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApachiServerStatus_ApachiServerStatus_Scanner",
+            "path": "Modules/ApachiServerStatus/ApachiServerStatus_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApachiServerStatus_ApachiServerStatus_Viewer",
+            "path": "Modules/ApachiServerStatus/ApachiServerStatus_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApachiServerStatusModule",
+            "path": "Modules/ApachiServerStatusModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApiDocs_ApiDocs_Provider",
+            "path": "Modules/ApiDocs/ApiDocs_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApiDocs_ApiDocs_Scanner",
+            "path": "Modules/ApiDocs/ApiDocs_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApiDocs_ApiDocs_Viewer",
+            "path": "Modules/ApiDocs/ApiDocs_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ApiDocsModule",
+            "path": "Modules/ApiDocsModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_CommonTestFiles_CommonTestFiles_Provider",
+            "path": "Modules/CommonTestFiles/CommonTestFiles_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_CommonTestFiles_CommonTestFiles_Scanner",
+            "path": "Modules/CommonTestFiles/CommonTestFiles_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_CommonTestFiles_CommonTestFiles_Viewer",
+            "path": "Modules/CommonTestFiles/CommonTestFiles_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_CommonTestFilesModule",
+            "path": "Modules/CommonTestFilesModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DS_Store_DS_Store_Provider",
+            "path": "Modules/DS_Store/DS_Store_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DS_Store_DS_Store_Scanner",
+            "path": "Modules/DS_Store/DS_Store_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DS_Store_DS_Store_Viewer",
+            "path": "Modules/DS_Store/DS_Store_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DS_StoreModule",
+            "path": "Modules/DS_StoreModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector",
+            "path": "Modules/DebugModeInspector.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_CVE_GitHub",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.CVE.GitHub.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_CVE_NVD",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.CVE.NVD.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_CVE_OSV",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.CVE.OSV.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_Django",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.Django.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_DotNet",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.DotNet.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_EvidenceAnalyzer",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.EvidenceAnalyzer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_Flask",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.Flask.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_Go",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.Go.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_Java",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.Java.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_Laravel",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.Laravel.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_Node",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.Node.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_PHP",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.PHP.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_PlatformDetector",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.PlatformDetector.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_Rails",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.Rails.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_ReportBuilder",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.ReportBuilder.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_RequestManager",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.RequestManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_VulnerabilityLookup",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.VulnerabilityLookup.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DebugModeInspector_DebugModeInspector_WordPress",
+            "path": "Modules/DebugModeInspector/DebugModeInspector.WordPress.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DirectoryBrowsing_DirectoryBrowsing_Provider",
+            "path": "Modules/DirectoryBrowsing/DirectoryBrowsing_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DirectoryBrowsing_DirectoryBrowsing_Scanner",
+            "path": "Modules/DirectoryBrowsing/DirectoryBrowsing_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DirectoryBrowsing_DirectoryBrowsing_Viewer",
+            "path": "Modules/DirectoryBrowsing/DirectoryBrowsing_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_DirectoryBrowsingModule",
+            "path": "Modules/DirectoryBrowsingModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_EnvFile_EnvFile_Provider",
+            "path": "Modules/EnvFile/EnvFile_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_EnvFile_EnvFile_Scanner",
+            "path": "Modules/EnvFile/EnvFile_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_EnvFile_EnvFile_Viewer",
+            "path": "Modules/EnvFile/EnvFile_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_EnvFileModule",
+            "path": "Modules/EnvFileModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_FileViewerHash",
+            "path": "Modules/FileViewerHash.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GitConfig_GitConfig_Provider",
+            "path": "Modules/GitConfig/GitConfig_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GitConfig_GitConfig_Scanner",
+            "path": "Modules/GitConfig/GitConfig_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GitConfig_GitConfig_Viewer",
+            "path": "Modules/GitConfig/GitConfig_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GitConfigModule",
+            "path": "Modules/GitConfigModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GraphQL_GraphQL_Provider",
+            "path": "Modules/GraphQL/GraphQL_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GraphQL_GraphQL_Scanner",
+            "path": "Modules/GraphQL/GraphQL_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GraphQL_GraphQL_Viewer",
+            "path": "Modules/GraphQL/GraphQL_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_GraphQLModule",
+            "path": "Modules/GraphQLModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_HealthCheck_HealthCheck_Provider",
+            "path": "Modules/HealthCheck/HealthCheck_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_HealthCheck_HealthCheck_Scanner",
+            "path": "Modules/HealthCheck/HealthCheck_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_HealthCheck_HealthCheck_Viewer",
+            "path": "Modules/HealthCheck/HealthCheck_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_HealthCheckModule",
+            "path": "Modules/HealthCheckModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ImageFileViewer_ImageFileViewer",
+            "path": "Modules/ImageFileViewer/ImageFileViewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ImageFileViewer_ImageFileViewer_Provider",
+            "path": "Modules/ImageFileViewer/ImageFileViewer_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ImageFileViewerModule",
+            "path": "Modules/ImageFileViewerModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Metrics_Metrics_Provider",
+            "path": "Modules/Metrics/Metrics_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Metrics_Metrics_Scanner",
+            "path": "Modules/Metrics/Metrics_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Metrics_Metrics_Viewer",
+            "path": "Modules/Metrics/Metrics_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_MetricsModule",
+            "path": "Modules/MetricsModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_OpenAPI_OpenAPI_Provider",
+            "path": "Modules/OpenAPI/OpenAPI_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_OpenAPI_OpenAPI_Scanner",
+            "path": "Modules/OpenAPI/OpenAPI_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_OpenAPI_OpenAPI_Viewer",
+            "path": "Modules/OpenAPI/OpenAPI_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_OpenAPIModule",
+            "path": "Modules/OpenAPIModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_PhpInfo_PhpInfo_Provider",
+            "path": "Modules/PhpInfo/PhpInfo_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_PhpInfo_PhpInfo_Scanner",
+            "path": "Modules/PhpInfo/PhpInfo_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_PhpInfo_PhpInfo_Viewer",
+            "path": "Modules/PhpInfo/PhpInfo_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_PhpInfoModule",
+            "path": "Modules/PhpInfoModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_PlainTextViewer_PlainTextViewer",
+            "path": "Modules/PlainTextViewer/PlainTextViewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_PlainTextViewer_PlainTextViewer_Provider",
+            "path": "Modules/PlainTextViewer/PlainTextViewer_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_PlainTextViewerModule",
+            "path": "Modules/PlainTextViewerModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Redoc_Redoc_Provider",
+            "path": "Modules/Redoc/Redoc_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Redoc_Redoc_Scanner",
+            "path": "Modules/Redoc/Redoc_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Redoc_Redoc_Viewer",
+            "path": "Modules/Redoc/Redoc_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_RedocModule",
+            "path": "Modules/RedocModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Scalar_Scalar_Provider",
+            "path": "Modules/Scalar/Scalar_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Scalar_Scalar_Scanner",
+            "path": "Modules/Scalar/Scalar_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Scalar_Scalar_Viewer",
+            "path": "Modules/Scalar/Scalar_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ScalarModule",
+            "path": "Modules/ScalarModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ServerInfo_ServerInfo_Provider",
+            "path": "Modules/ServerInfo/ServerInfo_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ServerInfo_ServerInfo_Scanner",
+            "path": "Modules/ServerInfo/ServerInfo_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ServerInfo_ServerInfo_Viewer",
+            "path": "Modules/ServerInfo/ServerInfo_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_ServerInfoModule",
+            "path": "Modules/ServerInfoModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Status_Status_Provider",
+            "path": "Modules/Status/Status_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Status_Status_Scanner",
+            "path": "Modules/Status/Status_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_Status_Status_Viewer",
+            "path": "Modules/Status/Status_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_StatusModule",
+            "path": "Modules/StatusModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_SwaggerUI_SwaggerUI_Provider",
+            "path": "Modules/SwaggerUI/SwaggerUI_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_SwaggerUI_SwaggerUI_Scanner",
+            "path": "Modules/SwaggerUI/SwaggerUI_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_SwaggerUI_SwaggerUI_Viewer",
+            "path": "Modules/SwaggerUI/SwaggerUI_Viewer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_SwaggerUIModule",
+            "path": "Modules/SwaggerUIModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_Collector",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.Collector.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_DirectoryScanner",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.DirectoryScanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_Grabber",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.Grabber.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_ResourceAnalyzer",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.ResourceAnalyzer.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_ResourceStore",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.ResourceStore.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_SensitiveScanner",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.SensitiveScanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_TreeBuilder",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.TreeBuilder.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_UIManager",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.UIManager.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector",
+            "path": "Modules/WebStructureInspector/WebStructureInspector.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_Provider",
+            "path": "Modules/WebStructureInspector/WebStructureInspector_Provider.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspector_WebStructureInspector_Scanner",
+            "path": "Modules/WebStructureInspector/WebStructureInspector_Scanner.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Modules_WebStructureInspectorModule",
+            "path": "Modules/WebStructureInspectorModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_CloudStorageUI",
+            "path": "Settings/CloudStorageUI.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_DataManagerUI",
+            "path": "Settings/DataManagerUI.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_GeneralUI",
+            "path": "Settings/GeneralUI.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_ModulesUI",
+            "path": "Settings/ModulesUI.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_SitesUI",
+            "path": "Settings/SitesUI.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_StorageUI",
+            "path": "Settings/StorageUI.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_WebStructureInspectorUI",
+            "path": "Settings/WebStructureInspectorUI.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Settings_manifest",
+            "path": "Settings/manifest.json",
+            "version": "1.0.0",
+            "type": "json",
+            "required": true
+        },
+        {
+            "id": "Storage_GMStorageAdapter",
+            "path": "Storage/GMStorageAdapter.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        },
+        {
+            "id": "Storage_IndexedDBAdapter",
+            "path": "Storage/IndexedDBAdapter.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
+            "id": "Storage_StorageAdapter",
+            "path": "Storage/StorageAdapter.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": true
+        }
+    ]
+}
