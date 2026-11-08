@@ -3,34 +3,35 @@
 
     class CommonTestFiles_Provider extends Framework.BaseProvider {
         matchesResource(resource) {
-            const raw = typeof resource === "string"
-                ? resource
-                : resource && (
-                    resource.url ||
-                    resource.path ||
-                    resource.name ||
-                    resource.directoryUrl ||
-                    ""
-                );
+            if (!resource || typeof resource !== "object") {
+                return false;
+            }
+
+            // These are site-level inspectors, not file viewers.
+            // They may match an explicitly supplied site/directory resource only.
+            if (
+                resource.kind !== "site" &&
+                resource.type !== "directory"
+            ) {
+                return false;
+            }
+
+            const raw = resource.url ||
+                resource.path ||
+                resource.directoryUrl ||
+                "";
 
             if (!raw) {
                 return false;
             }
 
-            let url;
-
             try {
-                url = new URL(String(raw), location.href);
+                const url = new URL(String(raw), location.href);
+                return url.origin === location.origin;
             } catch {
                 return false;
             }
-
-            return (
-                url.origin === location.origin &&
-                new RegExp(".*", "i").test(url.pathname)
-            );
         }
-
         async getResult(context = {}) {
             let origin;
 
