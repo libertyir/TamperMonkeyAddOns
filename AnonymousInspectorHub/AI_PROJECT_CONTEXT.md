@@ -256,3 +256,95 @@ After updating/reloading the userscript, verify in a real browser:
 6. The tree remains functional after the lightweight record projection, especially directory-listing metadata and status/tag behavior.
 
 Do not claim these browser checks passed until they are actually performed.
+
+
+## 11. Current project state — module architecture and file viewers (2026-11-08)
+
+This section records recent Anonymous Inspector Hub work discussed and committed during the current project conversation. The latest repository branch observed after the file-viewer additions was main at commit 46206e18f9dff7021f3220b5861ac16dbaa7161b. Always re-fetch current files before relying on this snapshot.
+
+### 11.1 Module architecture and naming
+
+- The user standardized descriptor filenames without the _Module suffix: for example, GitConfigModule.js, not GitConfig_Module.js.
+- Component filenames retain role suffixes, including _Provider.js; the user specifically requested readable formatting, indentation, and non-minified source.
+- The user explicitly excluded DebugModeInspector and WebStructureInspector from an earlier batch migration; later the user explicitly authorized converting WebStructureInspector as well.
+- Desired separation remains: descriptor registers components; Provider matches resource types and resolves stored results; Viewer presents results; Scanner performs scan/network work. Do not add a Scanner to modules that the user explicitly says do not need one.
+- Do not assume previous claims that every module is fully migrated or runtime-tested are true. Verify actual current source and behavior.
+
+### 11.2 Scan scheduling and cache contract — critical
+
+The user has repeatedly clarified the exact expected behavior. Treat these as hard requirements:
+
+1. Loading the userscript/module definitions and running scans are separate actions.
+2. On page entry, modules/components may be loaded and valid prior results may be restored for display, but no scan should start automatically.
+3. A normal Play request is non-forced. Before a module enters the scan queue or its Scanner is invoked, its Provider must determine whether a valid result already exists for the exact resource/scope.
+4. If a valid, unexpired result exists, skip the module entirely. Do not invoke its Scanner and do not send even a preliminary network request to re-check the URL. This must hold on repeated Play presses, even 100 times.
+5. Results must be scoped correctly. Some modules are site/origin scoped; others are directory/path scoped. Do not collapse distinct scopes or treat a result for one directory as valid for another.
+6. Stop halts the current operation and must not advance to the next queued module. A subsequent Play resumes pending work, including newly registered modules, while continuing to skip still-valid cached results.
+7. Refresh is the explicit invalidation route: stop the process, remove prior scan records/results and temporary/resource cache for the current website/scope, then allow a fresh scan from the beginning.
+8. A Force scan capability has not yet been implemented. Do not silently treat ordinary Play as Force.
+9. Negative but successfully completed findings (e.g. “not found”) should be cacheable as completed results until their TTL expires; real errors/exceptions must not be mislabeled as successful negative findings.
+10. Provider-side gating is essential. A queue-only check is insufficient because direct calls to ModuleManager/Scanner must not bypass the cache policy.
+
+Recent code work attempted to introduce BaseProvider.shouldScan(), Provider cache gating, and a non-always TTL for WebStructureInspector. These changes were committed in the conversation as 741bd6aeaa0f8ea28c916ecdc59d7fae88bc3dda and f37d2cdbd06e10241523d1ed4c96ac12639bede5. The user subsequently reported repeated rescans despite existing data, so the cache contract is not considered verified or fixed until a browser test proves that repeated normal Play causes zero scanner/network requests for valid cached scopes. Investigate the actual current implementation before making further claims.
+
+### 11.3 Main menu and progress controls
+
+The user requested a distinct row at the bottom of the main menu with Play, Stop, and Refresh:
+- Play performs only required non-forced scans.
+- Stop halts and preserves pending progress.
+- Refresh stops, clears current-site scan/temp/cache data, and enables a full rescan.
+- Progress UI is positioned to the left of the floating menu button, independently of whether the menu is open.
+- Progress must not overlap the scanner/menu button, must not cover the menu, and must never lock/disable menu interaction.
+- The floating button keeps its normal menu icon when idle and uses a spinner/rotation state while processing, returning to the menu icon afterward.
+- A previous layout adjustment set a fixed 48px progress bar height, single-line text, and a wider bar. Verify current CSS and actual viewport behavior rather than assuming no overlap.
+
+### 11.4 WebStructureInspector Viewer matching issue
+
+The user reported that unrelated viewers, especially HTTP Status Viewer, were appearing beside many unrelated file types in WebStructureInspector's resource list.
+
+A fix was committed as 92f14d61f722cf63165cc2276b5cbc4d43fd59b7:
+- Tightened several broad site-level Provider matchers (AdminPanel, CommonTestFiles, ServerInfo, Status) so they do not indiscriminately match ordinary file resources.
+- Passed resource classification details (type, extension, tags, content type) from WebStructureInspector.UIManager into Viewer lookup.
+
+This needs real browser verification. If unrelated viewers still appear, inspect the full matching pipeline and each Provider's matcher. Do not assume passing extra metadata alone makes all matchers precise.
+
+### 11.5 New modules — Plain Text Viewer and Image File Viewer
+
+The user explicitly requested two new modules, added to the repository and registered in AnonymousInspectorHub.user.js. No dedicated Scanner is required for either module; they open/read the selected resource through the existing binary request bridge.
+
+Files added:
+- Modules/FileViewerHash.js — shared file reading and MD5/SHA-256 helper.
+- Modules/PlainTextViewerModule.js
+- Modules/PlainTextViewer/PlainTextViewer.js
+- Modules/PlainTextViewer/PlainTextViewer_Provider.js
+- Modules/ImageFileViewerModule.js
+- Modules/ImageFileViewer/ImageFileViewer.js
+- Modules/ImageFileViewer/ImageFileViewer_Provider.js
+
+Registration was added to AnonymousInspectorHub.user.js for PlainTextViewerModule and ImageFileViewerModule.
+
+Plain Text Viewer intended support includes common text/source extensions such as TXT, LOG, CSS, JS, JSON, XML, HTML, SVG, YAML, SQL, Python and related formats. It preserves whitespace in a monospace code view, identifies a language label from extension/content type, provides copy, and displays MD5 and SHA-256. Current preview limit: 2 MiB. Syntax highlighting/colorized token rendering is not implemented yet; the current code view is plain monospace.
+
+Image File Viewer intended support includes ICO, PNG, JPG/JPEG, GIF, WebP, BMP, AVIF, SVG and TIFF. It previews the image and displays file size, MD5 and SHA-256. Current preview limit: 20 MiB. It revokes its generated object URL when destroyed.
+
+Shared helper details:
+- SHA-256 uses Web Crypto crypto.subtle.digest.
+- MD5 is implemented in the shared helper.
+- Binary content is obtained via Framework.requestArrayBuffer(url), which routes through the existing KernelEnvironment request bridge. Do not replace this with an independent raw fetch or an invented API.
+- The helper is exposed as globalThis.AnonymousInspectorFileViewerHash for the two Viewer files.
+- Each JavaScript file is short (well below the user's 400-line threshold); helper logic is shared rather than duplicated.
+
+Important pending verification:
+1. Confirm the module descriptors load the shared helper exactly once or safely tolerate it being registered from both descriptors.
+2. Confirm Provider matching is correct for file resources and does not conflict with other file viewers.
+3. Confirm the ViewerHost passes the selected resource URL under context.url or context.fileUrl; adjust only after inspecting the actual contract.
+4. Confirm Framework.createElement supports the attributes/append behavior used by the new viewers, and confirm Framework.copy exists in the current public API.
+5. Test binary request behavior and verify that requestArrayBuffer returns a true ArrayBuffer without text conversion.
+6. Validate MD5 against known test vectors (empty string and abc) and SHA-256 against a known vector.
+7. Test representative files, CORS/same-origin behavior, large-file limits, ICO, animated GIF, and SVG handling.
+8. Check whether the current viewer lifecycle calls destroy() so object URLs are reliably released.
+9. Test in an actual browser/Tampermonkey session. No browser runtime test has yet been confirmed for these modules.
+
+### 11.6 Current immediate status
+
+The latest user request was to update this project memory on GitHub. This memory update is authorized by the standing exception in Section 2; it does not grant permission to edit other source files. The last source-code work added Plain Text Viewer and Image File Viewer; the next technical step should be runtime verification and correction of those modules only when the user asks to continue.
