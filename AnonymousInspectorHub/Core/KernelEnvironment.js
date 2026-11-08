@@ -92,6 +92,39 @@
         }
 
         request(url, responseType = "text") {
+            const assetManager = root.AnonymousInspectorAssetManager;
+
+            if (
+                responseType !== "arraybuffer" &&
+                assetManager &&
+                assetManager.initialized &&
+                typeof assetManager.getText === "function"
+            ) {
+                try {
+                    const requestedUrl = new URL(url, this.kernel.baseUrl);
+                    const baseUrl = new URL(this.kernel.baseUrl);
+
+                    if (
+                        requestedUrl.origin === baseUrl.origin &&
+                        requestedUrl.pathname.startsWith(baseUrl.pathname)
+                    ) {
+                        const path = decodeURIComponent(
+                            requestedUrl.pathname.slice(baseUrl.pathname.length)
+                        );
+                        const cachedSource = assetManager.getText(path);
+
+                        if (typeof cachedSource === "string") {
+                            return Promise.resolve(cachedSource);
+                        }
+                    }
+                } catch (error) {
+                    console.warn(
+                        "[Anonymous Inspector] Asset cache lookup failed:",
+                        error
+                    );
+                }
+            }
+
             return new Promise((resolve, reject) => {
                 const requestAPI = this.kernel.gm.xmlHttpRequest;
 
