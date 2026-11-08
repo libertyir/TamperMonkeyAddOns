@@ -64,7 +64,9 @@
         "StatusModule",
         "MetricsModule",
         "HealthCheckModule",
-        "AdminPanelModule"
+        "AdminPanelModule",
+        "PlainTextViewerModule",
+        "ImageFileViewerModule"
     );
 
 })();
