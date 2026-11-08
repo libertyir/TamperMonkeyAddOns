@@ -194,14 +194,22 @@
                     throw new Error("Empty asset response.");
                 }
 
-                await this.writeCache(cacheKey, {
-                    version: asset.version,
-                    content,
-                    savedAt: Date.now()
-                });
-
                 this.assets.set(asset.path, content);
                 this.stats.downloaded++;
+
+                try {
+                    await this.writeCache(cacheKey, {
+                        version: asset.version,
+                        content,
+                        savedAt: Date.now()
+                    });
+                } catch (cacheError) {
+                    console.warn(
+                        "[AIH AssetManager] GM cache write failed:",
+                        asset.path,
+                        cacheError
+                    );
+                }
             } catch (error) {
                 this.stats.failed++;
 
