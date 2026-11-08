@@ -14,6 +14,12 @@
         set: typeof GM_setValue === "function" ? GM_setValue : null,
         request: typeof GM_xmlhttpRequest === "function"
             ? GM_xmlhttpRequest
+            : null,
+        list: typeof GM_listValues === "function"
+            ? GM_listValues
+            : null,
+        delete: typeof GM_deleteValue === "function"
+            ? GM_deleteValue
             : null
     };
 
@@ -221,6 +227,33 @@
             }
         }
 
+        async cleanupRemovedAssets() {
+            if (!gm.list || !gm.delete) return;
+
+            const activeKeys = new Set(
+                this.manifest.Assets.map(asset =>
+                    this.getAssetCacheKey(asset.path)
+                )
+            );
+
+            try {
+                const keys = await gm.list();
+                const staleKeys = keys.filter(key =>
+                    key.startsWith(ASSET_CACHE_PREFIX) &&
+                    !activeKeys.has(key)
+                );
+
+                await Promise.all(
+                    staleKeys.map(key => gm.delete(key))
+                );
+            } catch (error) {
+                console.warn(
+                    "[AIH AssetManager] Removed-asset cleanup failed:",
+                    error
+                );
+            }
+        }
+
         async loadAssets() {
             const assets = this.manifest.Assets;
             const forceLoad = this.manifest.ForceLoad === true;
@@ -276,6 +309,7 @@
                 }
 
                 this.manifest = await this.loadManifest();
+                await this.cleanupRemovedAssets();
                 await this.loadAssets();
                 this.initialized = true;
 
