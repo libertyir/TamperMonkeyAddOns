@@ -9,8 +9,18 @@
         }
 
         static async read(url) {
-            const buffer = await Framework.requestArrayBuffer(url);
-            if (!(buffer instanceof ArrayBuffer)) {
+            const responseData = await Framework.requestArrayBuffer(url);
+            let buffer;
+
+            if (Object.prototype.toString.call(responseData) === "[object ArrayBuffer]") {
+                buffer = new Uint8Array(responseData).slice().buffer;
+            } else if (ArrayBuffer.isView(responseData)) {
+                buffer = new Uint8Array(
+                    responseData.buffer,
+                    responseData.byteOffset,
+                    responseData.byteLength
+                ).slice().buffer;
+            } else {
                 throw new Error("The file response is not binary data.");
             }
 
