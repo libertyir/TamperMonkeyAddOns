@@ -8,6 +8,7 @@
 // @homepageURL  https://github.com/libertyir/TamperMonkeyAddOns
 // @match        http://*/*
 // @match        https://*/*
+// @sandbox      JavaScript
 // @run-at       document-idle
 // @require      https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/AssetManager.js?v=1.0.1
 // @require      https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/main.js?v=1.5.2
