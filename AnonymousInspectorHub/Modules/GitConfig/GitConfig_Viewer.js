@@ -74,6 +74,70 @@ constructor() {
                 textContent: "Copy Config"
             });
 
+            const checkButton = Framework.createElement("button", {
+                type: "button",
+                textContent: "Check GitHub Connection",
+                style: "margin-left:8px"
+            });
+
+            const checkResult = Framework.createElement("div", {
+                role: "status",
+                "aria-live": "polite",
+                style: "margin:10px 0;white-space:pre-wrap"
+            });
+
+            const repositories = this.getGitHubRepositories();
+            checkButton.disabled = repositories.length === 0;
+            if (!repositories.length) {
+                checkResult.textContent = "No GitHub remote URL was found in this config.";
+            }
+
+            checkButton.addEventListener("click", async () => {
+                checkButton.disabled = true;
+                checkResult.textContent = "Checking GitHub access…";
+                try {
+                    const results = await Promise.all(repositories.map(async repository => {
+                        const response = await Framework.requestText(
+                            "https://api.github.com/repos/" +
+                            encodeURIComponent(repository.owner) + "/" +
+                            encodeURIComponent(repository.name)
+                        );
+
+                        if (typeof response !== "string") {
+                            return repository.owner + "/" + repository.name +
+                                ": unavailable, private, or authentication is required.";
+                        }
+
+                        let data;
+                        try {
+                            data = JSON.parse(response);
+                        } catch {
+                            return repository.owner + "/" + repository.name +
+                                ": GitHub returned an unreadable response.";
+                        }
+
+                        if (!data || !data.full_name) {
+                            return repository.owner + "/" + repository.name +
+                                ": GitHub did not confirm this repository.";
+                        }
+
+                        return [
+                            "Access OK: " + data.full_name,
+                            "Title: " + (data.name || data.full_name),
+                            "Visibility: " + (data.private ? "private" : "public"),
+                            "Description: " + (data.description || "(none)"),
+                            "URL: " + (data.html_url || repository.url)
+                        ].join("\n");
+                    }));
+                    checkResult.textContent = results.join("\n\n");
+                } catch (error) {
+                    checkResult.textContent = "GitHub check failed: " +
+                        (error && error.message ? error.message : String(error));
+                } finally {
+                    checkButton.disabled = false;
+                }
+            });
+
             copyButton.addEventListener("click", () => {
                 Framework.copy(this.content);
                 copyButton.textContent = "Copied";
@@ -101,10 +165,41 @@ constructor() {
                 fileLink,
                 document.createTextNode(" "),
                 copyButton,
+                checkButton,
+                checkResult,
                 contentBox
             );
 
             return container;
+        }
+
+        getGitHubRepositories() {
+            const repositories = new Map();
+            const remoteSection = /^\s*\[remote\s+"[^"]+"\]\s*$([\s\S]*?)(?=^\s*\[|$(?![\s\S]))/gim;
+            let section;
+
+            while ((section = remoteSection.exec(this.content)) !== null) {
+                const urlMatch = section[1].match(/^\s*url\s*=\s*(.*?)\s*$/im);
+                if (!urlMatch) continue;
+
+                const raw = urlMatch[1].replace(/^['"]|['"]$/g, "");
+                let match = raw.match(/^(?:https?:\/\/|git:\/\/)(?:[^/@]+@)?github\.com\/([^/]+)\/([^/#?]+?)(?:\.git)?\/?(?:[#?].*)?$/i);
+                if (!match) {
+                    match = raw.match(/^(?:[^@/]+@)?github\.com:([^/]+)\/([^/#?]+?)(?:\.git)?\/?$/i);
+                }
+                if (!match) continue;
+
+                const owner = match[1];
+                const name = match[2];
+                if (!owner || !name || owner.includes("%") || name.includes("%")) continue;
+                repositories.set(owner.toLowerCase() + "/" + name.toLowerCase(), {
+                    owner,
+                    name,
+                    url: "https://github.com/" + owner + "/" + name
+                });
+            }
+
+            return [...repositories.values()];
         }
 
         renderConfigContent(container) {
