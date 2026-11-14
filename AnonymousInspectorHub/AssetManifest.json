@@ -1,6 +1,6 @@
 {
     "Version": "1.0.0",
-    "ForceLoad": false,
+    "ForceLoad": true,
     "EntryPoint": "main.js",
     "MaxConcurrency": 16,
     "RequestTimeout": 20000,
