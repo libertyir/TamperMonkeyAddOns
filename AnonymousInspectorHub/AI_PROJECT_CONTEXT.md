@@ -383,3 +383,221 @@ The user explicitly authorized implementation of an independent asset cache and 
 - This is source-level verification only. The complete userscript has not yet been tested in a live Tampermonkey browser session. In particular, verify GM storage persistence across different sites, first-run downloads, second-run cache hits, a single-file version bump, ForceLoad behavior, offline manifest fallback, removed-asset cleanup, and binary viewer requests.
 - Do not claim browser-level behavior is verified until those tests are run.
 
+
+
+---
+
+# 13. Full handover snapshot — 2026-11-14
+
+This section is the newest handover snapshot and takes precedence over any conflicting older status in this file. It was prepared from the current GitHub `main` source on 2026-11-14. Preserve older history below/above as historical context; do not treat old configuration values as current when this section explicitly supersedes them.
+
+## 13.1 User's local working copy and repository
+
+- User's local repository path (Windows): `D:\\GithubSources\\TamperMonkeyAddOns`
+- Repository: `libertyir/TamperMonkeyAddOns`
+- Branch inspected: `main`
+- Project directory: `AnonymousInspectorHub/`
+- Live project root: `https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/`
+- Shared source of truth for collaborative review remains the current GitHub branch, while the user's local working copy is at the path above.
+- When a new project/chat resumes, read this entire file first, then inspect the actual current source/branch state before relying on any recorded implementation detail.
+
+## 13.2 Strict working contract — restated
+
+- User's language is Persian. Respond in Persian, directly and technically, with minimal unnecessary explanation.
+- User does not want to exchange source files as downloads/uploads. Inspect source in the shared repository and provide inline code when the agreed workflow calls for user-applied changes.
+- GitHub source-code operations are read-only by default. Do not write, commit, push, create PRs, or modify source files without explicit authorization for that specific task.
+- Standing exception: the user explicitly authorizes maintaining this `AI_PROJECT_CONTEXT.md` memory file. This does not authorize writes to any other file.
+- Before changing code, inspect the exact current file and its dependencies. Do not guess source or rely on stale snippets.
+- Small code changes: show the exact snippet and line location. Large changes: provide the complete file inline. One file per response unless user explicitly asks otherwise.
+- Preserve formatting and existing architecture. No unsolicited refactors, broad rewrites, unrelated fixes, or unnecessary comments/whitespace.
+- Do not claim a fix, test, commit, or deployment unless actually completed.
+- GitHub access must be treated as read-only unless the user explicitly grants a task-specific exception.
+
+## 13.3 AssetManager — current source state checked 2026-11-14
+
+Files currently present in the repository:
+- `AssetManager.js`
+- `AssetManifest.json`
+- `AnonymousInspectorHub.user.js`
+- `main.js`
+- `Core/Kernel.js`
+- `Core/KernelEnvironment.js`
+
+Current values read directly from `AssetManifest.json`:
+- `Version: "1.0.0"`
+- `ForceLoad: true`
+- `EntryPoint: "main.js"`
+- `MaxConcurrency: 16`
+- `RequestTimeout: 20000`
+- `Assets.length: 145`
+- Required assets: 27
+- Optional assets: 118
+
+Current AssetManager source:
+- AssetManager implementation constant is `VERSION = "1.0.1"`.
+- Userscript requires `AssetManager.js?v=1.0.1` before `main.js?v=1.5.2`.
+- Userscript metadata version is currently `1.1.3`.
+- AssetManager uses legacy Tampermonkey GM functions: `GM_getValue`, `GM_setValue`, `GM_xmlhttpRequest`, `GM_listValues`, and `GM_deleteValue`.
+- GM cache key prefix is `aih_asset_manager_v1:asset:`; manifest fallback key is `aih_asset_manager_v1:manifest`.
+- Asset cache is global to this userscript installation and is not partitioned by current website, origin, page, or tab.
+- No IndexedDB is used by AssetManager. The project's separate existing `Storage/IndexedDBAdapter.js` may still exist for the application's other storage mode; do not confuse that with AssetManager's cache.
+- The AssetManager always requests `AssetManifest.json` from the network with cache-busting/no-cache headers. If manifest download fails, it attempts to use the last stored manifest.
+- With `ForceLoad: true`, every manifest asset is fetched again at startup, even if a cached copy exists. Successful downloads replace the GM cache and populate the in-memory map.
+- Downloads use bounded parallel workers; current configured concurrency is 16 (implementation clamps the value to 1–32).
+- Asset execution remains lazy and ordered by the existing Kernel/Core/Module loaders; download concurrency does not imply parallel code execution.
+- Failed asset downloads preserve a previous cached copy. A failed required asset without a usable prior copy causes initialization to fail; optional asset failures are logged.
+- Asset paths removed from the manifest are cleaned from the AssetManager GM key namespace when GM list/delete APIs are available.
+- `AssetManager.getText(path)` is the interface used by the bootstrap and Kernel to retrieve downloaded project text assets.
+- `KernelEnvironment.request()` routes same-origin project text assets to AssetManager when initialized; external-site requests and arraybuffer/binary requests continue through the existing GM network path.
+- AssetManager is strictly separate from the scan-result/temp-resource cache and from application data storage.
+- `main.js` calls `assetManager.initialize()` before attempting to load the Kernel.
+- `Core/Kernel.js` gets bootstrap source using AssetManager and executes components in its established sequence using `new Function(source + "\\n//# sourceURL=" + url)()`.
+- The manifest currently records the main project's JS/JSON assets; do not add/remove assets or change their versions without inspecting the actual tree and receiving the appropriate user instruction.
+
+### 13.3.1 Critical user instruction — ForceLoad and versioning
+
+This is an explicit, current user instruction from 2026-11-14 and overrides the older Section 12.2 statement that ForceLoad was false:
+
+1. Keep `ForceLoad: true` in `AssetManifest.json`. Do not turn it off.
+2. The user wants all listed assets downloaded again in the first startup phase every time, rather than reusing the previous asset cache for startup.
+3. Do not perform any new versioning until the user explicitly says that versioning should begin. This prohibition applies to AssetManager's own version, userscript @require query version, manifest version, and individual asset versions. Do not bump versions as part of a fix unless the user explicitly authorizes it.
+4. Do not alter ForceLoad or version values as a side effect of any unrelated fix.
+5. The current verified values are the ones listed in Section 13.3. Keep them unchanged unless the user explicitly instructs otherwise.
+
+## 13.4 Current startup error — exact root cause found in GitHub source
+
+User-reported browser error on 2026-11-14:
+```
+[Anonymous Inspector] Startup failed: SyntaxError: invalid escape sequence
+loading ... userscript ... :615
+promise callback*loadKernel ... :598
+startupPromise ... :663
+startApplication ... :666
+AnonymousInspector ... :688
+At https://aashwast.ziplink.in/assets/js/:10
+```
+
+The current GitHub source was fetched and the relevant lines were inspected. The exact cause is in `main.js`, inside `loadKernel()`, where the source text for Kernel is passed to `new Function()`.
+
+Current source fragment (as fetched from GitHub):
+```javascript
+const KernelClass = new Function(
+    source +
+    "\\nreturn globalThis.AnonymousInspectorKernel;" +
+    "\\n//# sourceURL=" + KERNEL_URL
+)();
+```
+
+The two backslashes in the JavaScript string literal mean the resulting generated function source receives the literal characters backslash + `n`, rather than an actual newline. The generated code therefore contains an invalid backslash sequence before `return` (and before the sourceURL comment), which causes the reported parse-time `SyntaxError: invalid escape sequence` in Firefox.
+
+The intended source construction is to use a JavaScript newline escape (one backslash in the string literal):
+```javascript
+const KernelClass = new Function(
+    source +
+    "\nreturn globalThis.AnonymousInspectorKernel;" +
+    "\n//# sourceURL=" + KERNEL_URL
+)();
+```
+
+Important status:
+- Root cause has been identified from the current GitHub source.
+- **The source fix has NOT been applied.**
+- No code file was changed as part of this memory update.
+- Do not change version numbers or `ForceLoad` while fixing this.
+- The next minimal code correction, when the user asks to apply it, is only to replace the doubled backslash escapes in these two `main.js` string literals with single newline escapes. Then run a syntax check and verify the generated Function source in a browser/Tampermonkey session.
+- Do not mistake the userscript's stack line 615 for the location of the malformed escape in the downloaded Kernel source; the malformed generated source is assembled in `main.js` at the `new Function()` call.
+- The `new Function()` use in `Core/Kernel.js` has a normal single newline escape in its source literal (`"\\n//# sourceURL="`) and is not the specific doubled-escape defect identified above.
+
+## 13.5 Current userscript startup sequence
+
+Verified from current source:
+1. Tampermonkey loads `AssetManager.js?v=1.0.1` before `main.js?v=1.5.2` because of the order of `@require` directives.
+2. `main.js` registers the settings menu command and creates the floating bootstrap UI as applicable.
+3. `startApplication()` calls and awaits `AnonymousInspectorAssetManager.initialize()`.
+4. AssetManager fetches the manifest, then all 145 assets according to `ForceLoad: true`, with up to 16 concurrent downloads.
+5. `loadKernel()` retrieves `Core/Kernel.js` from `assetManager.getText()`.
+6. `main.js` constructs the Kernel class dynamically using `new Function()`. This is where the current invalid escape defect occurs.
+7. Once fixed, Kernel's `start()` loads Kernel components in order: KernelEnvironment, KernelConfig, SiteInitializer, ModuleRunner, ApplicationStartup.
+8. Kernel loads CoreLoader and the remaining Core/Storage/UI components through the existing CoreLoader flow.
+9. Existing service initialization, UI initialization, site initialization, and module load-only flow continue as before.
+10. Module code loading and actual scan execution remain separate. Do not conflate AssetManager's eager file download with running modules or scanning a website.
+
+## 13.6 Current project architecture and behavior constraints to retain
+
+### Core/bootstrap and modules
+- Core boot should be independent of the UI.
+- Current boot chain starts from userscript → AssetManager → main.js → Kernel → CoreLoader → services/UI/modules.
+- Keep module files in their established project folders. Do not introduce a generic `Resources` folder for modules.
+- The user dislikes oversized source files, especially files above roughly 300–400 lines. Keep AssetManager as one compact file; do not split it into multiple files or expand it unnecessarily.
+- AssetManager is a bootstrap facility, not a Core service and not part of the scan cache.
+- Preserve execution order and dependencies even though static assets are downloaded concurrently.
+- Existing application storage may support GM or IndexedDB according to its own adapter configuration; this does not change the GM-only requirement for AssetManager.
+- SiteManager is responsible for per-site module loading policy and belongs after the relevant Core/Crypto initialization as established in prior architecture discussions.
+- Settings should remain accessible through the small persistent settings control in the bottom/floating menu.
+- The user previously specified that module code can be loaded into memory and old results restored without immediately scanning; the Play action is what starts eligible scans.
+
+### Scan lifecycle and cache contract
+- Loading a module/provider/viewer and executing its scanner are separate phases.
+- On ordinary Play, a Provider must check for a valid unexpired cache entry for the exact scope before enqueueing/running a scanner. If valid data exists, the scanner must not run and no preliminary request to the target site should be made.
+- Scope must distinguish site/origin and directory/path correctly.
+- Stop pauses before the next module/task and preserves pending work; a subsequent Play resumes pending work and handles newly eligible modules while still skipping valid cache.
+- Refresh stops work, clears temporary/site cache and prior scan results for the current site/scope, then allows a new scan.
+- Force scan is a separate capability and must not be silently inferred from ordinary Play.
+- A successfully completed negative result (for example a confirmed 404) may be cached with TTL; a real exception/network failure must not be recorded as a successful negative result.
+- Provider-side cache gating is mandatory; queue-level gating alone is insufficient.
+- The user has previously reported repeated scans despite valid stored data. Therefore this cache contract is still considered unverified until a real browser test proves repeated ordinary Play produces zero scanner/network requests for valid cached scopes.
+- Do not claim the scan-cache behavior is fixed without that verification.
+
+### WebStructureInspector and resource scanning
+- The user proposed a unified discovery queue combining Grabber, directory browsing, sensitive scanning and other existing discovery sources.
+- Candidate URLs should go through one central validation scanner, using HEAD first and GET only when needed.
+- 404 should be omitted/removed as not found; 403 should be retained with an inaccessible/access-denied marker; other statuses must be represented truthfully.
+- Results should feed the shared store/tree and the independent scanner dialog.
+- Do not duplicate validation in each discovery source.
+- Do not fetch every candidate body by default or expand into uncontrolled crawling.
+- The scanner dialog should remain independent from unrelated settings/hub UI refreshes.
+- The exact current implementation of this proposed unified scanner must be inspected before claiming it is complete.
+
+### Storage and memory
+- Temporary resource cache uses GM keys prefixed `aih_temp_`, default 15-minute lifetime, lazy payload reads, and supported text-like content types (HTML/CSS/JS/plain text); this is separate from AssetManager's `aih_asset_manager_v1:` keys.
+- Tree records should remain lightweight: avoid persisting fetched response bodies or unnecessary response headers.
+- WebStructureInspector path labels should decode percent-encoded names, display no more than 25 characters, and preserve the full decoded value in a tooltip.
+- Storage UI should show aggregate size/management rather than dumping every record by default, consistent with the user's earlier UI direction.
+- Never use IndexedDB for AssetManager, even if the main application has an IndexedDB adapter.
+
+### Viewer modules
+- PlainTextViewer and ImageFileViewer are present and registered in the userscript.
+- Shared helper: `Modules/FileViewerHash.js`.
+- PlainTextViewer files: `Modules/PlainTextViewerModule.js`, `Modules/PlainTextViewer/PlainTextViewer.js`, `Modules/PlainTextViewer/PlainTextViewer_Provider.js`.
+- ImageFileViewer files: `Modules/ImageFileViewerModule.js`, `Modules/ImageFileViewer/ImageFileViewer.js`, `Modules/ImageFileViewer/ImageFileViewer_Provider.js`.
+- Plain Text Viewer supports common text/source formats and displays MD5/SHA-256; preview limit recorded as 2 MiB.
+- Image File Viewer supports common image formats and displays file size, MD5/SHA-256; preview limit recorded as 20 MiB and it should revoke generated object URLs on destroy.
+- Browser/runtime behavior of these viewers remains to be verified; inspect current source and lifecycle before making claims.
+- DebugModeInspector previously had a chain of interface errors (`detector.detect is not a function`, then `evidenceAnalyzer.analyze is not a function`, then `reportBuilder.build is not a function`). The user explicitly deferred this; do not resume it unless asked.
+
+## 13.7 Recent historical commits and caveats
+
+The following commit references are preserved from prior verified project notes; check current history before using them as proof of current source:
+- `c91e66bf33faa430083ed399e881dcdf6f159274` — Storage UI improvements.
+- `322cf180ca49b48f16eaebabbf8ced25381e18d9` — temporary resource cache and lighter tree records.
+- `e7d1be00a5437c34b764933c7bf355c2368a3ec2` — Framework GM bridge / Storage UI fix.
+- `741bd6aeaa0f8ea28c916ecdc59d7fae88bc3dda` and `f37d2cdbd06e10241523d1ed4c96ac12639bede5` — provider cache-gating attempts; user later reported rescans, so not verified as fixed.
+- `92f14d61f722cf63165cc2276b5cbc4d43fd59b7` — tightened broad Viewer matching; browser verification remains necessary.
+- `51f082b6` — Plain Text Viewer provider fix.
+- `2475e2b3` — Image File Viewer provider fix.
+- `ace92b54073c8e63dce5bc86bb2dfd3551f5938a` — Collector/WebStructureInspector validation behavior.
+- `07a009cacf6ed9cc55cb333d27929e9e223f119f` — one DebugModeInspector detector instantiation fix; DebugModeInspector was later deferred due subsequent interface errors.
+- `b69247f39672604fe8ce3893c8d34a900f` — dialog top-layer/z-index behavior.
+- `55fce665c04c75cf1a1d1ad6933cf47a7` and `c21be90aba6f6b15d3b07865de47c7d24ae94731` — module/provider load and cache behavior work; verify current source before relying on behavior.
+- Older commits and versions do not override the current explicit no-versioning instruction.
+
+## 13.8 Immediate next step for the new project/chat
+
+1. Read this file first.
+2. Confirm the repository path is `D:\\GithubSources\\TamperMonkeyAddOns` for the user's local working copy and inspect current Git status before any local edit.
+3. Confirm current GitHub `main` and local source are aligned before applying any patch.
+4. The exact currently identified startup defect is in `AnonymousInspectorHub/main.js`, inside `loadKernel()`: two doubled-backslash string escapes are concatenated into generated source. The minimal intended correction is to change those two string literals from `"\\\\n...` to `"\\n...` (one backslash escape in the actual JavaScript source), without changing anything else.
+5. Do not apply the correction unless the user asks to modify code; the present task only authorized this memory update.
+6. Keep `ForceLoad: true` and every version unchanged.
+7. After an authorized correction, run a JavaScript syntax check and test the actual generated Kernel function body; then request/perform a real Tampermonkey browser test. Do not claim browser verification before it happens.
+8. Continue from the user's next explicit task; do not automatically resume unrelated Viewer, DebugModeInspector, UI, or scan-cache work.
