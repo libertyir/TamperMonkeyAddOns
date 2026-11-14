@@ -34,8 +34,15 @@
 
         isPageUrl(url) {
             const last = url.pathname.split("/").pop() || "";
+            const extension = (last.match(/\.([a-z0-9]{1,12})$/i) || [])[1]
+                ?.toLowerCase();
+            const staticExtensions = new Set([
+                "avif", "bmp", "css", "eot", "gif", "ico", "jpeg", "jpg",
+                "js", "mjs", "mp3", "mp4", "ogg", "otf", "pdf", "png",
+                "svg", "tif", "tiff", "ttf", "webm", "webp", "woff", "woff2"
+            ]);
 
-            return !/\.[a-z0-9]{1,12}$/i.test(last);
+            return !extension || !staticExtensions.has(extension);
         }
 
         async readLimited(response) {
@@ -157,7 +164,7 @@
             return resources;
         }
 
-        async fetchPage(rawUrl) {
+        async fetchPage(rawUrl, redirectCount = 0) {
             const url = new URL(rawUrl);
 
             if (!this.isAllowed(url)) return null;
@@ -182,6 +189,22 @@
                         "Accept": "text/html"
                     }
                 });
+
+                if ([301, 302, 303, 307, 308].includes(response.status)) {
+                    const locationHeader = response.headers.get("location");
+                    response.body?.cancel().catch(() => {});
+                    if (!locationHeader || redirectCount >= 5) return null;
+
+                    let redirectedUrl;
+                    try {
+                        redirectedUrl = new URL(locationHeader, url.href);
+                    } catch {
+                        return null;
+                    }
+
+                    if (!this.isAllowed(redirectedUrl)) return null;
+                    return this.fetchPage(redirectedUrl.href, redirectCount + 1);
+                }
 
                 if (
                     response.type === "opaqueredirect" ||
@@ -231,6 +254,17 @@
             const collected = [];
             const collectedResources = new Set();
             let pagesVisited = 0;
+            let pagesFailed = 0;
+            this.module.grabberProgress = {
+                startUrl: start.href,
+                currentUrl: start.href,
+                pagesVisited,
+                pagesFailed,
+                queued: queue.length,
+                resourcesFound: 0,
+                status: "running"
+            };
+            this.module.uiManager?.refresh();
 
             while (
                 queue.length &&
@@ -245,11 +279,31 @@
 
                 try {
                     page = await this.fetchPage(item.url);
-                } catch {
+                } catch (error) {
+                    pagesFailed++;
+                    this.module.grabberProgress = {
+                        ...this.module.grabberProgress,
+                        currentUrl: item.url,
+                        pagesVisited,
+                        pagesFailed,
+                        lastError: error.message || String(error)
+                    };
+                    this.module.uiManager?.refresh();
                     continue;
                 }
 
-                if (!page) continue;
+                if (!page) {
+                    pagesFailed++;
+                    this.module.grabberProgress = {
+                        ...this.module.grabberProgress,
+                        currentUrl: item.url,
+                        pagesVisited,
+                        pagesFailed,
+                        lastError: "Page could not be fetched as same-scope HTML."
+                    };
+                    this.module.uiManager?.refresh();
+                    continue;
+                }
 
                 visited.add(page.url);
                 pagesVisited++;
@@ -271,16 +325,27 @@
                     collected.push(resource);
                 }
 
-                if (item.depth >= this.maxDepth) continue;
-
-                for (const link of page.links) {
-                    if (!visited.has(link)) {
-                        queue.push({
-                            url: link,
-                            depth: item.depth + 1
-                        });
+                if (item.depth < this.maxDepth) {
+                    for (const link of page.links) {
+                        if (!visited.has(link)) {
+                            queue.push({
+                                url: link,
+                                depth: item.depth + 1
+                            });
+                        }
                     }
                 }
+
+                this.module.grabberProgress = {
+                    ...this.module.grabberProgress,
+                    currentUrl: page.url,
+                    pagesVisited,
+                    pagesFailed,
+                    queued: queue.length,
+                    resourcesFound: collectedResources.size,
+                    lastError: null
+                };
+                this.module.uiManager?.refresh();
             }
 
             const service = Framework.SiteIntelligence;
@@ -327,8 +392,18 @@
 
             await this.module.store.upsertMany(collected);
 
+            this.module.grabberProgress = {
+                ...this.module.grabberProgress,
+                pagesVisited,
+                pagesFailed,
+                queued: 0,
+                resourcesFound: collectedResources.size,
+                status: "complete"
+            };
+
             return {
                 pagesVisited,
+                pagesFailed,
                 resourcesFound: collectedResources.size,
                 completedAt: new Date().toISOString()
             };

@@ -506,7 +506,7 @@
                 this.button(
                     "Grabber",
                     () => this.execute(() =>
-                        this.module.runGrabber(location.href)
+                        this.module.runGrabber(this.currentDirectory)
                     )
                 )
             );
@@ -550,6 +550,26 @@
                     this.el("div", {
                         className: "wsi-operation"
                     }, "Running: " + this.module.operation + "...")
+                );
+            }
+
+            if (this.module.grabberProgress) {
+                const progress = this.module.grabberProgress;
+                const details = [
+                    "Grabber " + progress.status + ": " +
+                        progress.pagesVisited + " page(s) visited, " +
+                        progress.pagesFailed + " failed, " +
+                        progress.queued + " queued, " +
+                        progress.resourcesFound + " resource(s) found.",
+                    "Current: " + progress.currentUrl
+                ];
+                if (progress.lastError) {
+                    details.push("Latest skipped page: " + progress.lastError);
+                }
+                rootElement.appendChild(
+                    this.el("div", {
+                        className: "wsi-operation"
+                    }, details.join("\n"))
                 );
             }
 
