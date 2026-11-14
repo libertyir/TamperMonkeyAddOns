@@ -513,7 +513,9 @@
                         uiManager.openSettings(),
 
                     getModules: () =>
-                        moduleManager.getActiveInstances(),
+                        moduleManager.getActiveInstances().filter(instance =>
+                            instance.constructor.showInMenu !== false
+                        ),
 
                     getSettings: () =>
                         settingsManager.getActiveInstances(),

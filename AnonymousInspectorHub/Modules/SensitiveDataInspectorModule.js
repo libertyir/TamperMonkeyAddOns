@@ -48,6 +48,15 @@
             window.addEventListener("hashchange", this.onNavigation);
         }
 
+        getMetadata() {
+            return {
+                id: SensitiveDataInspectorModule.id,
+                title: SensitiveDataInspectorModule.title,
+                description: SensitiveDataInspectorModule.description,
+                icon: SensitiveDataInspectorModule.icon
+            };
+        }
+
         onNavigation = () => this.scheduleScan();
 
         scheduleScan() {

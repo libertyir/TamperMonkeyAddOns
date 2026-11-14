@@ -627,3 +627,7 @@ User reported Grabber did not appear to work. Review found the button always see
 ## 13.13 Firefox CSP / Trusted Types startup failure (2026-11-14)
 
 User reported repeated `EvalError: call to Function() blocked by CSP` and a Trusted Types `require-trusted-types-for 'script'` violation at the dynamic Kernel loader. The userscript uses `new Function()` to evaluate downloaded Kernel/component source. Tampermonkey documents `@sandbox JavaScript` as running Firefox userscripts in its dedicated `USERSCRIPT_WORLD`, which bypasses page CSP; the project does not use `unsafeWindow`. A minimal metadata change adds `// @sandbox JavaScript` to `AnonymousInspectorHub.user.js`. No script or asset versions were changed. Runtime confirmation is pending an updated userscript reload on the affected page.
+
+## 13.14 Viewer menu visibility and Sensitive Data Inspector menu metadata
+
+User reported PlainTextViewer and ImageFileViewer incorrectly appearing as top-level menu items and SensitiveDataInspector not appearing. Root cause: viewer wrapper modules must still load to register their providers, but all active instances were exposed in the menu; SensitiveDataInspector lacked `getMetadata()`, which the menu renderer requires. Added `static showInMenu = false` to both viewer wrappers and filtered those from `UIManager`'s module list in `ServiceFactory`, preserving provider loading. Added `getMetadata()` to SensitiveDataInspector. No versions changed; runtime check is pending reload.

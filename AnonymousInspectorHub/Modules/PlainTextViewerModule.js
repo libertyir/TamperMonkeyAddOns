@@ -5,6 +5,7 @@
         static title="Plain Text Viewer";
         static description="View text, source, CSS, JavaScript, XML and JSON";
         static icon="📄";
+        static showInMenu=false;
         async init(){this.available=true;}
         render(){return null;}
     }

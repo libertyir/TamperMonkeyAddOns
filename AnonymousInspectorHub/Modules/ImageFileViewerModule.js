@@ -5,6 +5,7 @@
         static title="Image File Viewer";
         static description="Preview images and inspect file hashes";
         static icon="🖼️";
+        static showInMenu=false;
         async init(){this.available=true;}
         render(){return null;}
     }
