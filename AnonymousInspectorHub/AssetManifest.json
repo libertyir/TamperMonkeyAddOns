@@ -811,6 +811,13 @@
             "required": false
         },
         {
+            "id": "Modules_SensitiveDataInspectorModule",
+            "path": "Modules/SensitiveDataInspectorModule.js",
+            "version": "1.0.0",
+            "type": "javascript",
+            "required": false
+        },
+        {
             "id": "Modules_Status_Status_Scanner",
             "path": "Modules/Status/Status_Scanner.js",
             "version": "1.0.0",

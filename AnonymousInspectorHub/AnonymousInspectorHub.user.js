@@ -59,6 +59,7 @@
         "GraphQLModule",
 
         "CommonTestFilesModule",
+        "SensitiveDataInspectorModule",
         "RedocModule",
         "ScalarModule",
         "ServerInfoModule",
