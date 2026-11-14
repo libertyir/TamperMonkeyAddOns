@@ -203,8 +203,8 @@
 
             const KernelClass = new Function(
                 source +
-                "\\nreturn globalThis.AnonymousInspectorKernel;" +
-                "\\n//# sourceURL=" + KERNEL_URL
+                "\nreturn globalThis.AnonymousInspectorKernel;" +
+                "\n//# sourceURL=" + KERNEL_URL
             )();
 
             if (typeof KernelClass !== "function") {
