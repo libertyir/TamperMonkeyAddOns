@@ -213,7 +213,8 @@
 
             kernel = new KernelClass({
                 version: "2.0.0",
-                gm: gmAPI
+                gm: gmAPI,
+                assetManager
             });
 
             kernel.onUIReady = openSettingsWhenReady;

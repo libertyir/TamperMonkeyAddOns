@@ -9,6 +9,7 @@
                 "https://libertyir.github.io/TamperMonkeyAddOns/AnonymousInspectorHub/"
             ).replace(/\/?$/, "/");
             this.gm = options.gm || {};
+            this.assetManager = options.assetManager || null;
 
             this.configKey = "aih_general_config";
             this.modulesConfigKey = "aih_modules_config";
@@ -57,7 +58,7 @@
 
         // The environment cannot load itself; this is the one bootstrap request.
         fetchBootstrapFile(path) {
-            const assetManager = root.AnonymousInspectorAssetManager;
+            const assetManager = this.assetManager;
 
             if (
                 !assetManager ||

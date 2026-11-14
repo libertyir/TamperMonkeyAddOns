@@ -92,7 +92,7 @@
         }
 
         request(url, responseType = "text") {
-            const assetManager = root.AnonymousInspectorAssetManager;
+            const assetManager = this.kernel.assetManager;
 
             if (
                 responseType !== "arraybuffer" &&

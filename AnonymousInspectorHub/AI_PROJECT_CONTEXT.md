@@ -601,3 +601,11 @@ The following commit references are preserved from prior verified project notes;
 6. Keep `ForceLoad: true` and every version unchanged.
 7. After an authorized correction, run a JavaScript syntax check and test the actual generated Kernel function body; then request/perform a real Tampermonkey browser test. Do not claim browser verification before it happens.
 8. Continue from the user's next explicit task; do not automatically resume unrelated Viewer, DebugModeInspector, UI, or scan-cache work.
+
+## 13.9 Follow-up startup failure and collaboration preference (2026-11-14)
+
+After the newline correction was deployed, the user reported that startup still failed with `AssetManager is not ready.` in `Core/Kernel.js:fetchBootstrapFile`, while AssetManager logged `initialized: true` and all 145 assets downloaded. This points to the dynamically loaded Kernel resolving `globalThis.AnonymousInspectorAssetManager` from a different userscript sandbox/global than the one that owns the initialized manager.
+
+The correction passes the already initialized AssetManager instance explicitly from `main.js` into the Kernel constructor (`options.assetManager`), stores it on the Kernel, and uses `this.assetManager` in `fetchBootstrapFile()` and `this.kernel.assetManager` in `KernelEnvironment.request()`. This avoids relying on cross-sandbox global lookup. Local diff prepared in `main.js`, `Core/Kernel.js`, and `Core/KernelEnvironment.js`; after deployment, browser verification is still required before claiming the startup flow is fixed.
+
+User workflow preference (explicitly stated 2026-11-14): do not make the user drive routine debugging by repeatedly asking for confirmation or sending unnecessary status prompts. Continue investigating independently when enough evidence exists. User authorizes direct GitHub pushes for requested work; manage all related local files together and push the complete set in one batch at the end, rather than delivering files individually. Ask only for information genuinely needed to proceed.
