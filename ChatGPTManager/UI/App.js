@@ -5,7 +5,7 @@ export class ManagerApp {
   constructor({api,bridge,preferences,i18n,conversations,projects}) {
     Object.assign(this,{api,bridge,preferences,i18n,conversations,projects});
     this.view="chats";this.archived=false;this.selected=new Set();this.items=[];this.activeChat=null;this.projectId=null;
-    this.root=document.querySelector("#app");
+    this.root=globalThis.__CGM_ROOT__?.querySelector("#app") || document.querySelector("#app");
   }
   async init() {
     const prefs=await this.preferences.get();
@@ -17,9 +17,10 @@ export class ManagerApp {
     this.render();
   }
   applyDirection() {
-    document.documentElement.lang=this.i18n.language;
-    document.documentElement.dir=this.i18n.dir;
-    document.documentElement.dataset.theme=this.theme;
+    const root=globalThis.__CGM_ROOT__?.host || document.documentElement;
+    root.lang=this.i18n.language;
+    root.dir=this.i18n.dir;
+    root.dataset.theme=this.theme;
   }
   async refresh() {
     try {
@@ -113,7 +114,6 @@ export class ManagerApp {
     catch(error){toast(error.message,"error");}
   }
   report(result) {
-    const t=key=>this.i18n.t(key);
     toast(`${result.success} ✓  ·  ${result.failed.length} ✕`,result.failed.length?"error":"success");
     if(result.failed.length) console.warn("[ChatGPT Manager] Partial operation failures",result.failed);
   }

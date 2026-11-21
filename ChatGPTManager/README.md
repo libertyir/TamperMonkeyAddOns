@@ -1,46 +1,32 @@
 # ChatGPT Manager
 
-Client-side conversation and ChatGPT Project manager for Tampermonkey.
+Client-side ChatGPT conversation and project manager for Tampermonkey.
 
-## Architecture
+## Runtime architecture
 
-- `Index.html`: single application entry. It runs standalone for UI preview and inside the in-page dialog.
-- `ChatGPTManager.user.js`: injects a modal dialog into the current ChatGPT page and hosts the authenticated bridge.
-- `Core/`: configuration, localization and RPC bridge client.
-- `API/`: UI-facing API facade.
-- `Storage/`: preferences persistence.
-- `Modules/`: conversation and project services.
-- `UI/`: application shell, reusable components and views.
-- `Assets/`: styles.
+- `Index.html` remains the single UI entry and declares the app root, stylesheet and ES module entry.
+- The Tampermonkey menu opens an overlay dialog in the current ChatGPT document.
+- No cross-origin iframe is created. The userscript reads `Index.html` and its stylesheet, mounts the app inside a Shadow DOM, and imports the declared module entry.
+- The userscript bridge runs in the same userscript sandbox as the app and accesses the current ChatGPT session and GM storage.
+- UI, API facade, conversation/project services, storage and localization remain separate modules.
 
 ## Install
 
-Install the raw userscript:
+Install or update:
 `https://raw.githubusercontent.com/libertyir/TamperMonkeyAddOns/main/ChatGPTManager/ChatGPTManager.user.js`
 
-Then open the Tampermonkey menu and select **ChatGPT Manager**. The manager opens as an overlay dialog on the current ChatGPT page; it does not navigate to another tab or window.
+Then reload ChatGPT and choose **ChatGPT Manager** from the Tampermonkey menu.
 
-Standalone preview:
+## CSP
+
+The manager does not use an iframe, so ChatGPT's `frame-src` policy does not apply. Its remote app files are retrieved by Tampermonkey's `GM_xmlhttpRequest`; the module entry is imported by the userscript sandbox.
+
+## Standalone preview
+
 `https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/Index.html`
 
-Standalone preview has no ChatGPT session bridge and therefore cannot perform account operations.
+The standalone page uses localStorage and does not have access to the signed-in ChatGPT session.
 
-## Current API coverage
+## Notes
 
-- List regular and archived conversations (paged).
-- Read full conversation details and message tree.
-- List projects and project conversations.
-- Create, rename and delete projects.
-- Archive, restore, rename, delete and move conversations.
-- Bulk archive, restore, delete and move operations from the UI.
-- Preferences use GM storage through the bridge; standalone preview uses localStorage.
-
-These are undocumented ChatGPT web-app endpoints, not the public OpenAI API. Their paths and payloads may change. The adapter is isolated in the userscript bridge so endpoint changes do not require UI rewrites.
-
-## Chat sending
-
-Message sending is intentionally not faked. The current ChatGPT frontend uses a Sentinel-protected streaming send flow. The send adapter currently returns a clear unsupported message rather than pretending a message was sent. The next integration step is to connect the Manager composer to ChatGPT's native send flow and stream the resulting response back into the embedded workspace.
-
-## Data and privacy
-
-No external server or database is used. The manager fetches data from the current ChatGPT origin using the existing signed-in browser session. Preferences are stored in Tampermonkey GM storage. Conversation bodies are fetched on demand and are not copied into GM storage.
+The ChatGPT web-app endpoints are undocumented and may change. Message sending is not yet connected to ChatGPT's native streaming send flow; the composer reports this explicitly rather than simulating a response.
