@@ -123,10 +123,8 @@
       }, location.origin));
   }
 
-  function installStandaloneBridge() {
-    if (location.hostname !== MANAGER_HOST || location.pathname !== MANAGER_PATH) return;
+  function installBridge() {
     window.addEventListener("message", handleBridgeRequest);
-    window.postMessage({ channel: CHANNEL, type: "ready" }, location.origin);
   }
 
   function createDialog() {
@@ -215,6 +213,6 @@
     }
   }
 
-  installStandaloneBridge();
+  installBridge();
   GM_registerMenuCommand("ChatGPT Manager", openDialog, { accessKey: "m" });
 })();
