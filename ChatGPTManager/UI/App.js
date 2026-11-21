@@ -5,7 +5,8 @@ export class ManagerApp {
   constructor({api,bridge,preferences,i18n,conversations,projects}) {
     Object.assign(this,{api,bridge,preferences,i18n,conversations,projects});
     this.view="chats";this.archived=false;this.selected=new Set();this.items=[];this.activeChat=null;this.projectId=null;
-    this.root=globalThis.__CGM_ROOT__?.querySelector("#app") || document.querySelector("#app");
+    this.root = document.querySelector("#cgm-dialog-host")?.shadowRoot?.querySelector("#app")
+      || document.querySelector("#app");
   }
   async init() {
     const prefs=await this.preferences.get();
@@ -17,10 +18,11 @@ export class ManagerApp {
     this.render();
   }
   applyDirection() {
-    const root=globalThis.__CGM_ROOT__?.host || document.documentElement;
-    root.lang=this.i18n.language;
-    root.dir=this.i18n.dir;
-    root.dataset.theme=this.theme;
+    const mount = this.root?.getRootNode();
+    const root = mount instanceof ShadowRoot ? mount.host : document.documentElement;
+    root.lang = this.i18n.language;
+    root.dir = this.i18n.dir;
+    root.dataset.theme = this.theme;
   }
   async refresh() {
     try {
