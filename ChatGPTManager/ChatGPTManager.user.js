@@ -105,8 +105,9 @@
 
   function handleBridgeRequest(event) {
     const message = event.data;
-    if (event.source !== window || event.origin !== location.origin ||
-        !message || message.channel !== CHANNEL) return;
+    const standalonePage = location.hostname === MANAGER_HOST && location.pathname === MANAGER_PATH;
+    if ((!standalonePage && !dialogHost) || event.source !== window ||
+        event.origin !== location.origin || !message || message.channel !== CHANNEL) return;
     if (message.type === "hello") {
       window.postMessage({ channel: CHANNEL, type: "ready" }, location.origin);
       return;
