@@ -119,8 +119,24 @@
     document.body.appendChild(wrap);const form=$("form",wrap),input=$("input",wrap);input.focus();
     $("#cancel",wrap).onclick=()=>wrap.remove();form.onsubmit=e=>{e.preventDefault();const name=input.value;wrap.remove();callback(name);};
   }
+  function ensureRoot() {
+    let root = document.getElementById(ROOT_ID);
+    if (root) return root;
+    root = document.createElement("div");
+    root.id = ROOT_ID;
+    document.body.appendChild(root);
+    if (!document.getElementById("cgm-styles")) {
+      const link = document.createElement("link");
+      link.id = "cgm-styles";
+      link.rel = "stylesheet";
+      link.href = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/Assets/manager.css";
+      document.head.appendChild(link);
+    }
+    return root;
+  }
   async function start() {
-    if (!document.getElementById(ROOT_ID)) return;
+    if (!document.body) return;
+    ensureRoot();
     await loadState();
     if (new URLSearchParams(location.search).has("cgm")) render();
     else renderLauncher();
