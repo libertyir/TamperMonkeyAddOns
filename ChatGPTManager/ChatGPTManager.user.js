@@ -74,6 +74,7 @@
   const operations = {
     "storage.get": ({ key }) => GM_getValue(key, null),
     "storage.set": ({ key, value }) => GM_setValue(key, value),
+    "ui.close": () => closeDialog(),
     "api.conversations": params => listConversations(params),
     "api.projects": () => requestChatGPT("/gizmos/snorlax/sidebar?owned_only=true&conversations_per_gizmo=0"),
     "api.projectConversations": ({ projectId }) => requestChatGPT("/gizmos/" + encodeURIComponent(projectId) + "/conversations?cursor=0"),
