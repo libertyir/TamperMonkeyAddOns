@@ -105,7 +105,12 @@
   function handleBridgeRequest(event) {
     const message = event.data;
     if (event.source !== window || event.origin !== location.origin ||
-        !message || message.channel !== CHANNEL || message.type !== "request") return;
+        !message || message.channel !== CHANNEL) return;
+    if (message.type === "hello") {
+      window.postMessage({ channel: CHANNEL, type: "ready" }, location.origin);
+      return;
+    }
+    if (message.type !== "request") return;
     const operation = operations[message.action];
     if (!operation) {
       window.postMessage({ channel: CHANNEL, type: "response", id: message.id, error: "Unknown action" }, location.origin);
