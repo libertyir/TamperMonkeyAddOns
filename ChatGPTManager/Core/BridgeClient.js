@@ -4,13 +4,10 @@ const CHANNEL = "cgm:page-bridge:v1";
 
 export class BridgeClient {
   constructor() {
-    this.transport = globalThis.__CGM_BRIDGE__ || null;
     this.pending = new Map();
     this.sequence = 0;
     this.pageConnected = false;
-    this.ready = this.transport
-      ? Promise.resolve(true)
-      : this.connectPageBridge();
+    this.ready = this.connectPageBridge();
   }
 
   connectPageBridge() {
@@ -40,7 +37,6 @@ export class BridgeClient {
   }
 
   request(action, params = {}) {
-    if (this.transport) return this.transport.request(action, params);
     if (!this.pageConnected) {
       return Promise.reject(new Error("پل Tampermonkey در دسترس نیست. افزونه را نصب و صفحه را بازآوری کن."));
     }
@@ -56,6 +52,6 @@ export class BridgeClient {
   }
 
   get connected() {
-    return Boolean(this.transport?.connected || this.pageConnected);
+    return this.pageConnected;
   }
 }
