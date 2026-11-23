@@ -2,7 +2,7 @@ function ChatGPTManagerBootstrap() {
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.6.2";
+  const VERSION = "0.6.3";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
@@ -238,9 +238,9 @@ function ChatGPTManagerBootstrap() {
 
   function handleBridgeRequest(event) {
     const message = event.data;
-    const standalonePage = location.hostname === MANAGER_HOST && location.pathname === MANAGER_PATH;
-    if ((!standalonePage && !dialogHost) || event.source !== window ||
-        event.origin !== location.origin || !message || message.channel !== CHANNEL) return;
+    const standalonePage = location.hostname === MANAGER_HOST && location.pathname.toLowerCase() === MANAGER_PATH.toLowerCase();
+    if ((!standalonePage && !dialogHost) || event.origin !== location.origin ||
+        !message || message.channel !== CHANNEL) return;
     if (message.type === "hello") {
       window.postMessage({ channel: CHANNEL, type: "ready" }, location.origin);
       return;
