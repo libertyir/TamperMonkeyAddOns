@@ -227,7 +227,7 @@ class ConversationService {
     this.items.push(...rows.filter(item=>!known.has(item.id)));
     this.offset += rows.length;
     this.total = result.total ?? this.total;
-    this.hasMore = rows.length === 28 && (this.total === null || this.offset < this.total);
+    this.hasMore = rows.length === 28;
     this.loading=false;
     onProgress?.({label:"گفتگوها دریافت شدند",current:this.items.length,total:this.total});
     return search ? this.items.filter(item=>item.title.toLowerCase().includes(search.toLowerCase())) : this.items;
@@ -452,6 +452,10 @@ class ManagerApp {
       this.render();
       const next=this.root.querySelector(".cgm-content");
       if(next) next.scrollTop=previousTop+(next.scrollHeight-previousHeight);
+      const scrollAreas=[next,this.root.querySelector(".cgm-table-wrap"),this.root.querySelector(".cgm-side-list")].filter(Boolean);
+      if(this.conversations.hasMore&&scrollAreas.every(area=>area.scrollHeight<=area.clientHeight+80)) {
+        queueMicrotask(()=>this.loadMore());
+      }
     } catch(error) {
       this.loadingMore=false;
       this.setProgress(error.message||"دریافت گفتگوهای قدیمی‌تر ناموفق بود",0,1,true);
@@ -490,8 +494,15 @@ class ManagerApp {
     this.root.querySelectorAll("[data-select]").forEach(el=>el.onchange=()=>{el.checked?this.selected.add(el.dataset.select):this.selected.delete(el.dataset.select);this.renderSelectionCount();});
     this.root.querySelectorAll("[data-action]").forEach(el=>el.onclick=()=>this.action(el.dataset.action,el.dataset.id));
     this.root.querySelector("#conversation-search")?.addEventListener("input",e=>this.filterRows(e.target.value));
-    const content=this.root.querySelector(".cgm-content");
-    content?.addEventListener("scroll",()=>{if(content.scrollHeight-content.scrollTop-content.clientHeight<320)this.loadMore();},{passive:true});
+    const maybeLoadMore=element=>{
+      if(!element) return;
+      element.addEventListener("scroll",()=>{
+        if(element.scrollHeight-element.scrollTop-element.clientHeight<320)this.loadMore();
+      },{passive:true});
+    };
+    maybeLoadMore(this.root.querySelector(".cgm-content"));
+    maybeLoadMore(this.root.querySelector(".cgm-table-wrap"));
+    maybeLoadMore(this.root.querySelector(".cgm-side-list"));
     this.root.querySelector("#bulk-project")?.addEventListener("change",e=>e.target.value&&this.moveSelected(e.target.value));
     this.root.querySelector("#chat-composer")?.addEventListener("submit",e=>{e.preventDefault();this.sendChatMessage();});
     this.root.querySelector("#language")?.addEventListener("change",e=>this.updatePreference("language",e.target.value));
