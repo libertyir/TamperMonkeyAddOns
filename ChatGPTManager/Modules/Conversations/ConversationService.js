@@ -1,9 +1,13 @@
 export class ConversationService {
-  constructor(api) { this.api = api; this.items = []; this.offset = 0; this.total = null; }
+  constructor(api) { this.api = api; this.items = []; this.offset = 0; this.total = null; this.hasMore = true; this.loading = false; }
   async load({archived=false,reset=true,search="",onProgress}={}) {
-    if (reset) { this.items=[]; this.offset=0; }
+    if (reset) { this.items=[]; this.offset=0; this.total=null; this.hasMore=true; }
+    if (this.loading || !this.hasMore) return this.items;
+    this.loading=true;
     onProgress?.({label:"در حال دریافت گفتگوها…",current:0,total:null});
-    const result = await this.api.conversations({archived,offset:this.offset,limit:28});
+    let result;
+    try { result = await this.api.conversations({archived,offset:this.offset,limit:28}); }
+    catch(error) { this.loading=false; throw error; }
     const rows = (result.items || []).map(item => ({
       id:item.id, title:item.title || "Untitled", projectId:item.gizmo_id || null,
       archived:Boolean(item.is_archived), updatedAt:item.update_time || item.create_time,
@@ -13,6 +17,8 @@ export class ConversationService {
     this.items.push(...rows.filter(item=>!known.has(item.id)));
     this.offset += rows.length;
     this.total = result.total ?? this.total;
+    this.hasMore = rows.length === 28 && (this.total === null || this.offset < this.total);
+    this.loading=false;
     onProgress?.({label:"گفتگوها دریافت شدند",current:this.items.length,total:this.total});
     return search ? this.items.filter(item=>item.title.toLowerCase().includes(search.toLowerCase())) : this.items;
   }
