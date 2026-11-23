@@ -2,7 +2,7 @@ function ChatGPTManagerBootstrap() {
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.7.3";
+  const VERSION = "0.7.4";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
@@ -164,7 +164,11 @@ function ChatGPTManagerBootstrap() {
   const chatGPTOperations = {
     "api.authStatus": () => getAuthStatus(),
     "api.conversations": params => listConversations(params),
-    "api.projects": () => requestChatGPT("/gizmos/snorlax/sidebar?owned_only=true&conversations_per_gizmo=0"),
+    "api.projects": ({ cursor = null } = {}) => {
+      const query = new URLSearchParams({ owned_only: "true", conversations_per_gizmo: "0" });
+      if (cursor !== null && cursor !== undefined && cursor !== "") query.set("cursor", String(cursor));
+      return requestChatGPT("/gizmos/snorlax/sidebar?" + query.toString());
+    },
     "api.projectConversations": ({ projectId }) => requestChatGPT("/gizmos/" + encodeURIComponent(projectId) + "/conversations?cursor=0"),
     "api.conversation": ({ id }) => requestChatGPT("/conversation/" + encodeURIComponent(id)),
     "api.archive": ({ id, archived }) => requestChatGPT("/conversation/" + encodeURIComponent(id), {
