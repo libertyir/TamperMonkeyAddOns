@@ -2,13 +2,14 @@ function ChatGPTManagerBootstrap() {
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.6.3";
+  const VERSION = "0.6.4";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
   let dialogHost = null;
   let shadowRoot = null;
   let dialogClosed = true;
+  let dialogGeneration = 0;
 
   function requestText(url) {
     return new Promise((resolve, reject) => {
@@ -299,6 +300,7 @@ function ChatGPTManagerBootstrap() {
 
   function closeDialog() {
     dialogClosed = true;
+    dialogGeneration++;
     dialogHost?.remove();
     dialogHost = null;
     shadowRoot = null;
@@ -307,15 +309,16 @@ function ChatGPTManagerBootstrap() {
     document.removeEventListener("keydown", onKeydown, true);
   }
 
-  async function loadDialogApplication() {
+  async function loadDialogApplication(generation) {
     const html = await requestText(APP_URL + "Index.html");
+    if (dialogClosed || generation !== dialogGeneration || !shadowRoot) return;
     const parsed = new DOMParser().parseFromString(html, "text/html");
     const cssPath = parsed.querySelector('link[rel="stylesheet"]')?.getAttribute("href");
     const modulePath = parsed.querySelector('script[type="module"]')?.getAttribute("src");
     const appMarkup = parsed.querySelector("#app")?.outerHTML;
     if (!cssPath || !modulePath || !appMarkup) throw new Error("Index.html فاقد #app یا فایل CSS یا ورودی ماژول است.");
     const css = await requestText(new URL(cssPath, APP_URL).href);
-    if (dialogClosed || !shadowRoot) return;
+    if (dialogClosed || generation !== dialogGeneration || !shadowRoot) return;
     const style = document.createElement("style");
     style.textContent = css;
     shadowRoot.appendChild(style);
@@ -330,10 +333,10 @@ function ChatGPTManagerBootstrap() {
         return operation(params);
       }
     };
-    await loadModuleGraph(new URL(modulePath, APP_URL).href);
+    await loadModuleGraph(new URL(modulePath, APP_URL).href, () => !dialogClosed && generation === dialogGeneration && Boolean(shadowRoot));
   }
 
-  async function loadModuleGraph(entryUrl) {
+  async function loadModuleGraph(entryUrl, isCurrent) {
     const moduleUrls = new Map();
     const loading = new Map();
 
@@ -374,6 +377,7 @@ function ChatGPTManagerBootstrap() {
 
     const entryBlob = await loadModule(entryUrl);
     try {
+      if (!isCurrent()) return;
       await import(entryBlob);
     } finally {
       moduleUrls.forEach(url => URL.revokeObjectURL(url));
@@ -384,8 +388,9 @@ function ChatGPTManagerBootstrap() {
   async function openDialog() {
     if (dialogHost) return;
     dialogClosed = false;
+    const generation = ++dialogGeneration;
     createDialog();
-    try { await loadDialogApplication(); }
+    try { await loadDialogApplication(generation); }
     catch (error) {
       if (!shadowRoot) return;
       const target = shadowRoot.querySelector("#cgm-app");
