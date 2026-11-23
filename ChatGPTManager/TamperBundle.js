@@ -94,7 +94,16 @@ exports.BridgeClient = BridgeClient;
 "Core/I18n.js": function(module, exports, __require) {
 const dictionaries = {
   fa: {
-    chats:"گفتگوها", projects:"پروژه‌ها", archive:"بایگانی", settings:"تنظیمات",
+    chats:"گفتگوها", projects:"پروژه‌ها", archive:"بایگانی", settings:"تنظیمات", help:"راهنما",
+    helpTitle:"راهنمای نصب و استفاده",helpIntro:"برای استفاده از امکانات مدیریت گفتگوها و پروژه‌های حساب ChatGPT، ابتدا Userscript را با Tampermonkey نصب کنید.",
+    helpStep1Title:"۱. نصب Tampermonkey",helpStep1Text:"افزونه Tampermonkey را برای مرورگر خود نصب و فعال کنید.",
+    helpTampermonkeyLink:"وب‌سایت رسمی Tampermonkey",
+    helpStep2Title:"۲. دریافت فایل ChatGPTManager.user.js",helpStep2Text:"فایل Userscript را از لینک مرحله بعد باز کنید. Tampermonkey صفحه نصب اسکریپت را نمایش می‌دهد.",
+    helpStep3Title:"۳. نصب ChatGPT Manager",helpStep3A:"روی لینک نصب اسکریپت کلیک کنید.",helpStep3B:"در صفحه Tampermonkey گزینه Install را بزنید.",helpStep3C:"مطمئن شوید اسکریپت در داشبورد Tampermonkey فعال است.",
+    helpInstallLink:"نصب ChatGPT Manager در Tampermonkey",
+    helpUsageTitle:"۴. اجرای برنامه",helpUsageA:"یک تب از chatgpt.com باز کنید و وارد حساب خود شوید.",helpUsageB:"روی آیکون Tampermonkey در نوار مرورگر کلیک کنید.",helpUsageC:"از منوی ChatGPT Manager، گزینه بازکردن Manager را انتخاب کنید. برای دسترسی به API حساب، تب ChatGPT باید باز باشد.",
+    helpNoteTitle:"نکته مهم",helpNoteText:"صفحه مستقل Manager نیز برای مشاهده رابط و امکانات محلی قابل بازکردن است؛ اما عملیات مربوط به گفتگوها و پروژه‌های حساب به یک تب فعال ChatGPT با نشست معتبر و Userscript نصب‌شده نیاز دارد.",
+
     newChat:"گفتگوی جدید", refresh:"بروزرسانی", search:"جست‌وجو در گفتگوها",
     all:"همه", active:"فعال", archived:"بایگانی‌شده", title:"عنوان", project:"پروژه",
     updated:"آخرین تغییر", actions:"عملیات", selectAll:"انتخاب همه", clear:"پاک‌کردن انتخاب",
@@ -117,7 +126,16 @@ const dictionaries = {
     loadMore:"بارگذاری بیشتر", retry:"تلاش دوباره", confirm:"تأیید"
   },
   en: {
-    chats:"Conversations", projects:"Projects", archive:"Archive", settings:"Settings",
+    chats:"Conversations", projects:"Projects", archive:"Archive", settings:"Settings", help:"Help",
+    helpTitle:"Installation and usage",helpIntro:"To manage conversations and projects in your ChatGPT account, install the userscript with Tampermonkey first.",
+    helpStep1Title:"1. Install Tampermonkey",helpStep1Text:"Install and enable the Tampermonkey extension for your browser.",
+    helpTampermonkeyLink:"Official Tampermonkey website",
+    helpStep2Title:"2. Get ChatGPTManager.user.js",helpStep2Text:"Open the userscript link in the next step. Tampermonkey will show its script installation page.",
+    helpStep3Title:"3. Install ChatGPT Manager",helpStep3A:"Open the install script link.",helpStep3B:"Click Install on the Tampermonkey installation page.",helpStep3C:"Make sure the script is enabled in the Tampermonkey dashboard.",
+    helpInstallLink:"Install ChatGPT Manager in Tampermonkey",
+    helpUsageTitle:"4. Launch the app",helpUsageA:"Open a chatgpt.com tab and sign in.",helpUsageB:"Click the Tampermonkey icon in your browser toolbar.",helpUsageC:"Choose Open ChatGPT Manager from its menu. Keep the ChatGPT tab open for account API access.",
+    helpNoteTitle:"Important",helpNoteText:"The standalone Manager page can also be opened for its interface and local features. Account conversation and project operations require an open ChatGPT tab with a valid session and the userscript installed.",
+
     newChat:"New chat", refresh:"Refresh", search:"Search conversations",
     all:"All", active:"Active", archived:"Archived", title:"Title", project:"Project",
     updated:"Updated", actions:"Actions", selectAll:"Select all", clear:"Clear selection",
@@ -318,7 +336,7 @@ function sidebar({t,view,projects,conversations,projectId}) {
     <div class="cgm-brand"><span class="cgm-logo">✳</span><span>ChatGPT Manager</span></div>
     <button class="cgm-new primary" data-action="new-chat">＋ ${t("newChat")}</button>
     <nav class="cgm-nav">
-      ${["chats","projects","archive","bulk","settings"].map(key=>`<button data-view="${key}" class="${view===key?"active":""}">${t(key)}</button>`).join("")}
+      ${["chats","projects","archive","bulk","settings","help"].map(key=>`<button data-view="${key}" class="${view===key?"active":""}">${t(key)}</button>`).join("")}
     </nav>
     <div class="cgm-side-label">${view==="projects"?t("projects"):t("chats")}</div>
     <div class="cgm-side-list">
@@ -356,14 +374,41 @@ function formatDate(value) {
   return Number.isNaN(date.getTime())?String(value):date.toLocaleString();
 }
 
+function helpView({t}) {
+  return `<article class="cgm-help">
+    <h2>${t("helpTitle")}</h2>
+    <p class="cgm-help-lead">${t("helpIntro")}</p>
+    <section class="cgm-help-section">
+      <h3>${t("helpStep1Title")}</h3>
+      <p>${t("helpStep1Text")}</p>
+      <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer">${t("helpTampermonkeyLink")}</a>
+    </section>
+    <section class="cgm-help-section">
+      <h3>${t("helpStep2Title")}</h3>
+      <p>${t("helpStep2Text")}</p>
+    </section>
+    <section class="cgm-help-section">
+      <h3>${t("helpStep3Title")}</h3>
+      <ol><li>${t("helpStep3A")}</li><li>${t("helpStep3B")}</li><li>${t("helpStep3C")}</li></ol>
+      <a class="cgm-help-install" href="https://raw.githubusercontent.com/libertyir/TamperMonkeyAddOns/main/ChatGPTManager/ChatGPTManager.user.js" target="_blank" rel="noopener noreferrer">${t("helpInstallLink")}</a>
+    </section>
+    <section class="cgm-help-section">
+      <h3>${t("helpUsageTitle")}</h3>
+      <ol><li>${t("helpUsageA")}</li><li>${t("helpUsageB")}</li><li>${t("helpUsageC")}</li></ol>
+    </section>
+    <section class="cgm-help-note"><strong>${t("helpNoteTitle")}</strong><p>${t("helpNoteText")}</p></section>
+  </article>`;
+}
+
 exports.sidebar = sidebar;
 exports.conversationTable = conversationTable;
 exports.projectsTable = projectsTable;
 exports.chatView = chatView;
+exports.helpView = helpView;
 
 },
 "UI/App.js": function(module, exports, __require) {
-const { sidebar,conversationTable,projectsTable,chatView } = __require("UI/Views.js");
+const { sidebar,conversationTable,projectsTable,chatView,helpView } = __require("UI/Views.js");
 const { modal,toast } = __require("UI/Components.js");
 class ManagerApp {
   constructor({api,bridge,preferences,i18n,conversations,projects}) {
@@ -425,6 +470,7 @@ class ManagerApp {
     if(this.view==="projects") content=projectsTable({t,projects:this.projects.items});
     else if(this.view==="chat"&&this.activeChat) content=chatView({t,chat:this.activeChat,messages:this.activeChat.messages||[]});
     else if(this.view==="settings") content=this.settingsView(t);
+    else if(this.view==="help") content=helpView({t});
     else if(this.view==="bulk") content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.archived});
     else content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.view==="archive"});
     const connectionLabel=this.authStatus.authRequired?"اتصال مجدد لازم است":!this.authStatus.bridgeConnected?t("bridgeOffline"):!this.authStatus.brokerConnected?t("brokerOffline"):!this.authStatus.accountAuthenticated?t("accountUnauthenticated"):this.authStatus.apiAvailable===true?t("apiAvailable"):this.authStatus.apiAvailable===false?t("apiUnavailable"):t("accountAuthenticated");
