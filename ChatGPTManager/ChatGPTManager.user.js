@@ -6,7 +6,7 @@
 // @match        *://*/*
 // @run-at       document-idle
 // @noframes
-// @require      https://raw.githubusercontent.com/libertyir/TamperMonkeyAddOns/main/ChatGPTManager/TamperBootstrap.js?v=0.6.1
+// @require      https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/TamperBootstrap.js?v=0.6.1
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
