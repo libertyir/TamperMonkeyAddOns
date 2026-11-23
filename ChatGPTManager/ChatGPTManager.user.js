@@ -142,39 +142,38 @@
   let brokerRequestQueue = Promise.resolve();
   function requestBroker(action, params = {}) {
     if (authBlocked) return Promise.reject(new Error(authBlockReason));
-    if (isChatGPTTab) return Promise.resolve().then(() => {
-      if (authBlocked) throw new Error(authBlockReason);
-      return chatGPTOperations[action](params);
-    });
-    const broker = getBrokerStatus();
-    if (!broker) {
-      throw new Error("تب فعال chatgpt.com پیدا نشد. ChatGPT را در یک تب دیگر باز و وارد حساب شو؛ Manager را می‌توانی همین‌جا نگه داری.");
-    }
-    const execute = () => new Promise((resolve, reject) => {
-      const id = MANAGER_CLIENT_ID + "-" + Math.random().toString(36).slice(2);
-      const requestKey = BROKER_REQUEST_PREFIX + broker.id + ":" + MANAGER_CLIENT_ID;
-      const responseKey = BROKER_RESPONSE_PREFIX + id;
-      let settled = false;
-      const finish = (error, result) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        GM_removeValueChangeListener(listener);
-        GM_deleteValue(responseKey);
-        GM_deleteValue(requestKey);
-        error ? reject(new Error(error)) : resolve(result);
-      };
-      const listener = GM_addValueChangeListener(responseKey, (_key, _oldValue, value) => {
-        if (value && value.id === id) finish(value.error, value.result);
+    const execute = () => {
+      if (isChatGPTTab) {
+        if (authBlocked) throw new Error(authBlockReason);
+        return Promise.resolve().then(() => chatGPTOperations[action](params));
+      }
+      const broker = getBrokerStatus();
+      if (!broker) throw new Error("تب فعال chatgpt.com پیدا نشد. ChatGPT را در یک تب دیگر باز و وارد حساب شو؛ Manager را می‌توانی همین‌جا نگه داری.");
+      return new Promise((resolve, reject) => {
+        const id = MANAGER_CLIENT_ID + "-" + Math.random().toString(36).slice(2);
+        const requestKey = BROKER_REQUEST_PREFIX + broker.id + ":" + MANAGER_CLIENT_ID;
+        const responseKey = BROKER_RESPONSE_PREFIX + id;
+        let settled = false;
+        const finish = (error, result) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          GM_removeValueChangeListener(listener);
+          GM_deleteValue(responseKey);
+          GM_deleteValue(requestKey);
+          error ? reject(new Error(error)) : resolve(result);
+        };
+        const listener = GM_addValueChangeListener(responseKey, (_key, _oldValue, value) => {
+          if (value && value.id === id) finish(value.error, value.result);
+        });
+        const timer = setTimeout(() => finish("پاسخی از تب ChatGPT دریافت نشد. تب را باز نگه دار و دوباره تلاش کن."), 30000);
+        GM_setValue(requestKey, { id, target: broker.id, action, params, timestamp: Date.now() });
       });
-      const timer = setTimeout(() => finish("پاسخی از تب ChatGPT دریافت نشد. تب را باز نگه دار و دوباره تلاش کن."), 30000);
-      GM_setValue(requestKey, { id, target: broker.id, action, params, timestamp: Date.now() });
-    });
+    };
     const task = brokerRequestQueue.then(execute, execute);
     brokerRequestQueue = task.catch(() => {});
     return task;
   }
-
   const chatGPTOperations = {
     "api.authStatus": () => getAuthStatus(),
     "api.conversations": params => listConversations(params),
