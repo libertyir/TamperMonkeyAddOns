@@ -2,7 +2,8 @@ export const escapeHTML = value => String(value ?? "").replace(/[&<>"']/g,c=>({"
 function getMount() {
   const appRoot = document.querySelector("#cgm-dialog-host")?.shadowRoot?.querySelector("#app")
     || document.querySelector("#app");
-  return appRoot?.getRootNode() || document;
+  const root = appRoot?.getRootNode();
+  return root?.nodeType === 9 ? root.body : root || document.body;
 }
 export function modal({title,body="",input=false,value="",confirmText="Save",cancelText="Cancel"}) {
   return new Promise(resolve=>{
