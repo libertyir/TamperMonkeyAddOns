@@ -221,33 +221,19 @@ function ChatGPTManagerBootstrap() {
     "storage.get": ({ key }) => GM_getValue(key, null),
     "storage.set": ({ key, value }) => GM_setValue(key, value),
     "ui.close": () => closeDialog(),
-    "api.authStatus": () => getAuthStatus(),
-    "api.conversations": params => listConversations(params),
-    "api.projects": () => requestChatGPT("/gizmos/snorlax/sidebar?owned_only=true&conversations_per_gizmo=0"),
-    "api.projectConversations": ({ projectId }) => requestChatGPT("/gizmos/" + encodeURIComponent(projectId) + "/conversations?cursor=0"),
-    "api.conversation": ({ id }) => requestChatGPT("/conversation/" + encodeURIComponent(id)),
-    "api.archive": ({ id, archived }) => requestChatGPT("/conversation/" + encodeURIComponent(id), {
-      method: "PATCH", body: JSON.stringify({ is_archived: archived })
-    }),
-    "api.deleteConversation": ({ id }) => requestChatGPT("/conversation/" + encodeURIComponent(id), {
-      method: "PATCH", body: JSON.stringify({ is_visible: false })
-    }),
-    "api.renameConversation": ({ id, title }) => requestChatGPT("/conversation/id/" + encodeURIComponent(id) + "/rename", {
-      method: "POST", body: JSON.stringify({ title })
-    }),
-    "api.moveConversation": ({ id, projectId }) => requestChatGPT("/conversation/" + encodeURIComponent(id), {
-      method: "PATCH", body: JSON.stringify({ gizmo_id: projectId })
-    }),
-    "api.createProject": ({ name }) => requestChatGPT("/projects", {
-      method: "POST", body: JSON.stringify({ name, instructions: "", memory_scope: "unset" })
-    }),
-    "api.renameProject": ({ id, name }) => requestChatGPT("/projects/" + encodeURIComponent(id), {
-      method: "PATCH", body: JSON.stringify({ name })
-    }),
-    "api.deleteProject": ({ id }) => requestChatGPT("/gizmos/" + encodeURIComponent(id), { method: "DELETE" }),
-    "api.sendMessage": () => {
-      throw new Error("ارسال پیام هنوز به جریان ارسال امن و استریم بومی ChatGPT متصل نشده است.");
-    }
+    "api.authStatus": params => requestBroker("api.authStatus", params),
+    "api.conversations": params => requestBroker("api.conversations", params),
+    "api.projects": params => requestBroker("api.projects", params),
+    "api.projectConversations": params => requestBroker("api.projectConversations", params),
+    "api.conversation": params => requestBroker("api.conversation", params),
+    "api.archive": params => requestBroker("api.archive", params),
+    "api.deleteConversation": params => requestBroker("api.deleteConversation", params),
+    "api.renameConversation": params => requestBroker("api.renameConversation", params),
+    "api.moveConversation": params => requestBroker("api.moveConversation", params),
+    "api.createProject": params => requestBroker("api.createProject", params),
+    "api.renameProject": params => requestBroker("api.renameProject", params),
+    "api.deleteProject": params => requestBroker("api.deleteProject", params),
+    "api.sendMessage": params => requestBroker("api.sendMessage", params)
   };
 
   function handleBridgeRequest(event) {
