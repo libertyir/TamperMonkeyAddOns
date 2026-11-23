@@ -5,6 +5,7 @@ export class ManagerApp {
   constructor({api,bridge,preferences,i18n,conversations,projects}) {
     Object.assign(this,{api,bridge,preferences,i18n,conversations,projects});
     this.view="chats";this.archived=false;this.selected=new Set();this.items=[];this.activeChat=null;this.projectId=null;
+    this.authStatus={bridgeConnected:Boolean(bridge.connected),accountAuthenticated:false,apiAvailable:null};
     this.root = document.querySelector("#cgm-dialog-host")?.shadowRoot?.querySelector("#app")
       || document.querySelector("#app");
   }
@@ -13,8 +14,14 @@ export class ManagerApp {
     this.i18n.setLanguage(prefs.language || "fa");
     this.theme=prefs.theme || "auto";
     this.applyDirection();
-    if(this.bridge.connected) await this.refresh();
-    else this.items=[];
+    if(this.bridge.connected) {
+      try {
+        this.authStatus=await this.api.authStatus();
+        if(this.authStatus.accountAuthenticated) await this.refresh();
+      } catch(error) {
+        this.authStatus={bridgeConnected:true,accountAuthenticated:false,apiAvailable:null,error:error.message};
+      }
+    } else this.items=[];
     this.render();
   }
   applyDirection() {
@@ -26,6 +33,10 @@ export class ManagerApp {
   }
   async refresh() {
     try {
+      if(!this.authStatus.accountAuthenticated) {
+        this.authStatus=await this.api.authStatus();
+        if(!this.authStatus.accountAuthenticated) { this.items=[];this.projects.items=[];this.render();return; }
+      }
       const [projects,items]=await Promise.all([this.projects.load(),this.conversations.load({archived:this.archived})]);
       this.items=items;toast(this.i18n.t("refreshDone"));
     } catch(error) { toast(error.message || this.i18n.t("loadError"),"error"); }
@@ -39,7 +50,8 @@ export class ManagerApp {
     else if(this.view==="settings") content=this.settingsView(t);
     else if(this.view==="bulk") content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.archived});
     else content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.view==="archive"});
-    this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${this.bridge.connected?t("connected"):t("preview")}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${content}</section></main></div>`;
+    const connectionLabel=!this.authStatus.bridgeConnected?t("bridgeOffline"):this.authStatus.accountAuthenticated?t("accountAuthenticated"):t("accountUnauthenticated");
+    this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${connectionLabel}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${content}</section></main></div>`;
     this.bind();
   }
   settingsView(t) {
