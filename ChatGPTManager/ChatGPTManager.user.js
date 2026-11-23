@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         ChatGPT Manager
 // @namespace    https://github.com/libertyir/TamperMonkeyAddOns
-// @version      0.7.0
+// @version      0.7.1
 // @description  Open ChatGPT Manager from the Tampermonkey menu
 // @match        *://*/*
 // @run-at       document-idle
 // @noframes
-// @require      https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/TamperBundle.js?v=0.7.0
-// @require      https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/TamperBootstrap.js?v=0.7.0
+// @require      https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/TamperBundle.js?v=0.7.1
+// @require      https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/TamperBootstrap.js?v=0.7.1
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
