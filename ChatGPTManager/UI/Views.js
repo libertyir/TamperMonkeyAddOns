@@ -5,7 +5,7 @@ export function sidebar({t,view,projects,conversations,projectId}) {
     <div class="cgm-brand"><span class="cgm-logo">✳</span><span>ChatGPT Manager</span></div>
     <button class="cgm-new primary" data-action="new-chat">＋ ${t("newChat")}</button>
     <nav class="cgm-nav">
-      ${["chats","projects","archive","bulk","settings"].map(key=>`<button data-view="${key}" class="${view===key?"active":""}">${t(key)}</button>`).join("")}
+      ${["chats","projects","archive","bulk","settings","help"].map(key=>`<button data-view="${key}" class="${view===key?"active":""}">${t(key)}</button>`).join("")}
     </nav>
     <div class="cgm-side-label">${view==="projects"?t("projects"):t("chats")}</div>
     <div class="cgm-side-list">
@@ -41,4 +41,30 @@ function formatDate(value) {
   if(!value)return "—";
   const date=new Date(value);
   return Number.isNaN(date.getTime())?String(value):date.toLocaleString();
+}
+
+export function helpView({t}) {
+  return `<article class="cgm-help">
+    <h2>${t("helpTitle")}</h2>
+    <p class="cgm-help-lead">${t("helpIntro")}</p>
+    <section class="cgm-help-section">
+      <h3>${t("helpStep1Title")}</h3>
+      <p>${t("helpStep1Text")}</p>
+      <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer">${t("helpTampermonkeyLink")}</a>
+    </section>
+    <section class="cgm-help-section">
+      <h3>${t("helpStep2Title")}</h3>
+      <p>${t("helpStep2Text")}</p>
+    </section>
+    <section class="cgm-help-section">
+      <h3>${t("helpStep3Title")}</h3>
+      <ol><li>${t("helpStep3A")}</li><li>${t("helpStep3B")}</li><li>${t("helpStep3C")}</li></ol>
+      <a class="cgm-help-install" href="https://raw.githubusercontent.com/libertyir/TamperMonkeyAddOns/main/ChatGPTManager/ChatGPTManager.user.js" target="_blank" rel="noopener noreferrer">${t("helpInstallLink")}</a>
+    </section>
+    <section class="cgm-help-section">
+      <h3>${t("helpUsageTitle")}</h3>
+      <ol><li>${t("helpUsageA")}</li><li>${t("helpUsageB")}</li><li>${t("helpUsageC")}</li></ol>
+    </section>
+    <section class="cgm-help-note"><strong>${t("helpNoteTitle")}</strong><p>${t("helpNoteText")}</p></section>
+  </article>`;
 }
