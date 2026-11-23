@@ -209,11 +209,15 @@ exports.ChatGPTApi = ChatGPTApi;
 },
 "Modules/Conversations/ConversationService.js": function(module, exports, __require) {
 class ConversationService {
-  constructor(api) { this.api = api; this.items = []; this.offset = 0; this.total = null; }
+  constructor(api) { this.api = api; this.items = []; this.offset = 0; this.total = null; this.hasMore = true; this.loading = false; }
   async load({archived=false,reset=true,search="",onProgress}={}) {
-    if (reset) { this.items=[]; this.offset=0; }
+    if (reset) { this.items=[]; this.offset=0; this.total=null; this.hasMore=true; }
+    if (this.loading || !this.hasMore) return this.items;
+    this.loading=true;
     onProgress?.({label:"در حال دریافت گفتگوها…",current:0,total:null});
-    const result = await this.api.conversations({archived,offset:this.offset,limit:28});
+    let result;
+    try { result = await this.api.conversations({archived,offset:this.offset,limit:28}); }
+    catch(error) { this.loading=false; throw error; }
     const rows = (result.items || []).map(item => ({
       id:item.id, title:item.title || "Untitled", projectId:item.gizmo_id || null,
       archived:Boolean(item.is_archived), updatedAt:item.update_time || item.create_time,
@@ -223,6 +227,8 @@ class ConversationService {
     this.items.push(...rows.filter(item=>!known.has(item.id)));
     this.offset += rows.length;
     this.total = result.total ?? this.total;
+    this.hasMore = rows.length === 28 && (this.total === null || this.offset < this.total);
+    this.loading=false;
     onProgress?.({label:"گفتگوها دریافت شدند",current:this.items.length,total:this.total});
     return search ? this.items.filter(item=>item.title.toLowerCase().includes(search.toLowerCase())) : this.items;
   }
@@ -316,7 +322,7 @@ function sidebar({t,view,projects,conversations,projectId}) {
     </nav>
     <div class="cgm-side-label">${view==="projects"?t("projects"):t("chats")}</div>
     <div class="cgm-side-list">
-      ${view==="projects"?projects.map(p=>`<button class="cgm-side-item ${p.id===projectId?"active":""}" data-project="${p.id}"><span class="cgm-dot"></span><span>${escapeHTML(p.name)}</span></button>`).join(""):conversations.slice(0,60).map(c=>`<button class="cgm-side-item" data-chat="${c.id}"><span>${escapeHTML(c.title)}</span></button>`).join("")}
+      ${view==="projects"?projects.map(p=>`<button class="cgm-side-item ${p.id===projectId?"active":""}" data-project="${p.id}"><span class="cgm-dot"></span><span>${escapeHTML(p.name)}</span></button>`).join(""):conversations.map(c=>`<button class="cgm-side-item" data-chat="${c.id}"><span>${escapeHTML(c.title)}</span></button>`).join("")}
     </div>
     <div class="cgm-side-footer"><span>${t("connection")}</span><span class="cgm-status"></span></div>
   </aside>`;
@@ -332,7 +338,7 @@ function conversationTable({t,items,projects,selected,archived}) {
   <div class="cgm-selection-count">${selected.size} ${t("selected")}</div>
   <div class="cgm-table-wrap"><table class="cgm-table"><thead><tr><th></th><th>${t("title")}</th><th>${t("project")}</th><th>${t("updated")}</th></tr></thead><tbody>
   ${items.length?items.map(c=>`<tr data-row="${c.id}"><td><input type="checkbox" data-select="${c.id}" ${selected.has(c.id)?"checked":""}></td><td><button class="link" data-chat="${c.id}">${escapeHTML(c.title)}</button><small>${escapeHTML(c.snippet)}</small></td><td>${escapeHTML(projects.find(p=>p.id===c.projectId)?.name || t("noProject"))}</td><td>${escapeHTML(formatDate(c.updatedAt))}</td></tr>`).join(""):`<tr><td colspan="4" class="cgm-empty">${t("empty")}</td></tr>`}
-  </tbody></table></div>`;
+  </tbody></table></div><div class="cgm-load-more" aria-live="polite"></div>`;
 }
 function projectsTable({t,projects}) {
   return `<div class="cgm-toolbar"><button class="primary" data-action="create-project">＋ ${t("createProject")}</button></div>
@@ -363,7 +369,7 @@ class ManagerApp {
   constructor({api,bridge,preferences,i18n,conversations,projects}) {
     Object.assign(this,{api,bridge,preferences,i18n,conversations,projects});
     this.view="chats";this.archived=false;this.selected=new Set();this.items=[];this.activeChat=null;this.projectId=null;
-    this.authStatus={bridgeConnected:Boolean(bridge.connected),brokerConnected:false,accountAuthenticated:false,apiAvailable:null};this.progress=null;
+    this.authStatus={bridgeConnected:Boolean(bridge.connected),brokerConnected:false,accountAuthenticated:false,apiAvailable:null};this.progress=null;this.loadingMore=false;
     this.root = globalThis.__CGM_ROOT__?.querySelector("#app")
       || document.querySelector("#app");
   }
@@ -423,8 +429,34 @@ class ManagerApp {
     else content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.view==="archive"});
     const connectionLabel=this.authStatus.authRequired?"اتصال مجدد لازم است":!this.authStatus.bridgeConnected?t("bridgeOffline"):!this.authStatus.brokerConnected?t("brokerOffline"):!this.authStatus.accountAuthenticated?t("accountUnauthenticated"):this.authStatus.apiAvailable===true?t("apiAvailable"):this.authStatus.apiAvailable===false?t("apiUnavailable"):t("accountAuthenticated");
     const authNotice=this.authStatus.authRequired?`<div class="cgm-auth-notice" role="alert"><strong>اتصال به حساب ChatGPT متوقف شده است.</strong><p>${this.authStatus.error||"برای جلوگیری از درخواست‌های نامعتبر، هیچ درخواست دیگری ارسال نمی‌شود."}</p><p>در یک تب ChatGPT از منوی Tampermonkey گزینه «اتصال مجدد به ChatGPT» را اجرا کن.</p></div>`:"";
-    this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${connectionLabel}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${authNotice}${content}</section>${this.progressMarkup()}</main></div>`;
+    this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${connectionLabel}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${authNotice}${content}</section>${this.loadMoreMarkup()}${this.progressMarkup()}</main></div>`;
     this.bind();
+  }
+  loadMoreMarkup() {
+    if(this.view==="projects"||this.view==="settings"||this.view==="chat") return "";
+    if(this.loadingMore) return '<div class="cgm-load-more">در حال دریافت گفتگوهای قدیمی‌تر…</div>';
+    if(this.conversations.hasMore) return '<div class="cgm-load-more">برای نمایش گفتگوهای قدیمی‌تر، به پایین فهرست بروید</div>';
+    return '<div class="cgm-load-more">همه گفتگوها بارگذاری شدند</div>';
+  }
+  async loadMore() {
+    if(this.loadingMore||!this.conversations.hasMore||!this.authStatus.accountAuthenticated||!["chats","archive","bulk"].includes(this.view)) return;
+    this.loadingMore=true;
+    const content=this.root.querySelector(".cgm-content");
+    const previousTop=content?.scrollTop||0;
+    const previousHeight=content?.scrollHeight||0;
+    const archived=this.view==="archive";
+    try {
+      const items=await this.conversations.load({archived,reset:false});
+      this.items=items;
+      this.loadingMore=false;
+      this.render();
+      const next=this.root.querySelector(".cgm-content");
+      if(next) next.scrollTop=previousTop+(next.scrollHeight-previousHeight);
+    } catch(error) {
+      this.loadingMore=false;
+      this.setProgress(error.message||"دریافت گفتگوهای قدیمی‌تر ناموفق بود",0,1,true);
+      this.render();
+    }
   }
   progressMarkup() {
     if(!this.progress) return "";
@@ -458,6 +490,8 @@ class ManagerApp {
     this.root.querySelectorAll("[data-select]").forEach(el=>el.onchange=()=>{el.checked?this.selected.add(el.dataset.select):this.selected.delete(el.dataset.select);this.renderSelectionCount();});
     this.root.querySelectorAll("[data-action]").forEach(el=>el.onclick=()=>this.action(el.dataset.action,el.dataset.id));
     this.root.querySelector("#conversation-search")?.addEventListener("input",e=>this.filterRows(e.target.value));
+    const content=this.root.querySelector(".cgm-content");
+    content?.addEventListener("scroll",()=>{if(content.scrollHeight-content.scrollTop-content.clientHeight<320)this.loadMore();},{passive:true});
     this.root.querySelector("#bulk-project")?.addEventListener("change",e=>e.target.value&&this.moveSelected(e.target.value));
     this.root.querySelector("#chat-composer")?.addEventListener("submit",e=>{e.preventDefault();this.sendChatMessage();});
     this.root.querySelector("#language")?.addEventListener("change",e=>this.updatePreference("language",e.target.value));
