@@ -43,7 +43,6 @@ export class ManagerApp {
       toast(this.i18n.t("refreshDone"));
       this.render();
     } catch(error) {
-      if(this.authStatus.accountAuthenticated) this.authStatus.apiAvailable=false;
       toast(error.message || this.i18n.t("loadError"),"error");
       this.render();
     }
