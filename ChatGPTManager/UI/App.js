@@ -5,7 +5,7 @@ export class ManagerApp {
   constructor({api,bridge,preferences,i18n,conversations,projects}) {
     Object.assign(this,{api,bridge,preferences,i18n,conversations,projects});
     this.view="chats";this.archived=false;this.selected=new Set();this.items=[];this.activeChat=null;this.projectId=null;
-    this.authStatus={bridgeConnected:Boolean(bridge.connected),brokerConnected:false,accountAuthenticated:false,apiAvailable:null};
+    this.authStatus={bridgeConnected:Boolean(bridge.connected),brokerConnected:false,accountAuthenticated:false,apiAvailable:null};this.progress=null;
     this.root = globalThis.__CGM_ROOT__?.querySelector("#app")
       || document.querySelector("#app");
   }
@@ -37,10 +37,14 @@ export class ManagerApp {
         this.authStatus=await this.api.authStatus();
         if(!this.authStatus.accountAuthenticated) { this.items=[];this.projects.items=[];this.render();return; }
       }
-      const [projects,items]=await Promise.all([this.projects.load(),this.conversations.load({archived:this.archived})]);
+      this.setProgress("در حال دریافت پروژه‌ها…",0,2);
+      const [projects,items]=await Promise.all([
+        this.projects.load().then(value=>{this.setProgress("پروژه‌ها دریافت شدند",1,2);return value;}),
+        this.conversations.load({archived:this.archived,onProgress:p=>this.setProgress(p.label,p.current,p.total)}).then(value=>{this.setProgress("گفتگوها دریافت شدند",2,2);return value;})
+      ]);
       this.items=items;
       this.authStatus.apiAvailable=true;
-      toast(this.i18n.t("refreshDone"));
+      this.setProgress("به‌روزرسانی کامل شد",2,2);toast(this.i18n.t("refreshDone"));
       this.render();
     } catch(error) {
       if(/HTTP (401|403)|اتصال مجدد|نشست|دسترسی را رد کرد/i.test(error.message||"")) {
@@ -61,8 +65,30 @@ export class ManagerApp {
     else content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.view==="archive"});
     const connectionLabel=this.authStatus.authRequired?"اتصال مجدد لازم است":!this.authStatus.bridgeConnected?t("bridgeOffline"):!this.authStatus.brokerConnected?t("brokerOffline"):!this.authStatus.accountAuthenticated?t("accountUnauthenticated"):this.authStatus.apiAvailable===true?t("apiAvailable"):this.authStatus.apiAvailable===false?t("apiUnavailable"):t("accountAuthenticated");
     const authNotice=this.authStatus.authRequired?`<div class="cgm-auth-notice" role="alert"><strong>اتصال به حساب ChatGPT متوقف شده است.</strong><p>${this.authStatus.error||"برای جلوگیری از درخواست‌های نامعتبر، هیچ درخواست دیگری ارسال نمی‌شود."}</p><p>در یک تب ChatGPT از منوی Tampermonkey گزینه «اتصال مجدد به ChatGPT» را اجرا کن.</p></div>`:"";
-    this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${connectionLabel}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${authNotice}${content}</section></main></div>`;
+    this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${connectionLabel}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${authNotice}${content}</section>${this.progressMarkup()}</main></div>`;
     this.bind();
+  }
+  progressMarkup() {
+    if(!this.progress) return "";
+    const p=this.progress,percent=p.total>0?Math.min(100,Math.round(p.current/p.total*100)):null;
+    return `<div class="cgm-progress" role="status" aria-live="polite"><div class="cgm-progress-head"><span>${p.label}</span><strong>${percent===null?"…":percent+"%"}</strong></div><div class="cgm-progress-track"><span class="${percent===null?"indeterminate":""}" style="${percent===null?"":"width:"+percent+"%"}"></span></div>${p.total>0?`<small>${p.current} از ${p.total}</small>`:""}<button data-action="dismiss-progress" aria-label="بستن">×</button></div>`;
+  }
+  setProgress(label,current=0,total=null,error=false) {
+    this.progress={label,current,total,error};
+    const old=this.root.querySelector(".cgm-progress");
+    const wrapper=document.createElement("div");
+    wrapper.innerHTML=this.progressMarkup();
+    const next=wrapper.firstElementChild;
+    if(old)old.replaceWith(next);
+    else this.root.append(next);
+    if(total!==null&&current>=total&&!error) {
+      setTimeout(()=>{if(this.progress?.label===label){this.progress=null;this.root.querySelector(".cgm-progress")?.remove();}},1600);
+    }
+  }
+  async runProgress(label,operation) {
+    this.setProgress(label,0,null);
+    try { const result=await operation();this.setProgress("عملیات انجام شد",1,1);return result; }
+    catch(error){this.setProgress(error.message||"عملیات ناموفق بود",0,1,true);throw error;}
   }
   settingsView(t) {
     return `<h2>${t("settings")}</h2><div class="cgm-settings-row"><label>${t("language")}</label><select id="language"><option value="fa" ${this.i18n.language==="fa"?"selected":""}>فارسی</option><option value="en" ${this.i18n.language==="en"?"selected":""}>English</option></select></div><div class="cgm-settings-row"><label>${t("theme")}</label><select id="theme"><option value="auto">Auto</option><option value="dark">Dark</option><option value="light">Light</option></select></div>`;
@@ -82,17 +108,17 @@ export class ManagerApp {
   async action(name,id) {
     const t=key=>this.i18n.t(key);
     try {
-      if(name==="refresh") await this.refresh();
+      if(name==="refresh") await this.refresh();\n      if(name==="dismiss-progress"){this.progress=null;this.root.querySelector(".cgm-progress")?.remove();return;}
       if(name==="close-manager") { this.bridge.request("ui.close").catch(()=>{}); return; }
       if(name==="select-all") this.items.filter(c=>c.archived===this.archived).forEach(c=>this.selected.add(c.id));
       if(name==="clear-selection") this.selected.clear();
       if(name==="archive-selected"||name==="restore-selected") {
-        const result=await this.conversations.archiveMany([...this.selected],name==="archive-selected");
+        const result=await this.conversations.archiveMany([...this.selected],name==="archive-selected",p=>this.setProgress(p.label,p.current,p.total));
         this.report(result);this.selected.clear();await this.refresh();
       }
       if(name==="delete-selected") {
         if(!this.selected.size||!confirm(t("confirmDelete")))return;
-        const result=await this.conversations.deleteMany([...this.selected]);this.report(result);this.selected.clear();await this.refresh();
+        const result=await this.conversations.deleteMany([...this.selected],p=>this.setProgress(p.label,p.current,p.total));this.report(result);this.selected.clear();await this.refresh();
       }
       if(name==="create-project") {
         const value=await modal({title:t("projectName"),input:true,confirmText:t("save"),cancelText:t("cancel")});
@@ -125,7 +151,7 @@ export class ManagerApp {
   }
   async openChat(id) {
     try {
-      const data=await this.conversations.detail(id);
+      this.setProgress("در حال دریافت محتوای گفتگو…",0,null);\n      const data=await this.conversations.detail(id);\n      this.progress=null;
       this.activeChat={id,title:data.title||"Untitled",messages:extractMessages(data)};
       this.view="chat";this.render();
     } catch(error) { toast(error.message,"error"); }
@@ -134,13 +160,13 @@ export class ManagerApp {
     const field=this.root.querySelector("#chat-message"),text=field?.value.trim();
     if(!text)return;
     try {
-      const result=await this.api.sendMessage(this.activeChat?.id,text);
+      this.setProgress("در حال ارسال پیام…",0,null);\n      const result=await this.api.sendMessage(this.activeChat?.id,text);\n      this.progress=null;
       if(result?.conversation_id) await this.openChat(result.conversation_id);
       else if(this.activeChat?.id) await this.openChat(this.activeChat.id);
     } catch(error) { toast(error.message,"error"); }
   }
   async moveSelected(projectId) {
-    try {const result=await this.conversations.moveMany([...this.selected],projectId);this.report(result);this.selected.clear();await this.refresh();this.render();}
+    try {const result=await this.conversations.moveMany([...this.selected],projectId,p=>this.setProgress(p.label,p.current,p.total));this.report(result);this.selected.clear();await this.refresh();this.render();}
     catch(error){toast(error.message,"error");}
   }
   report(result) {
