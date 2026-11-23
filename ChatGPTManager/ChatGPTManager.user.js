@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Manager
 // @namespace    https://github.com/libertyir/TamperMonkeyAddOns
-// @version      0.4.0
+// @version      0.5.0
 // @description  Independent ChatGPT manager available from the Tampermonkey menu
 // @match        *://*/*
 // @run-at       document-idle
@@ -19,7 +19,7 @@
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.4.0";
+  const VERSION = "0.5.0";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
@@ -42,6 +42,7 @@
 
   let sessionCache = null;
   let sessionExpiresAt = 0;
+  let backendApiAvailable = null;
 
   function requestJson(url, options = {}) {
     return new Promise((resolve, reject) => {
@@ -84,7 +85,7 @@
       return {
         bridgeConnected: true,
         accountAuthenticated: Boolean(session?.accessToken),
-        apiAvailable: Boolean(session?.accessToken),
+        apiAvailable: backendApiAvailable,
         user: session?.user ? { name: session.user.name || null } : null
       };
     } catch (error) {
@@ -117,7 +118,11 @@
       sessionExpiresAt = 0;
       return requestChatGPT(path, options, false);
     }
-    if (response.status >= 200 && response.status < 300) return response.data;
+    if (response.status >= 200 && response.status < 300) {
+      backendApiAvailable = true;
+      return response.data;
+    }
+    if (response.status === 401 || response.status === 403) backendApiAvailable = false;
     const data = response.data;
     throw new Error(data?.detail?.message || data?.message || data?.error ||
       "ChatGPT request failed: HTTP " + response.status);
