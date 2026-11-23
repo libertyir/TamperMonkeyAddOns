@@ -2,7 +2,7 @@ function ChatGPTManagerBootstrap() {
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.6.8";
+  const VERSION = "0.6.9";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
@@ -324,7 +324,9 @@ function ChatGPTManagerBootstrap() {
     const cssPath = parsed.querySelector('link[rel="stylesheet"]')?.getAttribute("href");
     const appMarkup = parsed.querySelector("#app")?.outerHTML;
     if (!cssPath || !appMarkup) throw new Error("Index.html فاقد #app یا فایل CSS است.");
-    const css = await requestText(new URL(cssPath, APP_URL).href);
+    const cssUrl = new URL(cssPath, APP_URL);
+    cssUrl.searchParams.set("v", VERSION);
+    const css = await requestText(cssUrl.href);
     if (dialogClosed || generation !== dialogGeneration || !shadowRoot) return;
     const style = document.createElement("style");
     style.textContent = css;
