@@ -40,29 +40,87 @@
     });
   }
 
-  function requestChatGPT(path, options = {}) {
+  let sessionCache = null;
+  let sessionExpiresAt = 0;
+
+  function requestJson(url, options = {}) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: options.method || "GET",
-        url: "https://chatgpt.com/backend-api" + path,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          ...(options.headers || {})
-        },
+        url,
+        headers: options.headers || { Accept: "application/json" },
         data: options.body,
         withCredentials: true,
         onload: response => {
           let data = null;
           try { data = response.responseText ? JSON.parse(response.responseText) : null; }
-          catch { data = response.responseText; }
-          if (response.status >= 200 && response.status < 300) resolve(data);
-          else reject(new Error(data?.detail?.message || data?.message || data?.error ||
-            "ChatGPT request failed: HTTP " + response.status));
+          catch { data = null; }
+          resolve({ status: response.status, data });
         },
-        onerror: () => reject(new Error("ارتباط با chatgpt.com برقرار نشد؛ دسترسی شبکه یا نشست حساب را بررسی کن."))
+        onerror: () => reject(new Error("ارتباط شبکه با chatgpt.com برقرار نشد."))
       });
     });
+  }
+
+  async function getAccountSession(force = false) {
+    if (!force && sessionCache && Date.now() < sessionExpiresAt) return sessionCache;
+    const response = await requestJson("https://chatgpt.com/api/auth/session");
+    if (response.status < 200 || response.status >= 300) {
+      sessionCache = null;
+      sessionExpiresAt = 0;
+      return null;
+    }
+    const data = response.data || {};
+    sessionCache = typeof data.accessToken === "string" && data.accessToken
+      ? { accessToken: data.accessToken, user: data.user || null }
+      : null;
+    sessionExpiresAt = Date.now() + 4 * 60 * 1000;
+    return sessionCache;
+  }
+
+  async function getAuthStatus() {
+    try {
+      const session = await getAccountSession(true);
+      return {
+        bridgeConnected: true,
+        accountAuthenticated: Boolean(session?.accessToken),
+        apiAvailable: Boolean(session?.accessToken),
+        user: session?.user ? { name: session.user.name || null } : null
+      };
+    } catch (error) {
+      return {
+        bridgeConnected: true,
+        accountAuthenticated: false,
+        apiAvailable: false,
+        error: error?.message || "Session check failed"
+      };
+    }
+  }
+
+  async function requestChatGPT(path, options = {}, retry = true) {
+    const session = await getAccountSession();
+    if (!session?.accessToken) {
+      throw new Error("نشست ورود ChatGPT در این مرورگر پیدا نشد. ابتدا در chatgpt.com وارد حساب شو.");
+    }
+    const response = await requestJson("https://chatgpt.com/backend-api" + path, {
+      method: options.method || "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + session.accessToken,
+        ...(options.headers || {})
+      },
+      body: options.body
+    });
+    if (response.status === 401 && retry) {
+      sessionCache = null;
+      sessionExpiresAt = 0;
+      return requestChatGPT(path, options, false);
+    }
+    if (response.status >= 200 && response.status < 300) return response.data;
+    const data = response.data;
+    throw new Error(data?.detail?.message || data?.message || data?.error ||
+      "ChatGPT request failed: HTTP " + response.status);
   }
 
   function listConversations({ archived = false, offset = 0, limit = 28 } = {}) {
@@ -75,6 +133,7 @@
     "storage.get": ({ key }) => GM_getValue(key, null),
     "storage.set": ({ key, value }) => GM_setValue(key, value),
     "ui.close": () => closeDialog(),
+    "api.authStatus": () => getAuthStatus(),
     "api.conversations": params => listConversations(params),
     "api.projects": () => requestChatGPT("/gizmos/snorlax/sidebar?owned_only=true&conversations_per_gizmo=0"),
     "api.projectConversations": ({ projectId }) => requestChatGPT("/gizmos/" + encodeURIComponent(projectId) + "/conversations?cursor=0"),
