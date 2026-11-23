@@ -55,6 +55,18 @@
   let sessionCache = null;
   let sessionExpiresAt = 0;
   let backendApiAvailable = null;
+  let authBlocked = false;
+  let authBlockReason = "";
+
+  function requireReconnect(reason) {
+    authBlocked = true;
+    authBlockReason = reason || "نشست ChatGPT معتبر نیست. از منوی Tampermonkey اتصال مجدد را اجرا کن.";
+    sessionCache = null;
+    sessionExpiresAt = 0;
+    backendApiAvailable = false;
+    if (isChatGPTTab) GM_setValue(BROKER_HEARTBEAT, { id: BROKER_ID, timestamp: Date.now(), authRequired: true, reason: authBlockReason });
+    return new Error(authBlockReason);
+  }
 
   async function requestJson(url, options = {}) {
     const pageWindow = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
@@ -72,37 +84,33 @@
   }
 
   async function getAccountSession(force = false) {
+    if (authBlocked) throw new Error(authBlockReason);
     if (!force && sessionCache && Date.now() < sessionExpiresAt) return sessionCache;
     const response = await requestJson("/api/auth/session");
-    if (response.status < 200 || response.status >= 300) {
-      sessionCache = null;
-      sessionExpiresAt = 0;
-      return null;
-    }
+    if (response.status === 401 || response.status === 403) throw requireReconnect("نشست ChatGPT رد شد (HTTP " + response.status + "). درخواست‌ها متوقف شدند؛ از منوی Tampermonkey اتصال مجدد را اجرا کن.");
+    if (response.status < 200 || response.status >= 300) throw new Error("بررسی نشست ناموفق بود: HTTP " + response.status);
     const data = response.data || {};
     sessionCache = typeof data.accessToken === "string" && data.accessToken
       ? { accessToken: data.accessToken, user: data.user || null }
       : null;
+    if (!sessionCache) throw requireReconnect("نشست معتبر ChatGPT پیدا نشد. ابتدا وارد chatgpt.com شو و سپس از منوی Tampermonkey اتصال مجدد را اجرا کن.");
     sessionExpiresAt = Date.now() + 2 * 60 * 1000;
     return sessionCache;
   }
 
   async function getAuthStatus() {
-    const session = await getAccountSession(true);
-    return {
-      bridgeConnected: true,
-      brokerConnected: true,
-      accountAuthenticated: Boolean(session?.accessToken),
-      apiAvailable: backendApiAvailable,
-      user: session?.user ? { name: session.user.name || null } : null
-    };
+    if (authBlocked) return { bridgeConnected: true, brokerConnected: true, accountAuthenticated: false, authRequired: true, error: authBlockReason, apiAvailable: false };
+    try {
+      const session = await getAccountSession(true);
+      return { bridgeConnected: true, brokerConnected: true, accountAuthenticated: Boolean(session.accessToken), authRequired: false, apiAvailable: backendApiAvailable, user: session.user ? { name: session.user.name || null } : null };
+    } catch (error) {
+      return { bridgeConnected: true, brokerConnected: true, accountAuthenticated: false, authRequired: authBlocked, error: error.message, apiAvailable: false };
+    }
   }
 
-  async function requestChatGPT(path, options = {}, retry = true) {
+  async function requestChatGPT(path, options = {}) {
+    if (authBlocked) throw new Error(authBlockReason);
     const session = await getAccountSession();
-    if (!session?.accessToken) {
-      throw new Error("نشست ورود ChatGPT در این تب پیدا نشد. در همین مرورگر وارد chatgpt.com شو.");
-    }
     const response = await requestJson("/backend-api" + path, {
       method: options.method || "GET",
       headers: {
@@ -113,29 +121,31 @@
       },
       body: options.body
     });
-    if (response.status === 401 && retry) {
-      sessionCache = null;
-      sessionExpiresAt = 0;
-      return requestChatGPT(path, options, false);
+    if (response.status === 401 || response.status === 403) {
+      throw requireReconnect("ChatGPT دسترسی نشست را رد کرد (HTTP " + response.status + "). همه درخواست‌ها متوقف شدند؛ از منوی Tampermonkey اتصال مجدد را اجرا کن.");
     }
+    if (response.status === 429) throw new Error("ChatGPT محدودیت نرخ درخواست اعمال کرد (429). عملیات متوقف شد؛ بعداً دستی دوباره تلاش کن.");
     if (response.status >= 200 && response.status < 300) {
       backendApiAvailable = true;
       return response.data;
     }
-    if (response.status === 401 || response.status === 403) backendApiAvailable = false;
     const data = response.data;
-    throw new Error(data?.detail?.message || data?.message || data?.error ||
-      "ChatGPT request failed: HTTP " + response.status);
+    throw new Error(data?.detail?.message || data?.message || data?.error || "ChatGPT request failed: HTTP " + response.status);
   }
 
   function getBrokerStatus() {
     const broker = GM_getValue(BROKER_HEARTBEAT, null);
+    if (broker?.authRequired) throw new Error(broker.reason || "نشست ChatGPT نیاز به اتصال مجدد دارد.");
     return broker && Date.now() - broker.timestamp < 20000 ? broker : null;
   }
 
   let brokerRequestQueue = Promise.resolve();
   function requestBroker(action, params = {}) {
-    if (isChatGPTTab) return Promise.resolve().then(() => chatGPTOperations[action](params));
+    if (authBlocked) return Promise.reject(new Error(authBlockReason));
+    if (isChatGPTTab) return Promise.resolve().then(() => {
+      if (authBlocked) throw new Error(authBlockReason);
+      return chatGPTOperations[action](params);
+    });
     const broker = getBrokerStatus();
     if (!broker) {
       throw new Error("تب فعال chatgpt.com پیدا نشد. ChatGPT را در یک تب دیگر باز و وارد حساب شو؛ Manager را می‌توانی همین‌جا نگه داری.");
@@ -195,20 +205,10 @@
     }
   };
 
-  const operations = {
-    "storage.get": ({ key }) => GM_getValue(key, null),
-    "storage.set": ({ key, value }) => GM_setValue(key, value),
-    "ui.close": () => closeDialog(),
-    ...Object.keys(chatGPTOperations).reduce((all, action) => {
-      all[action] = params => requestBroker(action, params);
-      return all;
-    }, {})
-  };
-
   function installChatGPTBroker() {
     if (!isChatGPTTab) return;
-    GM_setValue(BROKER_HEARTBEAT, { id: BROKER_ID, timestamp: Date.now() });
-    setInterval(() => GM_setValue(BROKER_HEARTBEAT, { id: BROKER_ID, timestamp: Date.now() }), 5000);
+    GM_setValue(BROKER_HEARTBEAT, { id: BROKER_ID, timestamp: Date.now(), authRequired: false });
+    setInterval(() => GM_setValue(BROKER_HEARTBEAT, { id: BROKER_ID, timestamp: Date.now(), authRequired: authBlocked, reason: authBlockReason }), 5000);
     const handled = new Set();
     const processRequests = () => {
       GM_listValues().filter(key => key.startsWith(BROKER_REQUEST_PREFIX + BROKER_ID + ":"))
@@ -388,4 +388,8 @@
   installBridge();
   installChatGPTBroker();
   GM_registerMenuCommand("ChatGPT Manager", openDialog, { accessKey: "m" });
+  GM_registerMenuCommand("اتصال مجدد به ChatGPT", () => {
+    if (isChatGPTTab) location.reload();
+    else window.open("https://chatgpt.com/", "_blank", "noopener");
+  });
 })();
