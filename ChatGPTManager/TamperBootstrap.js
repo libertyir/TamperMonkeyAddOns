@@ -358,7 +358,7 @@ function ChatGPTManagerBootstrap() {
       const task = (async () => {
         let source = await requestText(url);
         const imports = [];
-        const pattern = /(\\b(?:import|export)\\s+(?:[^"'\\x60;]*?\\s+from\\s*)?)["']([^"']+)["']/g;
+        const pattern = /(\b(?:import|export)\s+(?:[^"'\x60;]*?\s+from\s*)?)["']([^"']+)["']/g;
         let match;
 
         while ((match = pattern.exec(source))) {
