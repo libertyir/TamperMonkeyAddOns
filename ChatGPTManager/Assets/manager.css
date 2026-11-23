@@ -28,3 +28,5 @@ body{min-height:100vh;background:var(--bg);color:var(--text)}
 .cgm-progress-track{height:6px;background:var(--surface);border-radius:8px;overflow:hidden}.cgm-progress-track span{display:block;height:100%;background:var(--accent);border-radius:8px;transition:width .2s}.cgm-progress-track span.indeterminate{width:35%;animation:cgm-progress-move 1.2s ease-in-out infinite}
 .cgm-progress small{display:block;margin-top:6px;color:var(--muted);font-size:10px}.cgm-progress>button{position:absolute;inset-inline-end:8px;top:8px;padding:2px 7px;border:0;background:transparent;font-size:18px}
 @keyframes cgm-progress-move{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+
+.cgm-load-more{padding:14px 10px;text-align:center;color:var(--muted);font-size:12px}
