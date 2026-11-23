@@ -9,7 +9,7 @@ export function sidebar({t,view,projects,conversations,projectId}) {
     </nav>
     <div class="cgm-side-label">${view==="projects"?t("projects"):t("chats")}</div>
     <div class="cgm-side-list">
-      ${view==="projects"?projects.map(p=>`<button class="cgm-side-item ${p.id===projectId?"active":""}" data-project="${p.id}"><span class="cgm-dot"></span><span>${escapeHTML(p.name)}</span></button>`).join(""):conversations.slice(0,60).map(c=>`<button class="cgm-side-item" data-chat="${c.id}"><span>${escapeHTML(c.title)}</span></button>`).join("")}
+      ${view==="projects"?projects.map(p=>`<button class="cgm-side-item ${p.id===projectId?"active":""}" data-project="${p.id}"><span class="cgm-dot"></span><span>${escapeHTML(p.name)}</span></button>`).join(""):conversations.map(c=>`<button class="cgm-side-item" data-chat="${c.id}"><span>${escapeHTML(c.title)}</span></button>`).join("")}
     </div>
     <div class="cgm-side-footer"><span>${t("connection")}</span><span class="cgm-status"></span></div>
   </aside>`;
@@ -25,7 +25,7 @@ export function conversationTable({t,items,projects,selected,archived}) {
   <div class="cgm-selection-count">${selected.size} ${t("selected")}</div>
   <div class="cgm-table-wrap"><table class="cgm-table"><thead><tr><th></th><th>${t("title")}</th><th>${t("project")}</th><th>${t("updated")}</th></tr></thead><tbody>
   ${items.length?items.map(c=>`<tr data-row="${c.id}"><td><input type="checkbox" data-select="${c.id}" ${selected.has(c.id)?"checked":""}></td><td><button class="link" data-chat="${c.id}">${escapeHTML(c.title)}</button><small>${escapeHTML(c.snippet)}</small></td><td>${escapeHTML(projects.find(p=>p.id===c.projectId)?.name || t("noProject"))}</td><td>${escapeHTML(formatDate(c.updatedAt))}</td></tr>`).join(""):`<tr><td colspan="4" class="cgm-empty">${t("empty")}</td></tr>`}
-  </tbody></table></div>`;
+  </tbody></table></div><div class="cgm-load-more" aria-live="polite"></div>`;
 }
 export function projectsTable({t,projects}) {
   return `<div class="cgm-toolbar"><button class="primary" data-action="create-project">＋ ${t("createProject")}</button></div>
