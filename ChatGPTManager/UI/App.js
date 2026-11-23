@@ -38,8 +38,15 @@ export class ManagerApp {
         if(!this.authStatus.accountAuthenticated) { this.items=[];this.projects.items=[];this.render();return; }
       }
       const [projects,items]=await Promise.all([this.projects.load(),this.conversations.load({archived:this.archived})]);
-      this.items=items;toast(this.i18n.t("refreshDone"));
-    } catch(error) { toast(error.message || this.i18n.t("loadError"),"error"); }
+      this.items=items;
+      this.authStatus.apiAvailable=true;
+      toast(this.i18n.t("refreshDone"));
+      this.render();
+    } catch(error) {
+      if(this.authStatus.accountAuthenticated) this.authStatus.apiAvailable=false;
+      toast(error.message || this.i18n.t("loadError"),"error");
+      this.render();
+    }
   }
   render() {
     const t=key=>this.i18n.t(key);
@@ -50,7 +57,7 @@ export class ManagerApp {
     else if(this.view==="settings") content=this.settingsView(t);
     else if(this.view==="bulk") content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.archived});
     else content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.view==="archive"});
-    const connectionLabel=!this.authStatus.bridgeConnected?t("bridgeOffline"):this.authStatus.accountAuthenticated?t("accountAuthenticated"):t("accountUnauthenticated");
+    const connectionLabel=!this.authStatus.bridgeConnected?t("bridgeOffline"):!this.authStatus.accountAuthenticated?t("accountUnauthenticated"):this.authStatus.apiAvailable===true?t("apiAvailable"):this.authStatus.apiAvailable===false?t("apiUnavailable"):t("accountAuthenticated");
     this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${connectionLabel}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${content}</section></main></div>`;
     this.bind();
   }
