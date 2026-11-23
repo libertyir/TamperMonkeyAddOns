@@ -16,18 +16,25 @@ export class ConversationService {
   }
   async detail(id) { return this.api.conversation(id); }
   async archiveMany(ids, archived=true) {
-    const results = await Promise.allSettled(ids.map(id=>this.api.archive(id,archived)));
-    return summarize(results);
+    return runSequential(ids, id=>this.api.archive(id,archived));
   }
   async deleteMany(ids) {
-    const results = await Promise.allSettled(ids.map(id=>this.api.removeConversation(id)));
-    return summarize(results);
+    return runSequential(ids, id=>this.api.removeConversation(id));
   }
   async moveMany(ids, projectId) {
-    const results = await Promise.allSettled(ids.map(id=>this.api.moveConversation(id,projectId)));
-    return summarize(results);
+    return runSequential(ids, id=>this.api.moveConversation(id,projectId));
   }
 }
-function summarize(results) {
-  return {success:results.filter(x=>x.status==="fulfilled").length,failed:results.filter(x=>x.status==="rejected").map(x=>x.reason?.message || "Failed")};
+async function runSequential(ids, operation) {
+  let success=0;
+  const failed=[];
+  for (let i=0;i<ids.length;i++) {
+    try { await operation(ids[i]); success++; }
+    catch(error) {
+      failed.push(error?.message || "Failed");
+      if (/HTTP (401|403|429)|اتصال مجدد|نشست|دسترسی را رد کرد/i.test(error?.message || "")) break;
+    }
+    if (i<ids.length-1) await new Promise(resolve=>setTimeout(resolve,350));
+  }
+  return {success,failed};
 }
