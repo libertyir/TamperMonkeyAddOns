@@ -3,7 +3,7 @@ export class ChatGPTApi {
   call(action,params={}) { return this.bridge.request("api."+action,params); }
   authStatus() { return this.call("authStatus"); }
   conversations(options={}) { return this.call("conversations",options); }
-  projects() { return this.call("projects"); }
+  projects(cursor=null) { return this.call("projects",{cursor}); }
   projectConversations(projectId) { return this.call("projectConversations",{projectId}); }
   conversation(id) { return this.call("conversation",{id}); }
   archive(id, archived=true) { return this.call("archive",{id,archived}); }
