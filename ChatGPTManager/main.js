@@ -26,10 +26,20 @@ try {
   const app = new ManagerApp({ api, bridge, preferences, i18n, conversations, projects });
 
   await app.init();
-  bridge.ready.then(connected => {
-    if (!connected) return;
-    app.authStatus.bridgeConnected = true;
-    app.render();
+  bridge.ready.then(async connected => {
+    app.authStatus.bridgeConnected = connected;
+    if (connected) {
+      try {
+        app.authStatus = await api.authStatus();
+        if (app.authStatus.accountAuthenticated) await app.refresh();
+        else app.render();
+      } catch (error) {
+        app.authStatus = { ...app.authStatus, bridgeConnected: true, error: error.message };
+        app.render();
+      }
+    } else {
+      app.render();
+    }
   }).catch(error => console.warn("[ChatGPT Manager] Bridge connection failed:", error));
 } catch (error) {
   showStartupError(error);
