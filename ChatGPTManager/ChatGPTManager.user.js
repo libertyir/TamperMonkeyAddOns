@@ -209,19 +209,26 @@
     if (!isChatGPTTab) return;
     GM_setValue(BROKER_HEARTBEAT, { id: BROKER_ID, timestamp: Date.now() });
     setInterval(() => GM_setValue(BROKER_HEARTBEAT, { id: BROKER_ID, timestamp: Date.now() }), 5000);
-    GM_addValueChangeListener(BROKER_REQUEST_PREFIX + BROKER_ID, (_key, _oldValue, request) => {
-      if (!request || request.target !== BROKER_ID || !request.id || !request.action) return;
-      const action = chatGPTOperations[request.action];
-      if (!action) {
-        GM_setValue(BROKER_RESPONSE_PREFIX + request.id, { id: request.id, error: "Unknown broker operation" });
-        return;
-      }
-      Promise.resolve().then(() => action(request.params || {}))
-        .then(result => GM_setValue(BROKER_RESPONSE_PREFIX + request.id, { id: request.id, result }))
-        .catch(error => GM_setValue(BROKER_RESPONSE_PREFIX + request.id, {
-          id: request.id, error: error?.message || String(error)
-        }));
-    });
+    const handled = new Set();
+    const processRequests = () => {
+      GM_listValues().filter(key => key.startsWith(BROKER_REQUEST_PREFIX + BROKER_ID + ":"))
+        .forEach(key => {
+          const request = GM_getValue(key, null);
+          if (!request || request.target !== BROKER_ID || !request.id || handled.has(request.id)) return;
+          handled.add(request.id);
+          const action = chatGPTOperations[request.action];
+          const task = action
+            ? Promise.resolve().then(() => action(request.params || {}))
+            : Promise.reject(new Error("Unknown broker operation"));
+          task.then(result => GM_setValue(BROKER_RESPONSE_PREFIX + request.id, { id: request.id, result }))
+            .catch(error => GM_setValue(BROKER_RESPONSE_PREFIX + request.id, {
+              id: request.id, error: error?.message || String(error)
+            }))
+            .finally(() => GM_deleteValue(key));
+        });
+    };
+    setInterval(processRequests, 250);
+    processRequests();
   }
 
   function listConversations({ archived = false, offset = 0, limit = 28 } = {}) {
