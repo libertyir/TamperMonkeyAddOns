@@ -28,7 +28,6 @@ export class BridgeClient {
         if (message.type === "ready") {
           this.pageConnected = true;
           clearTimeout(timer);
-          window.removeEventListener("message", onMessage);
           resolve(true);
           return;
         }
