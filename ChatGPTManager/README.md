@@ -22,6 +22,6 @@ https://raw.githubusercontent.com/libertyir/TamperMonkeyAddOns/main/ChatGPTManag
 
 ## Account access
 
-The userscript sends account requests to ChatGPT web-app endpoints with browser credentials. These are undocumented endpoints and may change. The public OpenAI API is separate and does not expose ChatGPT account history or Projects.
+The userscript checks the signed-in web session through `/api/auth/session`, keeps its access token in memory only, and sends backend requests with a Bearer token. A successful session check is not treated as proof that the backend API works: the UI tracks bridge connectivity, account authentication, and backend API availability separately. ChatGPT web-app endpoints are undocumented and may change. The public OpenAI API is separate and does not expose ChatGPT account history or Projects.
 
 Message sending is not yet connected to ChatGPT's protected streaming send flow. The composer reports this limitation instead of simulating a response.
