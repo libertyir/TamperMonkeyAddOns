@@ -360,7 +360,7 @@ class ManagerApp {
     Object.assign(this,{api,bridge,preferences,i18n,conversations,projects});
     this.view="chats";this.archived=false;this.selected=new Set();this.items=[];this.activeChat=null;this.projectId=null;
     this.authStatus={bridgeConnected:Boolean(bridge.connected),brokerConnected:false,accountAuthenticated:false,apiAvailable:null};
-    this.root = document.querySelector("#cgm-dialog-host")?.shadowRoot?.querySelector("#app")
+    this.root = globalThis.__CGM_ROOT__?.querySelector("#app")
       || document.querySelector("#app");
   }
   async init() {
