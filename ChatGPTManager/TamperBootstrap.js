@@ -25,10 +25,11 @@ function ChatGPTManagerBootstrap() {
   }
 
   const BROKER_PREFIX = "cgm:broker:v1:";
-  const BROKER_HEARTBEAT = BROKER_PREFIX + "heartbeat";
+  const BROKER_HEARTBEAT_PREFIX = BROKER_PREFIX + "heartbeat:";
   const BROKER_REQUEST_PREFIX = BROKER_PREFIX + "request:";
   const BROKER_RESPONSE_PREFIX = BROKER_PREFIX + "response:";
   const BROKER_ID = "broker-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const BROKER_HEARTBEAT = BROKER_HEARTBEAT_PREFIX + BROKER_ID;
   const MANAGER_CLIENT_ID = "client-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
   const chatGPTHostname = location.hostname.toLowerCase();
   const isChatGPTTab = chatGPTHostname === "chatgpt.com" || chatGPTHostname.endsWith(".chatgpt.com") || chatGPTHostname === "chat.openai.com" || chatGPTHostname.endsWith(".chat.openai.com");
@@ -114,9 +115,14 @@ function ChatGPTManagerBootstrap() {
   }
 
   function getBrokerStatus() {
-    const broker = GM_getValue(BROKER_HEARTBEAT, null);
+    const brokers = GM_listValues()
+      .filter(key => key.startsWith(BROKER_HEARTBEAT_PREFIX))
+      .map(key => GM_getValue(key, null))
+      .filter(item => item && Date.now() - item.timestamp < 20000)
+      .sort((a, b) => b.timestamp - a.timestamp);
+    const broker = brokers[0] || null;
     if (broker?.authRequired) throw new Error(broker.reason || "نشست ChatGPT نیاز به اتصال مجدد دارد.");
-    return broker && Date.now() - broker.timestamp < 20000 ? broker : null;
+    return broker;
   }
 
   let brokerRequestQueue = Promise.resolve();
