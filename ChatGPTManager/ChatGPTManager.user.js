@@ -224,7 +224,10 @@
             .catch(error => GM_setValue(BROKER_RESPONSE_PREFIX + request.id, {
               id: request.id, error: error?.message || String(error)
             }))
-            .finally(() => GM_deleteValue(key));
+            .finally(() => {
+              GM_deleteValue(key);
+              handled.delete(request.id);
+            });
         });
     };
     setInterval(processRequests, 250);
