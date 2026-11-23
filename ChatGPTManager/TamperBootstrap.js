@@ -2,7 +2,7 @@ function ChatGPTManagerBootstrap() {
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.6.6";
+  const VERSION = "0.6.7";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
@@ -321,9 +321,8 @@ function ChatGPTManagerBootstrap() {
     if (dialogClosed || generation !== dialogGeneration || !shadowRoot) return;
     const parsed = new DOMParser().parseFromString(html, "text/html");
     const cssPath = parsed.querySelector('link[rel="stylesheet"]')?.getAttribute("href");
-    const modulePath = parsed.querySelector('script[type="module"]')?.getAttribute("src");
     const appMarkup = parsed.querySelector("#app")?.outerHTML;
-    if (!cssPath || !modulePath || !appMarkup) throw new Error("Index.html فاقد #app یا فایل CSS یا ورودی ماژول است.");
+    if (!cssPath || !appMarkup) throw new Error("Index.html فاقد #app یا فایل CSS است.");
     const css = await requestText(new URL(cssPath, APP_URL).href);
     if (dialogClosed || generation !== dialogGeneration || !shadowRoot) return;
     const style = document.createElement("style");
@@ -340,56 +339,10 @@ function ChatGPTManagerBootstrap() {
         return operation(params);
       }
     };
-    await loadModuleGraph(new URL(modulePath, APP_URL).href, () => !dialogClosed && generation === dialogGeneration && Boolean(shadowRoot));
-  }
-
-  async function loadModuleGraph(entryUrl, isCurrent) {
-    const moduleUrls = new Map();
-    const loading = new Map();
-
-    async function loadModule(url) {
-      if (moduleUrls.has(url)) return moduleUrls.get(url);
-      if (loading.has(url)) return loading.get(url);
-
-      const task = (async () => {
-        let source = await requestText(url);
-        const imports = [];
-        const pattern = /(\b(?:import|export)\s+(?:[^"'\x60;]*?\s+from\s*)?)["']([^"']+)["']/g;
-        let match;
-
-        while ((match = pattern.exec(source))) {
-          const specifier = match[2];
-          if (!specifier.startsWith(".")) throw new Error("وابستگی نامعتبر در ماژول: " + specifier);
-          imports.push({ start: match.index + match[1].length, end: match.index + match[1].length + specifier.length + 2, url: new URL(specifier, url).href, quote: match[0].slice(-1) });
-        }
-
-        const replacements = await Promise.all(imports.map(async item => ({
-          ...item,
-          blobUrl: await loadModule(item.url)
-        })));
-
-        for (const item of replacements.sort((a, b) => b.start - a.start)) {
-          source = source.slice(0, item.start) + item.quote + item.blobUrl + item.quote + source.slice(item.end);
-        }
-
-        const blobUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-        moduleUrls.set(url, blobUrl);
-        return blobUrl;
-      })();
-
-      loading.set(url, task);
-      try { return await task; }
-      finally { loading.delete(url); }
+    if (typeof globalThis.ChatGPTManagerStart !== "function") {
+      throw new Error("TamperBundle.js در sandbox بارگذاری نشده است. Userscript را به‌روزرسانی کن.");
     }
-
-    const entryBlob = await loadModule(entryUrl);
-    try {
-      if (!isCurrent()) return;
-      await import(entryBlob);
-    } finally {
-      moduleUrls.forEach(url => URL.revokeObjectURL(url));
-      moduleUrls.clear();
-    }
+    await globalThis.ChatGPTManagerStart();
   }
 
   async function openDialog() {
