@@ -1,4 +1,4 @@
-import { sidebar,conversationTable,projectsTable,chatView } from "./Views.js";
+import { sidebar,conversationTable,projectsTable,chatView,helpView } from "./Views.js";
 import { modal,toast } from "./Components.js";
 
 export class ManagerApp {
@@ -61,6 +61,7 @@ export class ManagerApp {
     if(this.view==="projects") content=projectsTable({t,projects:this.projects.items});
     else if(this.view==="chat"&&this.activeChat) content=chatView({t,chat:this.activeChat,messages:this.activeChat.messages||[]});
     else if(this.view==="settings") content=this.settingsView(t);
+    else if(this.view==="help") content=helpView({t});
     else if(this.view==="bulk") content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.archived});
     else content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.view==="archive"});
     const connectionLabel=this.authStatus.authRequired?"اتصال مجدد لازم است":!this.authStatus.bridgeConnected?t("bridgeOffline"):!this.authStatus.brokerConnected?t("brokerOffline"):!this.authStatus.accountAuthenticated?t("accountUnauthenticated"):this.authStatus.apiAvailable===true?t("apiAvailable"):this.authStatus.apiAvailable===false?t("apiUnavailable"):t("accountAuthenticated");
