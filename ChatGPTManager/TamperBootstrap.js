@@ -2,7 +2,7 @@ function ChatGPTManagerBootstrap() {
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.6.4";
+  const VERSION = "0.6.5";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
@@ -30,7 +30,8 @@ function ChatGPTManagerBootstrap() {
   const BROKER_RESPONSE_PREFIX = BROKER_PREFIX + "response:";
   const BROKER_ID = "broker-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
   const MANAGER_CLIENT_ID = "client-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
-  const isChatGPTTab = location.hostname === "chatgpt.com" || location.hostname.endsWith(".chatgpt.com");
+  const chatGPTHostname = location.hostname.toLowerCase();
+  const isChatGPTTab = chatGPTHostname === "chatgpt.com" || chatGPTHostname.endsWith(".chatgpt.com") || chatGPTHostname === "chat.openai.com" || chatGPTHostname.endsWith(".chat.openai.com");
   let sessionCache = null;
   let sessionExpiresAt = 0;
   let backendApiAvailable = null;
