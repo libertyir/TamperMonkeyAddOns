@@ -2,7 +2,7 @@ function ChatGPTManagerBootstrap() {
   "use strict";
 
   const APP_URL = "https://libertyir.github.io/TamperMonkeyAddOns/ChatGPTManager/";
-  const VERSION = "0.6.5";
+  const VERSION = "0.6.6";
   const CHANNEL = "cgm:page-bridge:v1";
   const MANAGER_HOST = "libertyir.github.io";
   const MANAGER_PATH = "/TamperMonkeyAddOns/ChatGPTManager/Index.html";
