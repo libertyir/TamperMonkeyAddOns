@@ -7,19 +7,28 @@ export class BridgeClient {
     this.pending = new Map();
     this.sequence = 0;
     this.pageConnected = false;
+    this.localBridge = globalThis.__CGM_BRIDGE__ || null;
     this.ready = this.connectPageBridge();
   }
 
   connectPageBridge() {
+    if (this.localBridge?.connected) {
+      this.pageConnected = true;
+      return Promise.resolve(true);
+    }
+
     return new Promise(resolve => {
-      const timer = setTimeout(() => resolve(false), 1200);
+      const timer = setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        resolve(false);
+      }, 3000);
       const onMessage = event => {
-        if (event.source !== window || event.origin !== location.origin ||
-            event.data?.channel !== CHANNEL) return;
+        if (event.origin !== location.origin || event.data?.channel !== CHANNEL) return;
         const message = event.data;
         if (message.type === "ready") {
           this.pageConnected = true;
           clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
           resolve(true);
           return;
         }
@@ -37,8 +46,11 @@ export class BridgeClient {
   }
 
   request(action, params = {}) {
+    if (this.localBridge?.connected) {
+      return Promise.resolve().then(() => this.localBridge.request(action, params));
+    }
     if (!this.pageConnected) {
-      return Promise.reject(new Error("پل Tampermonkey در دسترس نیست. افزونه را نصب و صفحه را بازآوری کن."));
+      return Promise.reject(new Error("پل Tampermonkey در دسترس نیست. Userscript را به‌روزرسانی و صفحه را بازآوری کن."));
     }
     const id = "cgm-" + (++this.sequence) + "-" + Date.now();
     return new Promise((resolve, reject) => {
@@ -52,6 +64,6 @@ export class BridgeClient {
   }
 
   get connected() {
-    return this.pageConnected;
+    return Boolean(this.localBridge?.connected || this.pageConnected);
   }
 }
