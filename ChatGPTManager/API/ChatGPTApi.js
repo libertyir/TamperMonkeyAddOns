@@ -1,6 +1,7 @@
 export class ChatGPTApi {
   constructor(bridge) { this.bridge = bridge; }
   call(action,params={}) { return this.bridge.request("api."+action,params); }
+  authStatus() { return this.call("authStatus"); }
   conversations(options={}) { return this.call("conversations",options); }
   projects() { return this.call("projects"); }
   projectConversations(projectId) { return this.call("projectConversations",{projectId}); }
