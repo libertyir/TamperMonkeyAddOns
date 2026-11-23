@@ -108,7 +108,8 @@ export class ManagerApp {
   async action(name,id) {
     const t=key=>this.i18n.t(key);
     try {
-      if(name==="refresh") await this.refresh();\n      if(name==="dismiss-progress"){this.progress=null;this.root.querySelector(".cgm-progress")?.remove();return;}
+      if(name==="refresh") await this.refresh();
+      if(name==="dismiss-progress"){this.progress=null;this.root.querySelector(".cgm-progress")?.remove();return;}
       if(name==="close-manager") { this.bridge.request("ui.close").catch(()=>{}); return; }
       if(name==="select-all") this.items.filter(c=>c.archived===this.archived).forEach(c=>this.selected.add(c.id));
       if(name==="clear-selection") this.selected.clear();
@@ -151,7 +152,9 @@ export class ManagerApp {
   }
   async openChat(id) {
     try {
-      this.setProgress("در حال دریافت محتوای گفتگو…",0,null);\n      const data=await this.conversations.detail(id);\n      this.progress=null;
+      this.setProgress("در حال دریافت محتوای گفتگو…",0,null);
+      const data=await this.conversations.detail(id);
+      this.progress=null;
       this.activeChat={id,title:data.title||"Untitled",messages:extractMessages(data)};
       this.view="chat";this.render();
     } catch(error) { toast(error.message,"error"); }
@@ -160,7 +163,9 @@ export class ManagerApp {
     const field=this.root.querySelector("#chat-message"),text=field?.value.trim();
     if(!text)return;
     try {
-      this.setProgress("در حال ارسال پیام…",0,null);\n      const result=await this.api.sendMessage(this.activeChat?.id,text);\n      this.progress=null;
+      this.setProgress("در حال ارسال پیام…",0,null);
+      const result=await this.api.sendMessage(this.activeChat?.id,text);
+      this.progress=null;
       if(result?.conversation_id) await this.openChat(result.conversation_id);
       else if(this.activeChat?.id) await this.openChat(this.activeChat.id);
     } catch(error) { toast(error.message,"error"); }
