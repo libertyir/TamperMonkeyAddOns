@@ -17,7 +17,7 @@ export class ConversationService {
     this.items.push(...rows.filter(item=>!known.has(item.id)));
     this.offset += rows.length;
     this.total = result.total ?? this.total;
-    this.hasMore = rows.length === 28 && (this.total === null || this.offset < this.total);
+    this.hasMore = rows.length === 28;
     this.loading=false;
     onProgress?.({label:"گفتگوها دریافت شدند",current:this.items.length,total:this.total});
     return search ? this.items.filter(item=>item.title.toLowerCase().includes(search.toLowerCase())) : this.items;
