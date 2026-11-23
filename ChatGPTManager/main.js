@@ -6,7 +6,7 @@ import { ConversationService } from "./Modules/Conversations/ConversationService
 import { ProjectService } from "./Modules/Projects/ProjectService.js";
 import { ManagerApp } from "./UI/App.js";
 
-const root = document.querySelector("#app");
+const root = globalThis.__CGM_ROOT__?.querySelector("#app") || document.querySelector("#cgm-dialog-host")?.shadowRoot?.querySelector("#app") || document.querySelector("#app");
 
 function showStartupError(error) {
   if (!root) return;
