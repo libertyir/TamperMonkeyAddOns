@@ -19,7 +19,7 @@ export class ManagerApp {
         this.authStatus=await this.api.authStatus();
         if(this.authStatus.accountAuthenticated) await this.refresh();
       } catch(error) {
-        this.authStatus={bridgeConnected:true,brokerConnected:false,accountAuthenticated:false,apiAvailable:null,error:error.message};
+        this.authStatus={bridgeConnected:true,brokerConnected:false,accountAuthenticated:false,authRequired:/نشست|اتصال مجدد|HTTP 401|HTTP 403/i.test(error.message||""),apiAvailable:false,error:error.message};
       }
     } else this.items=[];
     this.render();
@@ -56,7 +56,7 @@ export class ManagerApp {
     else if(this.view==="settings") content=this.settingsView(t);
     else if(this.view==="bulk") content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.archived});
     else content=conversationTable({t,items:projectConversations,projects:this.projects.items,selected:this.selected,archived:this.view==="archive"});
-    const connectionLabel=!this.authStatus.bridgeConnected?t("bridgeOffline"):!this.authStatus.brokerConnected?t("brokerOffline"):!this.authStatus.accountAuthenticated?t("accountUnauthenticated"):this.authStatus.apiAvailable===true?t("apiAvailable"):this.authStatus.apiAvailable===false?t("apiUnavailable"):t("accountAuthenticated");
+    const connectionLabel=this.authStatus.authRequired?"اتصال مجدد لازم است":!this.authStatus.bridgeConnected?t("bridgeOffline"):!this.authStatus.brokerConnected?t("brokerOffline"):!this.authStatus.accountAuthenticated?t("accountUnauthenticated"):this.authStatus.apiAvailable===true?t("apiAvailable"):this.authStatus.apiAvailable===false?t("apiUnavailable"):t("accountAuthenticated");
     this.root.innerHTML=`<div class="cgm-shell">${sidebar({t,view:this.view,projects:this.projects.items,conversations:this.items,projectId:this.projectId})}<main class="cgm-main"><header class="cgm-topbar"><strong>${t(this.view==="chat"?"chats":this.view)}</strong><div class="cgm-top-actions"><span class="cgm-session">${connectionLabel}</span><button data-action="refresh">${t("refresh")}</button><button data-action="close-manager" title="${t("closeManager")}">×</button></div></header><section class="cgm-content">${content}</section></main></div>`;
     this.bind();
   }
