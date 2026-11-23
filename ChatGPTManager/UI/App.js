@@ -43,6 +43,9 @@ export class ManagerApp {
       toast(this.i18n.t("refreshDone"));
       this.render();
     } catch(error) {
+      if(/HTTP (401|403)|اتصال مجدد|نشست|دسترسی را رد کرد/i.test(error.message||"")) {
+        this.authStatus={...this.authStatus,authRequired:true,accountAuthenticated:false,apiAvailable:false,error:error.message};
+      }
       toast(error.message || this.i18n.t("loadError"),"error");
       this.render();
     }
@@ -112,7 +115,13 @@ export class ManagerApp {
       }
       if(name==="select-all"||name==="clear-selection")this.render();
       if(name==="archive-selected"||name==="restore-selected"||name==="delete-selected"||name==="create-project"||name==="rename-project"||name==="delete-project")this.render();
-    } catch(error) { toast(error.message||t("apiError"),"error"); }
+    } catch(error) {
+      if(/HTTP (401|403)|اتصال مجدد|نشست|دسترسی را رد کرد/i.test(error.message||"")) {
+        this.authStatus={...this.authStatus,authRequired:true,accountAuthenticated:false,apiAvailable:false,error:error.message};
+      }
+      toast(error.message||t("apiError"),"error");
+      this.render();
+    }
   }
   async openChat(id) {
     try {
