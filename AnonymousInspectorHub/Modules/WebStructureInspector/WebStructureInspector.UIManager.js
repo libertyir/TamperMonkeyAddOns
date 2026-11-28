@@ -93,8 +93,9 @@
         getIcon(node) {
             if (this.containsSensitive(node)) return "⚠";
             if (node.type === "directory") return "📁";
-            if (node.type === "endpoint" || node.type === "page" ||
-                node.type === "web-address" || node.type === "route") return "🌐";
+            if (node.type === "endpoint" || node.type === "web-address" ||
+                node.type === "route") return "🌐";
+            if (node.type === "page" || node.type === "html") return "📃";
             if (node.type === "javascript") return "📜";
             if (node.type === "stylesheet") return "🎨";
             if (node.type === "image") return "🖼";
