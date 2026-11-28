@@ -631,3 +631,42 @@ User reported repeated `EvalError: call to Function() blocked by CSP` and a Trus
 ## 13.14 Viewer menu visibility and Sensitive Data Inspector menu metadata
 
 User reported PlainTextViewer and ImageFileViewer incorrectly appearing as top-level menu items and SensitiveDataInspector not appearing. Root cause: viewer wrapper modules must still load to register their providers, but all active instances were exposed in the menu; SensitiveDataInspector lacked `getMetadata()`, which the menu renderer requires. Added `static showInMenu = false` to both viewer wrappers and filtered those from `UIManager`'s module list in `ServiceFactory`, preserving provider loading. Added `getMetadata()` to SensitiveDataInspector. No versions changed; runtime check is pending reload.
+
+
+## 13.15 WebStructureInspector passive discovery and tree semantics (2026-11-29)
+
+User explicitly changed the collaboration policy: for requested project work, make the code changes directly on GitHub `main`; the user will pull/get and review them. This supersedes older read-only workflow notes for explicitly requested changes. Do not alter unrelated project files or versions.
+
+### Requested behavior
+- Merely observing a URL/resource in the active page must not trigger an automatic network validation request (especially HEAD/GET through SiteIntelligence).
+- Separate filesystem-like resources from ordinary web addresses/routes in the tree.
+- A route such as `/api/getuser` remains a web-address hierarchy (not a folder/file) unless evidence establishes an actual file/directory.
+- A known file such as `/assets/img/logo.jpg` creates inferred parent directories `assets/` and `img/`, then the file node.
+- UI refreshes while expanding/collapsing or interacting must preserve page/tree scroll position and search focus/caret.
+- Ordering preference: directories first, then files, then web pages, then route/address nodes. Alphabetical order is only a secondary ordering within a category.
+
+### Changes pushed to GitHub main
+- `WebStructureInspector/WebStructureInspector.Collector.js`: passive `flushPending()` no longer calls `SiteIntelligence.scan()` or performs validation. It persists discovered observations directly to ResourceStore. Explicit DirectoryScanner and Grabber operations retain their deliberate scanning/validation behavior.
+- `WebStructureInspector/WebStructureInspector.ResourceAnalyzer.js`: extensionless paths are classified as `endpoint` (web address), not file. Known page extensions are classified as `page`; known static/resource extensions remain file-like types.
+- `WebStructureInspector/WebStructureInspector.TreeBuilder.js`: creates inferred directory parents only when a discovered file/directory proves a filesystem hierarchy; route parents remain endpoint/address nodes. Sorts directories, files, pages, and addresses in that order.
+- `WebStructureInspector/WebStructureInspector.UIManager.js`: 🌐 for route/address nodes and 📃 for web pages; refresh captures/restores page scroll, tree scroll, and search focus/caret (including a requestAnimationFrame restoration).
+- `WebStructureInspector/WebStructureInspector.js`: central SiteIntelligence records imported at initialization are classified through ResourceAnalyzer (or their explicit metadata.resourceType) rather than treating every non-trailing-slash URL as a file.
+
+### Verification and limitations
+- JavaScript parse checks passed for all five changed source files using the current pushed blobs.
+- TreeBuilder behavior was exercised with sample records:
+  - `/assets/img/logo.jpg` -> directory `assets` -> directory `img` -> image file `logo.jpg`.
+  - `/api/getuser` and `/news/story-1` -> route/address nodes, not directories/files.
+  - `/about.html` -> page node.
+- No browser/Tampermonkey runtime test has been performed. Scroll behavior and the absence of passive network requests still require confirmation in the user's browser.
+- The change prevents the Collector's passive discovery pipeline from triggering validation. Explicit user-invoked Directory Scan and Grabber still perform network requests by design.
+- No AssetManager, manifest, @require, userscript, or asset versions were changed. Keep `ForceLoad: true` unchanged.
+
+### Commits
+- `e319d46ea270dd2afe75cfe131f72114eeab3b4a` — passive Collector discovery without network validation.
+- `b898d1e1576658f872fe02ed56c67b8f94111e61` — route/file classification in ResourceAnalyzer.
+- `2a5072d3b816cd6a51b49bfae7002bd5419a7d99` — TreeBuilder hierarchy semantics.
+- `680734e81c368fad24b83586e9a6ed514f578465` — UI refresh position preservation and node ordering.
+- `ee195168e049156291c927dc762277d3e616a295` — preserve classification for central resources imported at initialization.
+- `191fc51df19e25eb49a7c5f31f69a16556ebcf26` — page ordering after files and before routes.
+- `fa19eb06dc3c6d83f4f19ec9c4837d1b9a999fb5` — distinct page icon.
