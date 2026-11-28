@@ -110,20 +110,27 @@
                 : "";
 
             const isDirectory = path.endsWith("/") || name === "/";
+            const pageExtensions = new Set([
+                "html", "htm", "php", "phtml", "asp", "aspx",
+                "jsp", "jspx", "do", "action", "cfm", "shtml"
+            ]);
             const tags = [];
 
-            let type = isDirectory ? "directory" : "file";
+            // A URL is not automatically a file just because it has a
+            // path segment. Extensionless and dynamic routes remain web
+            // addresses; known document/application routes remain pages.
+            let type = "endpoint";
 
             if (isDirectory) {
                 type = "directory";
-            } else if (
-                ["js", "mjs", "cjs"].includes(extension)
-            ) {
+            } else if (pageExtensions.has(extension)) {
+                type = "page";
+            } else if ([
+                "js", "mjs", "cjs"
+            ].includes(extension)) {
                 type = "javascript";
             } else if (extension === "css") {
                 type = "stylesheet";
-            } else if (["html", "htm"].includes(extension)) {
-                type = "html";
             } else if (extension === "pdf") {
                 type = "document";
             } else if (this.imageExtensions.has(extension)) {
@@ -138,9 +145,9 @@
                 type = "executable";
                 tags.push("executable");
             } else if (extension) {
+                // A non-page extension is treated as a file, even when the
+                // extension is not in the specialized type lists above.
                 type = extension;
-            } else if (!isDirectory) {
-                type = "endpoint";
             }
 
             if (
