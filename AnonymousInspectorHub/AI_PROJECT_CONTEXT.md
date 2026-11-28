@@ -670,3 +670,5 @@ User explicitly changed the collaboration policy: for requested project work, ma
 - `ee195168e049156291c927dc762277d3e616a295` — preserve classification for central resources imported at initialization.
 - `191fc51df19e25eb49a7c5f31f69a16556ebcf26` — page ordering after files and before routes.
 - `fa19eb06dc3c6d83f4f19ec9c4837d1b9a999fb5` — distinct page icon.
+
+- `779f0555f95fd4300a92abce6a28862a1ef1d3f7` — directory-listing evidence promotes extensionless non-directory entries to files, allowing their parent path segments to become directories.
