@@ -23,9 +23,14 @@
                 type === "route";
         }
 
+        isPageType(type) {
+            return type === "page" || type === "html";
+        }
+
         isFileType(type) {
             return Boolean(type) &&
                 type !== "directory" &&
+                !this.isPageType(type) &&
                 !this.isAddressType(type);
         }
 
@@ -163,7 +168,8 @@
             const priority = child => {
                 if (child.type === "directory") return 0;
                 if (this.isFileType(child.type)) return 1;
-                return 2;
+                if (this.isPageType(child.type)) return 2;
+                return 3;
             };
 
             children.sort((a, b) => {
