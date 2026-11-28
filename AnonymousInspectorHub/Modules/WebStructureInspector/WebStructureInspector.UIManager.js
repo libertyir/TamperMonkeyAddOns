@@ -93,6 +93,8 @@
         getIcon(node) {
             if (this.containsSensitive(node)) return "⚠";
             if (node.type === "directory") return "📁";
+            if (node.type === "endpoint" || node.type === "page" ||
+                node.type === "web-address" || node.type === "route") return "🌐";
             if (node.type === "javascript") return "📜";
             if (node.type === "stylesheet") return "🎨";
             if (node.type === "image") return "🖼";
@@ -107,14 +109,10 @@
                 return "Sensitive Confirmed";
             }
 
-            if (this.hasSensitive(node)) {
-                return "Sensitive Type";
-            }
-
-            if ((node.tags || []).includes("directory-listing")) {
-                return "Directory Listing";
-            }
-
+            if (this.hasSensitive(node)) return "Sensitive Type";
+            if ((node.tags || []).includes("directory-listing")) return "Directory Listing";
+            if (node.type === "endpoint" || node.type === "web-address" || node.type === "route") return "Web Address";
+            if (node.type === "page") return "Web Page";
             if (node.status === "confirmed") return "Confirmed";
             if (node.status === "verified") return "Verified";
             if (node.status === "guessed") return "Guessed";
@@ -646,11 +644,54 @@
             if (!this.lastRoot || !this.lastRoot.isConnected) return;
 
             const previous = this.lastRoot;
-            const fresh = this.render();
+            const tree = previous.querySelector(".wsi-tree");
+            const treeScrollTop = tree ? tree.scrollTop : 0;
+            const pageScrollTop = document.scrollingElement
+                ? document.scrollingElement.scrollTop
+                : window.scrollY;
+            const pageScrollLeft = document.scrollingElement
+                ? document.scrollingElement.scrollLeft
+                : window.scrollX;
+            const activeSearch = previous.querySelector(".wsi-search") === document.activeElement;
+            const selectionStart = activeSearch
+                ? document.activeElement.selectionStart
+                : null;
+            const selectionEnd = activeSearch
+                ? document.activeElement.selectionEnd
+                : null;
 
+            const fresh = this.render();
             previous.replaceWith(fresh);
             this.lastRoot = fresh;
+
+            const restoreView = () => {
+                const newTree = fresh.querySelector(".wsi-tree");
+                if (newTree) newTree.scrollTop = treeScrollTop;
+
+                if (document.scrollingElement) {
+                    document.scrollingElement.scrollTop = pageScrollTop;
+                    document.scrollingElement.scrollLeft = pageScrollLeft;
+                } else {
+                    window.scrollTo(pageScrollLeft, pageScrollTop);
+                }
+
+                if (activeSearch) {
+                    const search = fresh.querySelector(".wsi-search");
+                    if (search) {
+                        search.focus({ preventScroll: true });
+                        if (selectionStart !== null && selectionEnd !== null) {
+                            try { search.setSelectionRange(selectionStart, selectionEnd); } catch { }
+                        }
+                    }
+                }
+            };
+
+            restoreView();
+            if (typeof requestAnimationFrame === "function") {
+                requestAnimationFrame(restoreView);
+            }
         }
+
     }
 
     ns.UIManager = UIManager;
