@@ -170,7 +170,11 @@
 
                 record.status = "observed";
                 record.directoryListing = true;
-                record.type = isDirectory ? "directory" : record.type;
+                // A directory listing is direct evidence that a non-slash
+                // entry is a file, even when its filename has no extension.
+                record.type = isDirectory
+                    ? "directory"
+                    : (record.type === "endpoint" ? "file" : record.type);
                 record.tags.push("directory-listing");
 
                 entries.push(record);
