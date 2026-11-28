@@ -94,66 +94,16 @@
                 this.pending.clear();
 
                 try {
-                    const records = items.map(([, record]) => record);
-                    const service = Framework.SiteIntelligence;
+                    // Passive discovery must never validate resources over the
+                    // network. Store observations locally and leave validation
+                    // to an explicitly requested scan operation.
+                    const records = items.map(([, record]) => ({
+                        ...record,
+                        status: record.status || "observed"
+                    }));
 
-                    if (!service || typeof service.discoverMany !== "function") {
-                        throw new Error("Central Site Intelligence service is unavailable.");
-                    }
-
-                    await service.discoverMany(
-                        records.map(record => ({
-                            url: record.url,
-                            source: "WebStructureInspector:" + (record.sources || []).join(","),
-                            tags: record.tags || [],
-                            metadata: {
-                                resourceType: record.type,
-                                extension: record.extension || null
-                            }
-                        }))
-                    );
-
-                    const settled = await Promise.allSettled(
-                        records.map(record =>
-                            service.scan(record.url, {
-                                source: "WebStructureInspector",
-                                needContent: false
-                            })
-                        )
-                    );
-
-                    const validated = [];
-
-                    for (let index = 0; index < settled.length; index++) {
-                        const outcome = settled[index];
-
-                        if (outcome.status !== "fulfilled") {
-                            continue;
-                        }
-
-                        const result = outcome.value;
-                        const central = result?.record;
-                        const original = records[index];
-
-                        if (
-                            !central ||
-                            central.status !== "accessible" ||
-                            !(central.httpStatus >= 200 && central.httpStatus < 300)
-                        ) {
-                            continue;
-                        }
-
-                        validated.push({
-                            ...original,
-                            status: "verified",
-                            httpStatus: central.httpStatus,
-                            contentType: central.contentType || original.contentType || null,
-                            tags: [...new Set([...(original.tags || []), ...(central.tags || [])])]
-                        });
-                    }
-
-                    if (validated.length) {
-                        await this.module.store.upsertMany(validated);
+                    if (records.length) {
+                        await this.module.store.upsertMany(records);
                     }
 
                     this.module.uiManager?.refresh();
@@ -169,7 +119,6 @@
                                     ...(current.sources || [])
                                 ])
                             ];
-
                             current.tags = [
                                 ...new Set([
                                     ...(record.tags || []),
@@ -185,6 +134,7 @@
 
                 } finally {
                     this.flushPromise = null;
+                    if (this.pending.size) this.scheduleFlush();
                 }
             })();
 
