@@ -16,6 +16,19 @@
             };
         }
 
+        isAddressType(type) {
+            return type === "endpoint" ||
+                type === "page" ||
+                type === "web-address" ||
+                type === "route";
+        }
+
+        isFileType(type) {
+            return Boolean(type) &&
+                type !== "directory" &&
+                !this.isAddressType(type);
+        }
+
         createNode(name, path, type, url) {
             return {
                 name,
@@ -54,7 +67,7 @@
             ];
 
             if (record.url) node.url = record.url;
-            if (record.record) node.record = record;
+            node.record = { ...record };
         }
 
         build(records) {
@@ -72,7 +85,6 @@
                 if (!record.path.startsWith("/")) continue;
 
                 const segments = record.path.split("/").filter(Boolean);
-
                 if (!segments.length) continue;
 
                 if (segments.some(segment =>
@@ -83,6 +95,11 @@
                     continue;
                 }
 
+                const terminalType = record.type || "endpoint";
+                const terminalIsDirectory = terminalType === "directory";
+                const terminalIsAddress = this.isAddressType(terminalType);
+                const terminalIsFile = !terminalIsDirectory && !terminalIsAddress;
+
                 let current = rootNode;
                 let currentPath = "";
 
@@ -91,16 +108,16 @@
                     currentPath += "/" + segment;
 
                     const isLast = i === segments.length - 1;
-                    const isDirectory =
-                        !isLast || record.type === "directory";
-
-                    const nodeType = isDirectory
-                        ? "directory"
-                        : "file";
+                    const nodeType = isLast
+                        ? terminalType
+                        : (terminalIsFile || terminalIsDirectory
+                            ? "directory"
+                            : "endpoint");
 
                     let child = current.children.get(segment);
 
                     if (!child) {
+                        const isDirectory = nodeType === "directory";
                         const nodeUrl = location.origin +
                             currentPath +
                             (isDirectory ? "/" : "");
@@ -111,22 +128,26 @@
                             nodeType,
                             nodeUrl
                         );
-
                         current.children.set(segment, child);
-                    } else if (isDirectory) {
+                    } else if (
+                        nodeType === "directory" ||
+                        (child.type === "endpoint" && terminalIsFile)
+                    ) {
+                        // A path becomes a real directory only when a
+                        // discovered file or directory proves that role.
                         child.type = "directory";
-                        if (!child.url.endsWith("/")) {
-                            child.url += "/";
-                        }
+                        if (!child.url.endsWith("/")) child.url += "/";
+                    } else if (
+                        isLast &&
+                        child.type === "endpoint" &&
+                        !terminalIsAddress
+                    ) {
+                        child.type = terminalType;
                     }
 
                     if (isLast) {
-                        if (record.type) {
-                            child.type = record.type;
-                        }
-
+                        child.type = terminalType;
                         this.mergeNode(child, record);
-                        child.record = { ...record };
                     }
 
                     current = child;
@@ -139,19 +160,19 @@
         sort(node) {
             const children = [...node.children.values()];
 
+            const priority = child => {
+                if (child.type === "directory") return 0;
+                if (this.isFileType(child.type)) return 1;
+                return 2;
+            };
+
             children.sort((a, b) => {
-                const aDirectory = a.type === "directory";
-                const bDirectory = b.type === "directory";
-
-                if (aDirectory && !bDirectory) return -1;
-                if (!aDirectory && bDirectory) return 1;
-
+                const difference = priority(a) - priority(b);
+                if (difference) return difference;
                 return a.name.localeCompare(b.name);
             });
 
-            for (const child of children) {
-                this.sort(child);
-            }
+            for (const child of children) this.sort(child);
 
             node.children = new Map(
                 children.map(child => [child.name, child])
