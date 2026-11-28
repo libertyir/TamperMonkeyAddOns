@@ -194,19 +194,32 @@
 
                     if (successfulResources.length) {
                         await this.store.upsertMany(
-                            successfulResources.map(record => ({
-                                url: record.url,
-                                path: new URL(record.url).pathname,
-                                name: new URL(record.url).pathname.split("/").filter(Boolean).pop() || "/",
-                                type: new URL(record.url).pathname.endsWith("/") ? "directory" : "file",
-                                status: "verified",
-                                sources: record.sources || [],
-                                tags: record.tags || [],
-                                contentType: record.contentType || null,
-                                size: record.contentLength || null,
-                                httpStatus: record.httpStatus,
-                                directoryListing: Boolean(record.metadata?.directoryListing)
-                            }))
+                            successfulResources.map(record => {
+                                const url = new URL(record.url);
+                                const inferred = this.analyzer.analyze(
+                                    record.url,
+                                    "site-intelligence",
+                                    {
+                                        contentType: record.contentType || null,
+                                        size: record.contentLength || null
+                                    }
+                                );
+
+                                return {
+                                    ...inferred,
+                                    url: record.url,
+                                    path: url.pathname,
+                                    name: url.pathname.split("/").filter(Boolean).pop() || "/",
+                                    type: record.metadata?.resourceType || inferred?.type || "endpoint",
+                                    status: "verified",
+                                    sources: record.sources || [],
+                                    tags: record.tags || [],
+                                    contentType: record.contentType || null,
+                                    size: record.contentLength || null,
+                                    httpStatus: record.httpStatus,
+                                    directoryListing: Boolean(record.metadata?.directoryListing)
+                                };
+                            }).filter(Boolean)
                         );
                     }
                 }
